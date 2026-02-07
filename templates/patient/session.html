@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+
+{% block title %}Rehab Session - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1>🏋️ Rehab Session</h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('patient_dashboard') }}">← Back to Dashboard</a>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="session-layout">
+    <!-- Video Panel -->
+    <div class="video-panel">
+        <div class="skeleton-overlay">
+            <strong>Skeleton Tracking: ON</strong><br>
+            <small>Pose detection active</small>
+        </div>
+        <div class="video-placeholder">
+            <div class="icon">📹</div>
+            <p>Live Webcam Feed</p>
+            <p style="font-size: 0.8rem; opacity: 0.7;">Skeleton overlay will appear on your body</p>
+        </div>
+    </div>
+    
+    <!-- Feedback Panel -->
+    <div class="feedback-panel">
+        <!-- Rep Counter -->
+        <div class="rep-counter">
+            <div class="count">7 / 10</div>
+            <div class="label">Reps (Set 2 of 3)</div>
+        </div>
+        
+        <!-- Form Status -->
+        <div class="form-status">
+            <h4 style="margin-bottom: 10px;">Form Status</h4>
+            <div class="status-indicator correct">
+                ✓ CORRECT FORM
+            </div>
+            <!-- Alternative incorrect state -->
+            <!--
+            <div class="status-indicator incorrect">
+                ✗ FORM NEEDS ADJUSTMENT
+            </div>
+            -->
+        </div>
+        
+        <!-- Error Messages -->
+        <div class="error-messages">
+            <h4>Real-time Feedback</h4>
+            <div class="error-item">
+                ⚠️ Keep your back straight
+            </div>
+            <div class="error-item">
+                ⚠️ Slow down the movement
+            </div>
+            <div class="error-item" style="background: #d4edda; border-left-color: #28a745;">
+                ✓ Good knee alignment
+            </div>
+        </div>
+        
+        <!-- Audio Indicator -->
+        <div class="audio-indicator">
+            <div class="audio-icon">🔊</div>
+            <div>
+                <strong>Voice Feedback: ON</strong><br>
+                <small>Audio cues are active</small>
+            </div>
+        </div>
+        
+        <!-- Exercise Info -->
+        <div class="card" style="padding: 15px;">
+            <h4>Current Exercise</h4>
+            <p style="color: #666; margin-top: 5px;">Knee Extension</p>
+            <p style="font-size: 0.85rem; margin-top: 10px;">
+                Target: 3 sets × 10 reps<br>
+                ROM Target: 90° flexion
+            </p>
+        </div>
+        
+        <!-- Session Controls -->
+        <div class="session-controls">
+            <button class="btn" style="flex: 1;">⏸️ Pause</button>
+            <button class="btn btn-danger" style="flex: 1;">⏹️ Stop Session</button>
+        </div>
+        
+        <!-- Next Step -->
+        <a href="{{ url_for('pain_checkin') }}" class="btn btn-success" style="text-align: center;">
+            Complete Set → Check-in
+        </a>
+    </div>
+</div>
+{% endblock %}

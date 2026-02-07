@@ -1,0 +1,190 @@
+{% extends 'base.html' %}
+
+{% block title %}Rehab Plan Editor - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1>📝 Rehab Plan Editor</h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('clinician_dashboard') }}">← Back to Dashboard</a>
+        <a href="{{ url_for('consultation') }}">Consultations</a>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<!-- Patient Selection -->
+<div class="card">
+    <div class="card-header">Select Patient</div>
+    <div class="form-group" style="margin-bottom: 0;">
+        <select class="form-control">
+            <option>John Smith (PT-001) - Knee Replacement</option>
+            <option>Maria Garcia (PT-002) - Hip Surgery</option>
+            <option>Robert Johnson (PT-003) - ACL Reconstruction</option>
+            <option>Emily Chen (PT-004) - Shoulder Rehab</option>
+        </select>
+    </div>
+</div>
+
+<div class="plan-editor-layout" style="margin-top: 20px;">
+    <!-- Exercise Library -->
+    <div class="exercise-library">
+        <h3 style="margin-bottom: 15px;">Exercise Library</h3>
+        <input type="text" class="form-control" placeholder="Search exercises..." style="margin-bottom: 15px;">
+        
+        <div style="margin-bottom: 15px;">
+            <strong>Category:</strong>
+            <select class="form-control" style="margin-top: 5px;">
+                <option>All Categories</option>
+                <option>Knee</option>
+                <option>Hip</option>
+                <option>Shoulder</option>
+                <option>Back</option>
+                <option>Ankle</option>
+            </select>
+        </div>
+        
+        <div class="exercise-item selected">
+            <strong>Knee Extension</strong>
+            <p style="font-size: 0.85rem; color: #666; margin-top: 5px;">Seated leg raises to strengthen quadriceps</p>
+        </div>
+        <div class="exercise-item">
+            <strong>Hip Flexor Stretch</strong>
+            <p style="font-size: 0.85rem; color: #666; margin-top: 5px;">Stretching hip flexors for improved mobility</p>
+        </div>
+        <div class="exercise-item">
+            <strong>Quad Strengthening</strong>
+            <p style="font-size: 0.85rem; color: #666; margin-top: 5px;">Resistance-based quadriceps exercises</p>
+        </div>
+        <div class="exercise-item">
+            <strong>Hamstring Curl</strong>
+            <p style="font-size: 0.85rem; color: #666; margin-top: 5px;">Lying hamstring curls for balance</p>
+        </div>
+        <div class="exercise-item">
+            <strong>Calf Raises</strong>
+            <p style="font-size: 0.85rem; color: #666; margin-top: 5px;">Standing calf raises for lower leg strength</p>
+        </div>
+        <div class="exercise-item">
+            <strong>Wall Slides</strong>
+            <p style="font-size: 0.85rem; color: #666; margin-top: 5px;">Back against wall squatting motion</p>
+        </div>
+    </div>
+    
+    <!-- Plan Configuration -->
+    <div class="plan-config">
+        <h3 style="margin-bottom: 20px;">Current Rehab Plan</h3>
+        
+        <!-- Exercise 1 Configuration -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div>
+                    <h4>1. Knee Extension</h4>
+                    <p style="color: #666; font-size: 0.9rem;">Added to plan</p>
+                </div>
+                <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.8rem;">Remove</button>
+            </div>
+            
+            <div class="config-row" style="margin-top: 15px;">
+                <div class="form-group">
+                    <label>Sets</label>
+                    <input type="number" class="form-control" value="3" min="1" max="10">
+                </div>
+                <div class="form-group">
+                    <label>Reps per Set</label>
+                    <input type="number" class="form-control" value="10" min="1" max="50">
+                </div>
+                <div class="form-group">
+                    <label>Frequency</label>
+                    <select class="form-control">
+                        <option>Daily</option>
+                        <option selected>3x per week</option>
+                        <option>2x per week</option>
+                        <option>Weekly</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="config-row">
+                <div class="form-group">
+                    <label>ROM Target (degrees)</label>
+                    <input type="number" class="form-control" value="90" min="0" max="180">
+                </div>
+                <div class="form-group">
+                    <label>Hold Time (sec)</label>
+                    <input type="number" class="form-control" value="5" min="0" max="60">
+                </div>
+                <div class="form-group">
+                    <label>Rest Between Sets (sec)</label>
+                    <input type="number" class="form-control" value="30" min="0" max="300">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Special Instructions</label>
+                <textarea class="form-control" rows="2" placeholder="Add any specific instructions for this exercise...">Keep back straight. Stop if pain exceeds 4/10.</textarea>
+            </div>
+        </div>
+        
+        <!-- Exercise 2 Configuration -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div>
+                    <h4>2. Hip Flexor Stretch</h4>
+                    <p style="color: #666; font-size: 0.9rem;">Added to plan</p>
+                </div>
+                <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.8rem;">Remove</button>
+            </div>
+            
+            <div class="config-row" style="margin-top: 15px;">
+                <div class="form-group">
+                    <label>Sets</label>
+                    <input type="number" class="form-control" value="2" min="1" max="10">
+                </div>
+                <div class="form-group">
+                    <label>Duration (sec)</label>
+                    <input type="number" class="form-control" value="30" min="1" max="120">
+                </div>
+                <div class="form-group">
+                    <label>Frequency</label>
+                    <select class="form-control">
+                        <option selected>Daily</option>
+                        <option>3x per week</option>
+                        <option>2x per week</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Add Exercise Button -->
+        <button class="btn" style="width: 100%; margin-top: 10px;">+ Add Selected Exercise to Plan</button>
+        
+        <!-- Plan Summary -->
+        <div class="card" style="margin-top: 20px; background: #f5f5f5;">
+            <div class="card-header">Plan Summary</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Total Exercises:</span>
+                <strong>2</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Est. Session Duration:</span>
+                <strong>25 minutes</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Sessions per Week:</span>
+                <strong>5</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>Plan Start Date:</span>
+                <strong>Jan 15, 2026</strong>
+            </div>
+        </div>
+        
+        <!-- Save Actions -->
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="btn btn-primary" style="flex: 1;">💾 Save Plan</button>
+            <button class="btn" style="flex: 1;">Preview</button>
+            <button class="btn btn-success" style="flex: 1;">Send to Patient</button>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}Consultations - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1>📅 Consultation & Scheduling</h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('clinician_dashboard') }}">← Back to Dashboard</a>
+        <a href="{{ url_for('plan_editor') }}">Plan Editor</a>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="consultation-layout">
+    <!-- Left Column: Scheduling & Appointments -->
+    <div>
+        <!-- Book New Consultation -->
+        <div class="card">
+            <div class="card-header">Book Video Consultation</div>
+            <div class="form-group">
+                <label>Select Patient</label>
+                <select class="form-control">
+                    <option>John Smith (PT-001)</option>
+                    <option>Maria Garcia (PT-002)</option>
+                    <option>Robert Johnson (PT-003)</option>
+                    <option>Emily Chen (PT-004)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Date</label>
+                <input type="date" class="form-control" value="2026-02-10">
+            </div>
+            <div class="form-group">
+                <label>Time</label>
+                <select class="form-control">
+                    <option>9:00 AM</option>
+                    <option>10:00 AM</option>
+                    <option selected>11:00 AM</option>
+                    <option>2:00 PM</option>
+                    <option>3:00 PM</option>
+                    <option>4:00 PM</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Duration</label>
+                <select class="form-control">
+                    <option>15 minutes</option>
+                    <option selected>30 minutes</option>
+                    <option>45 minutes</option>
+                    <option>60 minutes</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Notes (Optional)</label>
+                <textarea class="form-control" rows="2" placeholder="Reason for consultation..."></textarea>
+            </div>
+            <button class="btn btn-primary" style="width: 100%;">Schedule Consultation</button>
+        </div>
+        
+        <!-- Upcoming Appointments -->
+        <div class="appointment-list" style="margin-top: 20px;">
+            <div class="card-header">Upcoming Appointments</div>
+            
+            <div class="appointment-item">
+                <div>
+                    <strong>John Smith</strong>
+                    <p style="font-size: 0.85rem; color: #666;">Feb 8, 2026 - 10:00 AM (30 min)</p>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-success" style="padding: 5px 15px;">Join</button>
+                    <button class="btn" style="padding: 5px 15px;">Reschedule</button>
+                </div>
+            </div>
+            
+            <div class="appointment-item">
+                <div>
+                    <strong>Maria Garcia</strong>
+                    <p style="font-size: 0.85rem; color: #666;">Feb 9, 2026 - 2:00 PM (30 min)</p>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn" style="padding: 5px 15px;">Join</button>
+                    <button class="btn" style="padding: 5px 15px;">Reschedule</button>
+                </div>
+            </div>
+            
+            <div class="appointment-item">
+                <div>
+                    <strong>Emily Chen</strong>
+                    <p style="font-size: 0.85rem; color: #666;">Feb 12, 2026 - 11:00 AM (15 min)</p>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn" style="padding: 5px 15px;">Join</button>
+                    <button class="btn" style="padding: 5px 15px;">Reschedule</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right Column: Video Call Preview -->
+    <div>
+        <div class="card">
+            <div class="card-header">Video Call Interface</div>
+            
+            <!-- Main Video Area -->
+            <div class="video-call-preview">
+                <div style="text-align: center;">
+                    <div style="font-size: 4rem;">📹</div>
+                    <p>Video Call Preview</p>
+                    <p style="font-size: 0.8rem; opacity: 0.7;">Join a scheduled call to start</p>
+                </div>
+            </div>
+            
+            <!-- Self View (Picture-in-Picture) -->
+            <div style="display: flex; gap: 15px; margin-top: 15px;">
+                <div style="flex: 1; background: #333; border-radius: 4px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.8rem;">
+                    [ Your Camera ]
+                </div>
+                <div style="flex: 1; background: #333; border-radius: 4px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.8rem;">
+                    [ Screen Share ]
+                </div>
+            </div>
+            
+            <!-- Call Controls -->
+            <div style="display: flex; justify-content: center; gap: 15px; margin-top: 20px;">
+                <button class="btn" style="border-radius: 50%; width: 50px; height: 50px; padding: 0;">🎤</button>
+                <button class="btn" style="border-radius: 50%; width: 50px; height: 50px; padding: 0;">📹</button>
+                <button class="btn" style="border-radius: 50%; width: 50px; height: 50px; padding: 0;">🖥️</button>
+                <button class="btn btn-danger" style="border-radius: 50%; width: 50px; height: 50px; padding: 0;">📞</button>
+            </div>
+        </div>
+        
+        <!-- Quick Patient Info During Call -->
+        <div class="card" style="margin-top: 20px;">
+            <div class="card-header">Patient Quick View</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Current Adherence:</span>
+                <strong>45%</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Last Pain Report:</span>
+                <strong>4/10</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Avg. Quality Score:</span>
+                <strong>68</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>Sessions This Week:</span>
+                <strong>3/7</strong>
+            </div>
+            <a href="{{ url_for('patient_detail', patient_id='PT-001') }}" class="btn" style="width: 100%; margin-top: 15px; text-align: center;">View Full Profile</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

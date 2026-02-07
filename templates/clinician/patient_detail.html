@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+
+{% block title %}Patient Detail - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1>👤 Patient Detail View</h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('clinician_dashboard') }}">← Back to Dashboard</a>
+        <a href="{{ url_for('plan_editor') }}">Edit Plan</a>
+        <a href="{{ url_for('consultation') }}">Schedule Call</a>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<!-- Patient Header -->
+<div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <h2>John Smith</h2>
+        <p style="color: #666;">Patient ID: {{ patient_id }} | Age: 54 | Knee Replacement | Started: Jan 15, 2026</p>
+    </div>
+    <div style="display: flex; gap: 10px;">
+        <a href="{{ url_for('plan_editor') }}" class="btn">Edit Rehab Plan</a>
+        <a href="{{ url_for('consultation') }}" class="btn btn-primary">Schedule Consultation</a>
+    </div>
+</div>
+
+<!-- Weekly Summary Card -->
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">Weekly Summary (Week 3)</div>
+    <div class="stats-row">
+        <div class="stat-box">
+            <div class="stat-value" style="color: #dc3545;">45%</div>
+            <div class="stat-label">Adherence Rate</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value">68</div>
+            <div class="stat-label">Avg. Quality Score</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value">4.2</div>
+            <div class="stat-label">Avg. Pain Level</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value">3/7</div>
+            <div class="stat-label">Sessions Completed</div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="grid grid-2" style="margin-top: 20px;">
+    <!-- Quality Trend -->
+    <div class="card">
+        <div class="card-header">Form Quality Trend (4 Weeks)</div>
+        <div class="chart-placeholder">
+            <div class="bars">
+                <div class="bar" style="height: 75%; background: #6c757d;"></div>
+                <div class="bar" style="height: 70%; background: #6c757d;"></div>
+                <div class="bar" style="height: 65%; background: #ffc107;"></div>
+                <div class="bar" style="height: 68%; background: #ffc107;"></div>
+            </div>
+        </div>
+        <p style="text-align: center; margin-top: 10px; color: #ffc107;">⚠️ Quality declining - review form</p>
+    </div>
+    
+    <!-- Adherence Trend -->
+    <div class="card">
+        <div class="card-header">Adherence Trend (4 Weeks)</div>
+        <div class="chart-placeholder">
+            <div class="bars">
+                <div class="bar" style="height: 85%; background: #28a745;"></div>
+                <div class="bar" style="height: 70%; background: #ffc107;"></div>
+                <div class="bar" style="height: 55%; background: #dc3545;"></div>
+                <div class="bar" style="height: 45%; background: #dc3545;"></div>
+            </div>
+        </div>
+        <p style="text-align: center; margin-top: 10px; color: #dc3545;">⚠️ Adherence dropping significantly</p>
+    </div>
+</div>
+
+<!-- Common Form Errors -->
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">Common Form Errors (This Week)</div>
+    <div class="grid grid-4">
+        <div style="text-align: center; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <div style="font-size: 2rem; margin-bottom: 10px;">🦵</div>
+            <div style="font-weight: 600;">Knees Inward</div>
+            <div style="color: #dc3545; font-size: 1.5rem; font-weight: 700;">12x</div>
+        </div>
+        <div style="text-align: center; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <div style="font-size: 2rem; margin-bottom: 10px;">⏱️</div>
+            <div style="font-weight: 600;">Too Fast</div>
+            <div style="color: #ffc107; font-size: 1.5rem; font-weight: 700;">8x</div>
+        </div>
+        <div style="text-align: center; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <div style="font-size: 2rem; margin-bottom: 10px;">📐</div>
+            <div style="font-weight: 600;">Incomplete ROM</div>
+            <div style="color: #ffc107; font-size: 1.5rem; font-weight: 700;">6x</div>
+        </div>
+        <div style="text-align: center; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+            <div style="font-size: 2rem; margin-bottom: 10px;">🔄</div>
+            <div style="font-weight: 600;">Poor Balance</div>
+            <div style="color: #6c757d; font-size: 1.5rem; font-weight: 700;">3x</div>
+        </div>
+    </div>
+</div>
+
+<!-- Exercise Videos / Skeleton Replays -->
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">Session Recordings & Skeleton Replays</div>
+    <div class="grid grid-3">
+        <div style="background: #000; border-radius: 8px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; color: #fff;">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem;">▶️</div>
+                <p>Feb 7 - Knee Ext.</p>
+                <small>Quality: 72</small>
+            </div>
+        </div>
+        <div style="background: #000; border-radius: 8px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; color: #fff;">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem;">▶️</div>
+                <p>Feb 5 - Hip Flexor</p>
+                <small>Quality: 65</small>
+            </div>
+        </div>
+        <div style="background: #000; border-radius: 8px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; color: #fff;">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem;">▶️</div>
+                <p>Feb 3 - Quad Str.</p>
+                <small>Quality: 68</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Patient Notes -->
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">Clinician Notes</div>
+    <div style="background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
+        <strong>Feb 6, 2026 - Dr. Anderson:</strong>
+        <p>Patient reports increased pain after session. Consider reducing intensity. Schedule follow-up call.</p>
+    </div>
+    <div style="background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
+        <strong>Feb 1, 2026 - Dr. Anderson:</strong>
+        <p>Good progress overall. Adherence starting to drop - may need motivation support.</p>
+    </div>
+    <textarea class="form-control" rows="3" placeholder="Add a new note..."></textarea>
+    <button class="btn" style="margin-top: 10px;">Add Note</button>
+</div>
+
+<!-- Actions -->
+<div style="display: flex; gap: 15px; margin-top: 30px;">
+    <a href="{{ url_for('plan_editor') }}" class="btn btn-primary">Edit Rehab Plan</a>
+    <a href="{{ url_for('consultation') }}" class="btn">Schedule Video Call</a>
+    <button class="btn">Download Full Report (PDF)</button>
+    <button class="btn btn-danger">Send Alert to Patient</button>
+</div>
+{% endblock %}

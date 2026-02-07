@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}Select Role - Home Rehab Coach{% endblock %}
+
+{% block content %}
+<div class="role-selection">
+    <h1>Select Your Role</h1>
+    
+    <div class="role-cards">
+        <!-- Patient Role -->
+        <a href="{{ url_for('patient_dashboard') }}" class="role-card">
+            <div class="icon">🧑‍🦽</div>
+            <h3>Patient</h3>
+            <p>Access your rehab sessions, track progress, and complete exercises</p>
+        </a>
+        
+        <!-- Clinician Role -->
+        <a href="{{ url_for('clinician_dashboard') }}" class="role-card">
+            <div class="icon">👨‍⚕️</div>
+            <h3>Physiotherapist / Doctor</h3>
+            <p>Monitor patients, create rehab plans, and schedule consultations</p>
+        </a>
+        
+        <!-- Caregiver Role -->
+        <a href="{{ url_for('caregiver_dashboard') }}" class="role-card">
+            <div class="icon">👨‍👩‍👧</div>
+            <h3>Family Caregiver</h3>
+            <p>View progress summaries, receive alerts, and send encouragement</p>
+        </a>
+    </div>
+    
+    <div style="margin-top: 40px;">
+        <a href="{{ url_for('landing') }}" class="btn">← Back to Login</a>
+    </div>
+</div>
+{% endblock %}

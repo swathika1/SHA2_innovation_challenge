@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+
+{% block title %}Pain Check-in - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1>📋 Pain & Effort Check-in</h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('rehab_session') }}">← Back to Session</a>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="checkin-form">
+    <div class="card">
+        <div class="card-header">How are you feeling after this session?</div>
+        
+        <!-- Pain Slider -->
+        <div class="slider-group">
+            <label>Pain Level (1-10)</label>
+            <div class="slider-container">
+                <span>1</span>
+                <input type="range" min="1" max="10" value="3" class="slider" id="pain-slider">
+                <span>10</span>
+                <div class="slider-value" id="pain-value">3</div>
+            </div>
+            <div class="slider-labels">
+                <span>No Pain</span>
+                <span>Moderate</span>
+                <span>Severe</span>
+            </div>
+        </div>
+        
+        <!-- Perceived Exertion Slider -->
+        <div class="slider-group">
+            <label>Perceived Exertion (RPE 1-10)</label>
+            <div class="slider-container">
+                <span>1</span>
+                <input type="range" min="1" max="10" value="5" class="slider" id="exertion-slider">
+                <span>10</span>
+                <div class="slider-value" id="exertion-value">5</div>
+            </div>
+            <div class="slider-labels">
+                <span>Very Easy</span>
+                <span>Moderate</span>
+                <span>Maximum Effort</span>
+            </div>
+        </div>
+        
+        <!-- Voice Input -->
+        <div class="voice-input">
+            <div class="mic-icon">🎤</div>
+            <p><strong>Describe your pain (Optional)</strong></p>
+            <p style="color: #666; font-size: 0.9rem;">Tap to record voice note</p>
+            <button class="btn" style="margin-top: 15px;">Start Recording</button>
+        </div>
+        
+        <!-- Text Input Alternative -->
+        <div class="form-group">
+            <label for="pain-description">Or type your description:</label>
+            <textarea id="pain-description" class="form-control" rows="3" placeholder="Describe any discomfort, where it's located, and how it feels..."></textarea>
+        </div>
+        
+        <!-- Pain Location (Visual) -->
+        <div class="form-group">
+            <label>Pain Location</label>
+            <div style="background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; padding: 30px; text-align: center;">
+                <div style="font-size: 4rem;">🦵</div>
+                <p style="color: #666; margin-top: 10px;">[ Body diagram - tap to mark pain location ]</p>
+            </div>
+        </div>
+        
+        <!-- Submit -->
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <a href="{{ url_for('rehab_session') }}" class="btn" style="flex: 1; text-align: center;">Back to Session</a>
+            <a href="{{ url_for('session_summary') }}" class="btn btn-primary" style="flex: 1; text-align: center;">Submit & Continue</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Simple slider value update
+    document.getElementById('pain-slider').addEventListener('input', function() {
+        document.getElementById('pain-value').textContent = this.value;
+    });
+    document.getElementById('exertion-slider').addEventListener('input', function() {
+        document.getElementById('exertion-value').textContent = this.value;
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+
+{% block title %}Session Summary - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1>📊 Session Summary</h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('progress_history') }}">View Progress</a>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 20px;">Great job completing your session! 🎉</h2>
+
+<!-- Summary Stats Grid -->
+<div class="summary-grid">
+    <div class="summary-stat highlight">
+        <div class="value">28 / 30</div>
+        <div class="label">Reps Completed</div>
+    </div>
+    <div class="summary-stat highlight">
+        <div class="value">82</div>
+        <div class="label">Form Quality Score</div>
+    </div>
+    <div class="summary-stat">
+        <div class="value">+5°</div>
+        <div class="label">ROM Improvement</div>
+    </div>
+    <div class="summary-stat">
+        <div class="value">3</div>
+        <div class="label">Sets Completed</div>
+    </div>
+</div>
+
+<div class="grid grid-2" style="margin-top: 20px;">
+    <!-- Mistakes Detected -->
+    <div class="mistakes-list">
+        <div class="card-header">Common Mistakes Detected</div>
+        <div class="mistake-item">
+            <span>Knees tracking inward</span>
+            <span>4 times</span>
+        </div>
+        <div class="mistake-item">
+            <span>Movement too fast</span>
+            <span>3 times</span>
+        </div>
+        <div class="mistake-item">
+            <span>Incomplete range of motion</span>
+            <span>2 times</span>
+        </div>
+        <div class="mistake-item">
+            <span>Back not straight</span>
+            <span>1 time</span>
+        </div>
+    </div>
+    
+    <!-- Session Details -->
+    <div class="card">
+        <div class="card-header">Session Details</div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; justify-content: space-between;">
+                <span>Exercise:</span>
+                <strong>Knee Extension</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>Duration:</span>
+                <strong>18 minutes</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>Pain Level Reported:</span>
+                <strong>3 / 10</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>Perceived Exertion:</span>
+                <strong>5 / 10</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>Date:</span>
+                <strong>Feb 7, 2026</strong>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Motivational Feedback -->
+<div class="motivational-box" style="margin-top: 20px;">
+    <div style="font-size: 2rem; margin-bottom: 10px;">🌟</div>
+    <p><strong>Excellent work!</strong> Your form quality improved by 5% compared to your last session. Keep up the great consistency!</p>
+</div>
+
+<!-- Comparison Chart -->
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">Performance vs Previous Session</div>
+    <div style="display: flex; gap: 40px; justify-content: center; padding: 20px;">
+        <div style="text-align: center;">
+            <div style="font-size: 1.5rem; font-weight: 700;">Today</div>
+            <div style="font-size: 3rem; font-weight: 700; color: #28a745;">82</div>
+            <div style="color: #666;">Quality Score</div>
+        </div>
+        <div style="display: flex; align-items: center; font-size: 2rem; color: #28a745;">
+            ↑ +5
+        </div>
+        <div style="text-align: center;">
+            <div style="font-size: 1.5rem; font-weight: 700;">Last Session</div>
+            <div style="font-size: 3rem; font-weight: 700; color: #666;">77</div>
+            <div style="color: #666;">Quality Score</div>
+        </div>
+    </div>
+</div>
+
+<!-- Actions -->
+<div style="display: flex; gap: 15px; margin-top: 30px; justify-content: center;">
+    <a href="{{ url_for('patient_dashboard') }}" class="btn btn-primary btn-large">Return to Dashboard</a>
+    <a href="{{ url_for('progress_history') }}" class="btn btn-large">View Full Progress</a>
+</div>
+{% endblock %}
