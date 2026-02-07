@@ -1,43 +1,71 @@
-# SHA2_innonvation_challenge
-IC 2026 
+# SHA2 Innovation Challenge - IC 2026
 
+## Multimodal Home Rehab Form Coach (MSK / Post-op Rehab)
 
-Multimodal Home Rehab Form Coach (MSK / Post-op Rehab)
-Short Description / Features (Pointers):
-Target: Outpatient/post-op/MSK patients needing rehab
+### Short Description / Features
+**Target Users:** Outpatient / post-op / musculoskeletal (MSK) patients needing rehabilitation.  
 
+**Key Features:**
+- Detects exercises → counts reps/sets, checks form quality, flags mistakes
+- Real-time guidance: “knees tracking inward”, “slow down”, “stand taller”
+- Generates clinician-ready summary: adherence %, quality trend, top errors, “needs intervention” flags
+- Personalized feedback based on baseline range-of-motion and progressive targets
+- Multi-lingual cues: SEA-LION can give audio/text instructions in different languages
 
-Detects exercises → counts reps/sets, checks form quality, flags mistakes
+### Multimodal Inputs
+- **Video:** Pose/joint angles (primary) using MediaPipe / MoveNet
+- **Audio:** Optional effort/pain check
+- **Patient-reported:** Pain/perceived exertion
+- **Optional Wearables:** Smoothness, stability
 
+### MVP (Minimum Viable Product)
+- On-device pose extraction
+- Rule-based checks for exercise form
+- PDF summary generation
 
-Real-time guidance: “knees tracking inward”, “slow down”, “stand taller”
+### Advanced Features
+- Small temporal ML models (1D-CNN / LSTM) to predict quality score
+- Personalized feedback and progression tracking
 
+---
 
-Generates clinician-ready summary: adherence %, quality trend, top errors, “needs intervention” flags
+## Running the Flask App Locally
 
+### 1. Clone the Repository
+```bash
+git clone https://github.com/swathika1/SHA2_innovation_challenge.git
+cd SHA2_innovation_challenge
+```
 
-Multimodal inputs:
+### 2. Create a virtual environment
+Linux / Mac
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
 
+Windows (PowerShell)
+```bash
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
 
-Video → pose/joint angles (primary, MediaPipe / MoveNet)
+### 3. Install dependencies
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
+### 4. Run the app
+Linux / Mac
+```bash
+python3 main.py
+```
 
-Audio → optional effort/pain check
+Windows
+```bash
+python main.py
+```
 
+Than run it on localhost!
 
-Patient-reported → pain/perceived exertion
-
-
-Optional wearable → smoothness, stability
-
-
-MVP → on-device pose extraction + rule-based checks + PDF summary
-
-
-Advanced → small temporal ML (1D-CNN / LSTM) to predict quality score
-
-
-Personalized feedback → baseline range-of-motion, progressive targets
-
-
-Multi-lingual cues → SEA-LION can give audio/text instructions in different languages
