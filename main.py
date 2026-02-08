@@ -1,7 +1,149 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session
+from flask_sqlalchemy import SQLAlchemy
+from flask_session import Session
+from flask_cors import CORS
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from datetime import datetime
+import os
 from optim import get_top3_recommendations, optimize_all_patients, build_demo_data, load_dataset
 
+# Create instance folder if it doesn't exist
+os.makedirs('instance', exist_ok=True)
+
 app = Flask(__name__)
+app.secret_key = 'your-secret-key-here'  # Change this to a random secret key
+
+# Use absolute path for database
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(basedir, "instance", "rehab_app.db")}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Flask-Session configuration
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_PERMANENT'] = False
+app.config['SESSION_USE_SIGNER'] = True
+
+# Initialize extensions
+db = SQLAlchemy(app)
+Session(app)
+CORS(app, supports_credentials=True)
+
+# Flask-Login configuration
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'landing'
+
+# ==================== DATABASE MODELS ====================
+
+# User model (with Flask-Login integration)
+class User(UserMixin, db.Model):
+    __tablename__ = 'users'
+    
+    user_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(100), nullable=False)
+    email_id = db.Column(db.String(100), unique=True, nullable=False)
+    role = db.Column(db.String(50), nullable=False)  # 'patient', 'caregiver', 'clinician'
+    password = db.Column(db.String(255), nullable=False)
+    joining_date = db.Column(db.String(50), nullable=False)  # Changed to String to match SQLite TEXT
+    address = db.Column(db.Text)
+    
+    # Relationship with user_visits
+    visits = db.relationship('UserVisit', backref='user', lazy=True)
+    
+    def get_id(self):
+        return str(self.user_id)
+    
+    def __repr__(self):
+        return f'<User {self.name} - {self.role}>'
+
+# UserVisit model
+class UserVisit(db.Model):
+    __tablename__ = 'user_visits'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    visit_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<UserVisit {self.user_id} at {self.visit_time}>'
+
+# ==================== FLASK-LOGIN USER LOADER ====================
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# ==================== AUTHENTICATION API ====================
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    email = data.get('email_id')
+    password = data.get('password')
+    
+    print(f"Login attempt - Email: {email}")  # Debug log
+    
+    if not email or not password:
+        return jsonify({'success': False, 'message': 'Email and password required'}), 400
+    
+    # Find user by email
+    user = User.query.filter_by(email_id=email).first()
+    
+    if not user:
+        print(f"User not found for email: {email}")  # Debug log
+        return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
+    
+    print(f"User found: {user.name}, Role: {user.role}")  # Debug log
+    print(f"Stored password: {user.password}")  # Debug log
+    print(f"Entered password: {password}")  # Debug log
+    
+    # Check password (plain text for now - use hashed passwords in production)
+    if user.password != password:
+        print("Password mismatch!")  # Debug log
+        return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
+    
+    print("Password matched! Logging in user...")  # Debug log
+    
+    # Log the user in with Flask-Login
+    login_user(user)
+    
+    # Log the visit
+    visit = UserVisit(user_id=user.user_id, visit_time=datetime.utcnow())
+    db.session.add(visit)
+    db.session.commit()
+    
+    # Store user info in session
+    session['user_id'] = user.user_id
+    session['user_role'] = user.role
+    session['user_name'] = user.name
+    
+    # Return success with user role for routing
+    return jsonify({
+        'success': True,
+        'role': user.role,
+        'name': user.name,
+        'user_id': user.user_id
+    }), 200
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    logout_user()
+    session.clear()
+    return jsonify({'success': True}), 200
+
+@app.route('/api/current-user', methods=['GET'])
+def get_current_user():
+    """Get current logged-in user information"""
+    if current_user.is_authenticated:
+        return jsonify({
+            'authenticated': True,
+            'user_id': current_user.user_id,
+            'name': current_user.name,
+            'email': current_user.email_id,
+            'role': current_user.role
+        }), 200
+    else:
+        return jsonify({'authenticated': False}), 401
 
 # ==================== PATIENT ROUTES ====================
 
@@ -11,57 +153,87 @@ def landing():
     return render_template('landing.html')
 
 @app.route('/patient/dashboard')
+@login_required
 def patient_dashboard():
     """Patient Home Dashboard"""
+    if current_user.role != 'patient':
+        return redirect(url_for('landing'))
     return render_template('patient/dashboard.html')
 
 @app.route('/patient/session')
+@login_required
 def rehab_session():
     """Rehab Session Screen (Core Screen)"""
+    if current_user.role != 'patient':
+        return redirect(url_for('landing'))
     return render_template('patient/session.html')
 
 @app.route('/patient/checkin')
+@login_required
 def pain_checkin():
     """Pain & Effort Check-In Screen"""
+    if current_user.role != 'patient':
+        return redirect(url_for('landing'))
     return render_template('patient/checkin.html')
 
 @app.route('/patient/summary')
+@login_required
 def session_summary():
     """Session Summary Screen"""
+    if current_user.role != 'patient':
+        return redirect(url_for('landing'))
     return render_template('patient/summary.html')
 
 @app.route('/patient/progress')
+@login_required
 def progress_history():
     """Progress & History Screen"""
+    if current_user.role != 'patient':
+        return redirect(url_for('landing'))
     return render_template('patient/progress.html')
 
 # ==================== CLINICIAN ROUTES ====================
 
 @app.route('/clinician/dashboard')
+@login_required
 def clinician_dashboard():
     """Clinician Dashboard"""
+    if current_user.role != 'clinician':
+        return redirect(url_for('landing'))
     return render_template('clinician/dashboard.html')
 
 @app.route('/clinician/patient/<patient_id>')
+@login_required
 def patient_detail(patient_id):
     """Patient Detail View"""
+    if current_user.role != 'clinician':
+        return redirect(url_for('landing'))
     return render_template('clinician/patient_detail.html', patient_id=patient_id)
 
 @app.route('/clinician/plan-editor')
+@login_required
 def plan_editor():
     """Rehab Plan Editor"""
+    if current_user.role != 'clinician':
+        return redirect(url_for('landing'))
     return render_template('clinician/plan_editor.html')
 
 @app.route('/clinician/consultation')
+@login_required
 def consultation():
     """Consultation & Scheduling Screen"""
+    if current_user.role != 'clinician':
+        return redirect(url_for('landing'))
     return render_template('clinician/consultation.html')
 
 # ==================== CAREGIVER ROUTES ====================
 
 @app.route('/caregiver/dashboard')
+@login_required
 def caregiver_dashboard():
     """Caregiver Dashboard"""
+    if current_user.role != 'caregiver':
+        return redirect(url_for('landing'))
     return render_template('caregiver/dashboard.html')
 
 # ==================== ROLE SELECTION ====================
@@ -74,18 +246,9 @@ def select_role():
 # ==================== OPTIMIZATION API ====================
 
 @app.route('/api/optimize', methods=['POST'])
+@login_required
 def api_optimize():
-    """Run appointment optimization for a single patient.
-
-    Expects JSON body with:
-        patient_id (str): ID of the patient to optimize for.
-        patients (list[dict]): Patient data.
-        doctors (list[dict]): Doctor data.
-        timeslots (list[dict]): Timeslot data.
-        weights (dict, optional): Objective weights.
-
-    Returns JSON with top-3 recommendations and notification (if any).
-    """
+    """Run appointment optimization for a single patient."""
     data = request.get_json()
     if data is None:
         return jsonify({"error": "Request body must be JSON"}), 400
@@ -117,17 +280,9 @@ def api_optimize():
 
 
 @app.route('/api/optimize/all', methods=['POST'])
+@login_required
 def api_optimize_all():
-    """Run appointment optimization for all patients.
-
-    Expects JSON body with:
-        patients (list[dict]): Patient data.
-        doctors (list[dict]): Doctor data.
-        timeslots (list[dict]): Timeslot data.
-        weights (dict, optional): Objective weights.
-
-    Returns JSON with results keyed by patient_id.
-    """
+    """Run appointment optimization for all patients."""
     data = request.get_json()
     if data is None:
         return jsonify({"error": "Request body must be JSON"}), 400
@@ -161,4 +316,9 @@ def api_optimize_demo():
 
 
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+        print("Database tables created successfully!")
+        print(f"Database location: {os.path.join(basedir, 'instance', 'rehab_app.db')}")
+    
     app.run(debug=True)
