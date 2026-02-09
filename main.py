@@ -2,6 +2,8 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, s
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 from flask import request, jsonify
+from flask import request, jsonify
+from Rehab_Scorer_Coach.src.web_pipeline import WebRehabPipeline
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from datetime import datetime
@@ -13,6 +15,8 @@ os.makedirs('instance', exist_ok=True)
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this to a random secret key
+
+PIPELINE = WebRehabPipeline()
 
 # Use absolute path for database
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -327,6 +331,27 @@ def api_session_start():
     SESSION_STATE["threshold"] = float(data.get("threshold", 30.0))
     SESSION_STATE["cooldown_until"] = 0
     return jsonify({"ok": True, "threshold": SESSION_STATE["threshold"]})
+
+@app.route("/api/session/start", methods=["POST"])
+def api_session_start():
+    data = request.get_json(force=True) or {}
+    threshold = float(data.get("threshold", 30.0))
+    exercise_name = data.get("exercise_name", "exercise")
+    cooldown_seconds = float(data.get("cooldown_seconds", 10.0))
+
+    PIPELINE.reset(threshold=threshold, exercise_name=exercise_name, cooldown_seconds=cooldown_seconds)
+    return jsonify({"ok": True, "threshold": threshold, "exercise_name": exercise_name})
+
+
+@app.route("/api/live_feedback", methods=["POST"])
+def api_live_feedback():
+    data = request.get_json(force=True) or {}
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    out = PIPELINE.process_frame_dataurl(frame_b64)
+    return jsonify(out)
 
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():

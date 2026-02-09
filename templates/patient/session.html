@@ -19,50 +19,54 @@
             <strong>Skeleton Tracking: ON</strong><br>
             <small>Pose detection active</small>
         </div>
-        <div class="video-placeholder">
-            <div class="icon">📹</div>
-            <p>Live Webcam Feed</p>
-            <p style="font-size: 0.8rem; opacity: 0.7;">Skeleton overlay will appear on your body</p>
+
+        <!-- ✅ Replace placeholder with REAL webcam video -->
+        <div class="video-placeholder" style="padding: 0; overflow: hidden;">
+            <video id="webcamVideo" autoplay playsinline muted style="width:100%; height:100%; object-fit: cover; background:#000;"></video>
+            <!-- optional: show overlay text if camera fails -->
+            <div id="camErrorOverlay" style="display:none; position:absolute; inset:0; align-items:center; justify-content:center; flex-direction:column; color:#fff;">
+                <div class="icon">📹</div>
+                <p>Live Webcam Feed</p>
+                <p style="font-size: 0.8rem; opacity: 0.7;">Allow camera access to start</p>
+            </div>
         </div>
     </div>
-    
+
     <!-- Feedback Panel -->
     <div class="feedback-panel">
-        <!-- Rep Counter -->
+        <!-- Rep Counter (still placeholder) -->
         <div class="rep-counter">
             <div class="count">7 / 10</div>
             <div class="label">Reps (Set 2 of 3)</div>
         </div>
-        
-        <!-- Form Status -->
+
+        <!-- ✅ Form Status (dynamic) -->
         <div class="form-status">
             <h4 style="margin-bottom: 10px;">Form Status</h4>
-            <div class="status-indicator correct">
+
+            <!-- ✅ single indicator (remove duplicates) -->
+            <div id="statusIndicator" class="status-indicator correct">
                 ✓ CORRECT FORM
             </div>
-            <!-- Alternative incorrect state -->
-            <!--
-            <div class="status-indicator incorrect">
-                ✗ FORM NEEDS ADJUSTMENT
+
+            <div style="margin-top: 10px; text-align:center; color:#666;">
+                Score: <span id="frameScoreText">--</span> / 50
             </div>
-            -->
         </div>
-        
-        <!-- Error Messages -->
+
+        <!-- ✅ Real-time Feedback (dynamic) -->
         <div class="error-messages">
             <h4>Real-time Feedback</h4>
-            <div class="error-item">
-                ⚠️ Keep your back straight
-            </div>
-            <div class="error-item">
-                ⚠️ Slow down the movement
-            </div>
-            <div class="error-item" style="background: #d4edda; border-left-color: #28a745;">
-                ✓ Good knee alignment
+
+            <!-- This will be replaced by JS -->
+            <div id="feedbackList">
+                <div class="error-item">
+                    Waiting for feedback...
+                </div>
             </div>
         </div>
-        
-        <!-- Audio Indicator -->
+
+        <!-- Audio Indicator (still placeholder UI) -->
         <div class="audio-indicator">
             <div class="audio-icon">🔊</div>
             <div>
@@ -70,27 +74,147 @@
                 <small>Audio cues are active</small>
             </div>
         </div>
-        
+
         <!-- Exercise Info -->
         <div class="card" style="padding: 15px;">
             <h4>Current Exercise</h4>
-            <p style="color: #666; margin-top: 5px;">Knee Extension</p>
+            <p style="color: #666; margin-top: 5px;" id="exerciseNameText">Knee Extension</p>
             <p style="font-size: 0.85rem; margin-top: 10px;">
                 Target: 3 sets × 10 reps<br>
                 ROM Target: 90° flexion
             </p>
         </div>
-        
+
         <!-- Session Controls -->
         <div class="session-controls">
             <button class="btn" style="flex: 1;">⏸️ Pause</button>
             <button class="btn btn-danger" style="flex: 1;">⏹️ Stop Session</button>
         </div>
-        
+
         <!-- Next Step -->
         <a href="{{ url_for('pain_checkin') }}" class="btn btn-success" style="text-align: center;">
             Complete Set → Check-in
         </a>
     </div>
 </div>
+
+<!-- ✅ JS: camera + polling + UI updates -->
+<script>
+const VIDEO = document.getElementById("webcamVideo");
+const camErrorOverlay = document.getElementById("camErrorOverlay");
+
+const statusIndicator = document.getElementById("statusIndicator");
+const scoreSpan = document.getElementById("frameScoreText");
+const feedbackBox = document.getElementById("feedbackList");
+const exerciseNameText = document.getElementById("exerciseNameText");
+
+const canvas = document.createElement("canvas");
+const ctx = canvas.getContext("2d");
+
+// You can wire this later to a dropdown / backend variable
+const EXERCISE_NAME = exerciseNameText ? exerciseNameText.textContent.trim() : "exercise";
+const THRESHOLD = 30.0;
+const COOLDOWN_SECONDS = 10;
+const POLL_MS = 2000;
+
+async function startWebcam() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        VIDEO.srcObject = stream;
+        await VIDEO.play();
+        if (camErrorOverlay) camErrorOverlay.style.display = "none";
+        return true;
+    } catch (err) {
+        console.error("Camera error:", err);
+        if (camErrorOverlay) {
+            camErrorOverlay.style.display = "flex";
+        }
+        return false;
+    }
+}
+
+async function startSession() {
+    await fetch("/api/session/start", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            threshold: THRESHOLD,
+            exercise_name: EXERCISE_NAME,
+            cooldown_seconds: COOLDOWN_SECONDS
+        })
+    });
+}
+
+function grabFrameDataURL() {
+    const w = VIDEO.videoWidth, h = VIDEO.videoHeight;
+    if (!w || !h) return null;
+    canvas.width = w; canvas.height = h;
+    ctx.drawImage(VIDEO, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+function setStatus(status, score) {
+    scoreSpan.textContent = Number(score || 0).toFixed(2);
+
+    // reset classes
+    statusIndicator.classList.remove("correct", "incorrect");
+
+    if (status === "CORRECT") {
+        statusIndicator.classList.add("correct");
+        statusIndicator.textContent = "✓ CORRECT FORM";
+    } else if (status === "WRONG") {
+        statusIndicator.classList.add("incorrect");
+        statusIndicator.textContent = "✗ FORM NEEDS ADJUSTMENT";
+    } else if (status === "NO_POSE") {
+        statusIndicator.classList.add("incorrect");
+        statusIndicator.textContent = "… POSE NOT DETECTED";
+    } else {
+        statusIndicator.classList.add("incorrect");
+        statusIndicator.textContent = "… PROCESSING";
+    }
+}
+
+function renderFeedback(items) {
+    feedbackBox.innerHTML = "";
+
+    if (!items || items.length === 0) {
+        const div = document.createElement("div");
+        div.className = "error-item";
+        div.textContent = "No new feedback.";
+        feedbackBox.appendChild(div);
+        return;
+    }
+
+    items.slice(0, 4).forEach((txt, idx) => {
+        const div = document.createElement("div");
+        div.className = "error-item";
+        div.textContent = "⚠️ " + txt;
+        feedbackBox.appendChild(div);
+    });
+}
+
+async function pollFeedback() {
+    const frame_b64 = grabFrameDataURL();
+    if (!frame_b64) return;
+
+    const res = await fetch("/api/live_feedback", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ frame_b64 })
+    });
+
+    const out = await res.json();
+    setStatus(out.form_status, out.frame_score);
+    renderFeedback(out.llm_feedback);
+}
+
+(async function init() {
+    const camOk = await startWebcam();
+    if (!camOk) return;
+
+    await startSession();
+    setInterval(pollFeedback, POLL_MS);
+})();
+</script>
+
 {% endblock %}
