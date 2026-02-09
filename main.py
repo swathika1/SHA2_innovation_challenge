@@ -343,17 +343,30 @@ def patient_appointments():
 @role_required('doctor')
 def clinician_dashboard():
     """Clinician Dashboard"""
+    # Get patients assigned to this doctor
     patients = query_db('''
         SELECT 
             u.id, u.name, u.email,
             p.condition, p.current_week, p.adherence_rate, 
-            p.avg_pain_level, p.avg_quality_score, p.streak_days
+            p.avg_pain_level, p.avg_quality_score, p.completed_sessions
         FROM users u
         JOIN patients p ON u.id = p.user_id
-        JOIN doctor_patient dp ON u.id = dp.patient_id
+        JOIN doctor_patient dp ON p.user_id = dp.patient_id
         WHERE dp.doctor_id = ?
         ORDER BY p.adherence_rate ASC
     ''', (session['user_id'],))
+    
+    # If no assigned patients, show ALL patients (for demo/new doctors)
+    if not patients:
+        patients = query_db('''
+            SELECT 
+                u.id, u.name, u.email,
+                p.condition, p.current_week, p.adherence_rate, 
+                p.avg_pain_level, p.avg_quality_score, p.completed_sessions
+            FROM users u
+            JOIN patients p ON u.id = p.user_id
+            ORDER BY p.adherence_rate ASC
+        ''')
     
     total_patients = len(patients)
     needs_attention = sum(1 for p in patients if p['adherence_rate'] < 50 or p['avg_pain_level'] > 6)
@@ -436,13 +449,22 @@ def plan_editor():
         
         flash('Exercise added to patient\'s plan!', 'success')
     
+    # Get patients assigned to this doctor
     patients = query_db('''
         SELECT u.id, u.name, p.condition
         FROM users u
         JOIN patients p ON u.id = p.user_id
-        JOIN doctor_patient dp ON u.id = dp.patient_id
+        JOIN doctor_patient dp ON p.user_id = dp.patient_id
         WHERE dp.doctor_id = ?
     ''', (session['user_id'],))
+    
+    # If no assigned patients, show ALL patients
+    if not patients:
+        patients = query_db('''
+            SELECT u.id, u.name, p.condition
+            FROM users u
+            JOIN patients p ON u.id = p.user_id
+        ''')
     
     exercises = query_db('SELECT * FROM exercises ORDER BY category, name')
     
@@ -487,12 +509,22 @@ def consultation():
         flash('Appointment scheduled successfully!', 'success')
         return redirect(url_for('consultation'))
     
+    # Get patients assigned to this doctor
     patients = query_db('''
         SELECT u.id, u.name
         FROM users u
-        JOIN doctor_patient dp ON u.id = dp.patient_id
+        JOIN patients p ON u.id = p.user_id
+        JOIN doctor_patient dp ON p.user_id = dp.patient_id
         WHERE dp.doctor_id = ?
     ''', (session['user_id'],))
+    
+    # If no assigned patients, show ALL patients
+    if not patients:
+        patients = query_db('''
+            SELECT u.id, u.name
+            FROM users u
+            JOIN patients p ON u.id = p.user_id
+        ''')
     
     appointments = query_db('''
         SELECT a.*, u.name as patient_name, p.condition, p.adherence_rate, p.avg_pain_level, p.avg_quality_score

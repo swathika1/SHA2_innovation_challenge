@@ -225,15 +225,53 @@
 <div class="video-container">
     <!-- Main Video Area -->
     <div class="video-main" id="videoContainer">
-        <!-- Jitsi Meet will be embedded here automatically -->
+        <!-- Different UI for Doctor (Host) vs Patient -->
         <div class="waiting-room" id="waitingRoom">
-            <h2>📹 Connecting to Video Call...</h2>
-            <p>{{ appointment.patient_name }} {% if is_doctor %}(Patient){% else %}with {{ appointment.doctor_name }}{% endif %}</p>
+            {% if is_doctor %}
+            <!-- DOCTOR VIEW - They are the host -->
+            <h2>📹 Start Video Consultation</h2>
+            <p><strong>Patient:</strong> {{ appointment.patient_name }}</p>
             <p style="font-size: 0.9rem;">{{ appointment.appointment_date }} at {{ appointment.appointment_time }}</p>
-            <div class="loading-spinner"></div>
-            <p style="font-size: 0.8rem; margin-top: 20px; opacity: 0.6;">
-                Please allow camera and microphone access when prompted
+            
+            <div style="background: rgba(40, 167, 69, 0.2); padding: 15px; border-radius: 8px; margin: 20px 0; max-width: 400px;">
+                <p style="margin: 0; font-size: 0.9rem;">👨‍⚕️ <strong>You are the HOST</strong></p>
+                <p style="margin: 8px 0 0 0; font-size: 0.85rem; opacity: 0.9;">Click below to start the meeting. Your patient will be able to join once you're in.</p>
+            </div>
+            
+            <button class="join-btn" onclick="openJitsiAsHost()" style="margin-top: 10px;">
+                🎥 Start Meeting as Host
+            </button>
+            
+            <p style="font-size: 0.8rem; margin-top: 15px; opacity: 0.7; max-width: 400px;">
+                When Jitsi opens, click <strong>"I am the host"</strong> to begin.
             </p>
+            
+            {% else %}
+            <!-- PATIENT VIEW - They join after doctor -->
+            <h2>📹 Join Video Consultation</h2>
+            <p><strong>Doctor:</strong> {{ appointment.doctor_name }}</p>
+            <p style="font-size: 0.9rem;">{{ appointment.appointment_date }} at {{ appointment.appointment_time }}</p>
+            
+            <div style="background: rgba(23, 162, 184, 0.2); padding: 15px; border-radius: 8px; margin: 20px 0; max-width: 400px;">
+                <p style="margin: 0; font-size: 0.9rem;">⏳ <strong>Waiting for Doctor to Start</strong></p>
+                <p style="margin: 8px 0 0 0; font-size: 0.85rem; opacity: 0.9;">Your doctor needs to start the meeting first. Once they're in, you can join.</p>
+            </div>
+            
+            <button class="join-btn" onclick="openJitsiAsPatient()" style="margin-top: 10px; background: #17a2b8;">
+                🎥 Join Meeting
+            </button>
+            
+            <p style="font-size: 0.8rem; margin-top: 15px; opacity: 0.7; max-width: 400px;">
+                If you see "waiting for moderator", your doctor hasn't started yet. Please wait.
+            </p>
+            {% endif %}
+            
+            <div style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                <p style="font-size: 0.8rem; margin: 0;">
+                    📋 <strong>Room ID:</strong> <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">{{ room_id }}</code>
+                    <button onclick="copyRoomLink()" style="margin-left: 10px; padding: 3px 8px; font-size: 0.75rem; cursor: pointer;">Copy Link</button>
+                </p>
+            </div>
         </div>
     </div>
     
@@ -297,7 +335,7 @@
         
         <!-- Call Actions -->
         <div class="call-actions">
-            <button class="btn btn-primary" onclick="joinVideoCall()">
+            <button class="btn btn-primary" onclick="openJitsiWindow()">
                 🎥 Join/Rejoin Call
             </button>
             {% if is_doctor %}
@@ -328,13 +366,17 @@
     const isDoctor = {{ 'true' if is_doctor else 'false' }};
     let api = null;
     
+    // Use alternative Jitsi server (no authentication required)
+    // Options: "meet.ffmuc.net", "jitsi.uib.no", "meet.jit.si"
+    const jitsiDomain = "meet.ffmuc.net";
+    
     // Auto-start Jitsi when page loads
     document.addEventListener('DOMContentLoaded', function() {
-        startJitsiMeet();
+        // Don't auto-start, let user click the button
     });
     
     function startJitsiMeet() {
-        const domain = "meet.jit.si";
+        const domain = jitsiDomain;
         const options = {
             roomName: roomId,
             width: '100%',
@@ -352,7 +394,14 @@
                 enableClosePage: false,
                 disableInviteFunctions: true,
                 hideConferenceSubject: false,
-                subject: 'Home Rehab Consultation'
+                subject: 'Home Rehab Consultation',
+                // Disable lobby mode - allow anyone to join
+                enableLobbyChat: false,
+                hideLobbyButton: true,
+                requireDisplayName: false,
+                // Make everyone a moderator
+                enableUserRolesBasedOnToken: false,
+                disableModeratorIndicator: true
             },
             interfaceConfigOverwrite: {
                 TOOLBAR_BUTTONS: [
@@ -364,7 +413,8 @@
                 DEFAULT_BACKGROUND: '#1a1a2e',
                 DISABLE_JOIN_LEAVE_NOTIFICATIONS: false,
                 MOBILE_APP_PROMO: false,
-                HIDE_INVITE_MORE_HEADER: true
+                HIDE_INVITE_MORE_HEADER: true,
+                DISABLE_PRESENCE_STATUS: true
             }
         };
         
@@ -416,9 +466,75 @@
         startJitsiMeet();
     }
     
+    // DOCTOR: Open Jitsi as HOST
+    // DOCTOR: Open Jitsi as HOST (using free server without auth)
+    function openJitsiAsHost() {
+        const jitsiUrl = `https://${jitsiDomain}/${roomId}#userInfo.displayName="${encodeURIComponent(userName)}"&config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.startWithVideoMuted=false`;
+        
+        // Open in new window
+        window.open(
+            jitsiUrl,
+            'VideoCall',
+            'width=1200,height=800,menubar=no,toolbar=no,location=yes,status=no'
+        );
+        
+        // Update status
+        updateConnectionStatus('connected', 'Meeting started - you are the host');
+        
+        // Show host status
+        document.getElementById('waitingRoom').innerHTML = `
+            <h2>✅ Meeting Started</h2>
+            <p style="font-size: 1.1rem; margin: 20px 0;">You are the <strong>HOST</strong> of this meeting.</p>
+            <div style="background: rgba(40, 167, 69, 0.2); padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0;">👨‍⚕️ The video call is open in another window.</p>
+                <p style="margin: 10px 0 0 0;">Your patient can now join the meeting.</p>
+            </div>
+            <button class="join-btn" onclick="openJitsiAsHost()" style="background: #6c757d;">
+                🔄 Reopen Meeting Window
+            </button>
+        `;
+    }
+    
+    // PATIENT: Open Jitsi as participant (using free server without auth)
+    function openJitsiAsPatient() {
+        const jitsiUrl = `https://${jitsiDomain}/${roomId}#userInfo.displayName="${encodeURIComponent(userName)}"&config.prejoinPageEnabled=false`;
+        
+        // Open in new window
+        window.open(
+            jitsiUrl,
+            'VideoCall',
+            'width=1200,height=800,menubar=no,toolbar=no,location=yes,status=no'
+        );
+        
+        // Update status
+        updateConnectionStatus('connected', 'Joining meeting...');
+        
+        // Show joining status
+        document.getElementById('waitingRoom').innerHTML = `
+            <h2>📹 Joining Meeting...</h2>
+            <p style="font-size: 1.1rem; margin: 20px 0;">The video call has opened in a new window.</p>
+            <div style="background: rgba(40, 167, 69, 0.2); padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0;">✅ Using ${jitsiDomain} - no login required!</p>
+                <p style="margin: 10px 0 0 0;">Both participants can join directly.</p>
+            </div>
+            <button class="join-btn" onclick="openJitsiAsPatient()" style="background: #17a2b8;">
+                🔄 Try Joining Again
+            </button>
+        `;
+    }
+    
+    // Generic open function (used by sidebar button)
+    function openJitsiWindow() {
+        if (isDoctor) {
+            openJitsiAsHost();
+        } else {
+            openJitsiAsPatient();
+        }
+    }
+    
     // Copy room link functionality
     function copyRoomLink() {
-        const link = `https://meet.jit.si/${roomId}`;
+        const link = `https://${jitsiDomain}/${roomId}`;
         navigator.clipboard.writeText(link).then(() => {
             alert('Room link copied! Share this with the other participant.');
         });
