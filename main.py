@@ -1,6 +1,6 @@
 """
 main.py - Home Rehab Coach Flask Application
-With SQLite database integration and Video Call features
+With SQLite database integration, Video Call features, and CV/ML Pipeline
 """
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
@@ -9,6 +9,15 @@ from database import get_db, close_db, query_db, execute_db
 from functools import wraps
 from datetime import datetime, date
 import uuid
+import os
+
+# Import optimization module (from computer_vision branch)
+try:
+    from optim import get_top3_recommendations, optimize_all_patients, build_demo_data, load_dataset
+    OPTIM_AVAILABLE = True
+except ImportError:
+    OPTIM_AVAILABLE = False
+    print("[WARNING] optim module not found - optimization features disabled")
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'  # Required for sessions
@@ -23,7 +32,6 @@ def login_required(f):
     """Decorator to protect routes that require login."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        print(f"[DEBUG] login_required check: user_id={session.get('user_id')}")  # Debug
         if 'user_id' not in session:
             flash('Please log in to access this page.', 'error')
             return redirect(url_for('login'))
@@ -69,16 +77,11 @@ def login():
         email = request.form['email']
         password = request.form['password']
         
-        print(f"[DEBUG] Login attempt for: {email}")  # Debug
-        
         # Find user by email
         user = query_db('SELECT * FROM users WHERE email = ?', (email,), one=True)
         
-        print(f"[DEBUG] User found: {user is not None}")  # Debug
-        
         if user:
             password_match = check_password_hash(user['password'], password)
-            print(f"[DEBUG] Password match: {password_match}")  # Debug
             
             if password_match:
                 # Login successful - store user info in session
@@ -86,8 +89,6 @@ def login():
                 session['user_name'] = user['name']
                 session['role'] = user['role']
                 session.permanent = True  # Make session persistent
-                
-                print(f"[DEBUG] Session set: user_id={session.get('user_id')}, role={session.get('role')}")  # Debug
                 
                 flash(f'Welcome back, {user["name"]}!', 'success')
                 
@@ -102,6 +103,71 @@ def login():
         flash('Invalid email or password.', 'error')
     
     return render_template('login.html')
+
+
+# API Login endpoint (for computer_vision branch compatibility)
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    """API Login endpoint"""
+    data = request.get_json()
+    email = data.get('email_id') or data.get('email')
+    password = data.get('password')
+    
+    if not email or not password:
+        return jsonify({'success': False, 'message': 'Email and password required'}), 400
+    
+    user = query_db('SELECT * FROM users WHERE email = ?', (email,), one=True)
+    
+    if not user:
+        return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
+    
+    # Check password (support both hashed and plain text for compatibility)
+    password_match = False
+    try:
+        password_match = check_password_hash(user['password'], password)
+    except:
+        password_match = (user['password'] == password)
+    
+    if not password_match:
+        return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
+    
+    # Store in session
+    session['user_id'] = user['id']
+    session['user_name'] = user['name']
+    session['role'] = user['role']
+    
+    # Map role names for compatibility
+    role_map = {'doctor': 'clinician', 'patient': 'patient', 'caregiver': 'caregiver'}
+    
+    return jsonify({
+        'success': True,
+        'role': role_map.get(user['role'], user['role']),
+        'name': user['name'],
+        'user_id': user['id']
+    }), 200
+
+
+@app.route('/api/logout', methods=['POST'])
+def api_logout():
+    """API Logout endpoint"""
+    session.clear()
+    return jsonify({'success': True}), 200
+
+
+@app.route('/api/current-user', methods=['GET'])
+def api_current_user():
+    """Get current logged-in user information"""
+    if 'user_id' in session:
+        user = get_current_user()
+        if user:
+            return jsonify({
+                'authenticated': True,
+                'user_id': user['id'],
+                'name': user['name'],
+                'email': user['email'],
+                'role': user['role']
+            }), 200
+    return jsonify({'authenticated': False}), 401
 
 
 @app.route('/signup', methods=['GET', 'POST'])
@@ -215,9 +281,9 @@ def patient_dashboard():
     return render_template('patient/dashboard.html',
                          user=user,
                          patient=patient_info,
-                         workouts=workouts,
-                         recent_sessions=recent_sessions,
-                         upcoming_appointments=upcoming_appointments)
+                         workouts=workouts if workouts else [],
+                         recent_sessions=recent_sessions if recent_sessions else [],
+                         upcoming_appointments=upcoming_appointments if upcoming_appointments else [])
 
 
 @app.route('/patient/session')
@@ -232,7 +298,7 @@ def rehab_session():
         WHERE w.patient_id = ? AND w.is_active = 1
     ''', (session['user_id'],))
     
-    return render_template('patient/session.html', workouts=workouts)
+    return render_template('patient/session.html', workouts=workouts if workouts else [])
 
 
 @app.route('/patient/checkin', methods=['GET', 'POST'])
@@ -303,7 +369,7 @@ def progress_history():
     )
     
     return render_template('patient/progress.html',
-                         sessions=all_sessions,
+                         sessions=all_sessions if all_sessions else [],
                          patient=patient_info)
 
 
@@ -332,8 +398,8 @@ def patient_appointments():
     ''', (session['user_id'],))
     
     return render_template('patient/appointments.html',
-                         appointments=appointments,
-                         past_appointments=past_appointments)
+                         appointments=appointments if appointments else [],
+                         past_appointments=past_appointments if past_appointments else [])
 
 
 # ==================== CLINICIAN ROUTES ====================
@@ -368,6 +434,7 @@ def clinician_dashboard():
             ORDER BY p.adherence_rate ASC
         ''')
     
+    patients = patients if patients else []
     total_patients = len(patients)
     needs_attention = sum(1 for p in patients if p['adherence_rate'] < 50 or p['avg_pain_level'] > 6)
     avg_adherence = sum(p['adherence_rate'] for p in patients) / total_patients if total_patients > 0 else 0
@@ -386,7 +453,7 @@ def clinician_dashboard():
                          total_patients=total_patients,
                          needs_attention=needs_attention,
                          avg_adherence=round(avg_adherence),
-                         upcoming_appointments=len(appointments))
+                         upcoming_appointments=len(appointments) if appointments else 0)
 
 
 @app.route('/clinician/patient/<int:patient_id>')
@@ -424,8 +491,8 @@ def patient_detail(patient_id):
     
     return render_template('clinician/patient_detail.html',
                          patient=patient,
-                         workouts=workouts,
-                         sessions=sessions)
+                         workouts=workouts if workouts else [],
+                         sessions=sessions if sessions else [])
 
 
 @app.route('/clinician/plan-editor', methods=['GET', 'POST'])
@@ -479,9 +546,9 @@ def plan_editor():
         ''', (selected_patient_id,))
     
     return render_template('clinician/plan_editor.html',
-                         patients=patients,
-                         exercises=exercises,
-                         current_workouts=current_workouts,
+                         patients=patients if patients else [],
+                         exercises=exercises if exercises else [],
+                         current_workouts=current_workouts if current_workouts else [],
                          selected_patient_id=selected_patient_id)
 
 
@@ -536,8 +603,8 @@ def consultation():
     ''', (session['user_id'],))
     
     return render_template('clinician/consultation.html',
-                         patients=patients,
-                         appointments=appointments)
+                         patients=patients if patients else [],
+                         appointments=appointments if appointments else [])
 
 
 # ==================== VIDEO CALL ROUTES ====================
@@ -625,7 +692,7 @@ def caregiver_dashboard():
         WHERE cp.caregiver_id = ?
     ''', (session['user_id'],))
     
-    patient_ids = [p['id'] for p in monitored_patients]
+    patient_ids = [p['id'] for p in monitored_patients] if monitored_patients else []
     recent_sessions = []
     if patient_ids:
         placeholders = ','.join('?' * len(patient_ids))
@@ -641,8 +708,8 @@ def caregiver_dashboard():
         ''', patient_ids)
     
     return render_template('caregiver/dashboard.html',
-                         patients=monitored_patients,
-                         recent_sessions=recent_sessions)
+                         patients=monitored_patients if monitored_patients else [],
+                         recent_sessions=recent_sessions if recent_sessions else [])
 
 
 # ==================== ROLE SELECTION ====================
@@ -676,7 +743,7 @@ def get_appointments():
             ORDER BY a.appointment_date, a.appointment_time
         ''', (session['user_id'],))
     
-    return jsonify([dict(a) for a in appointments])
+    return jsonify([dict(a) for a in appointments] if appointments else [])
 
 
 @app.route('/api/appointments', methods=['POST'])
@@ -723,7 +790,13 @@ def cancel_appointment_api(appointment_id):
 def complete_appointment(appointment_id):
     """Mark appointment as completed"""
     execute_db("UPDATE appointments SET status = 'completed' WHERE id = ?", (appointment_id,))
-    return jsonify({'success': True})
+    
+    # Check if this is an API call or form submission
+    if request.is_json:
+        return jsonify({'success': True})
+    else:
+        flash('Appointment marked as completed.', 'success')
+        return redirect(url_for('consultation'))
 
 
 @app.route('/api/remove-workout/<int:workout_id>', methods=['POST'])
@@ -743,6 +816,160 @@ def cancel_appointment(appointment_id):
     execute_db("UPDATE appointments SET status = 'cancelled' WHERE id = ?", (appointment_id,))
     flash('Appointment cancelled.', 'success')
     return redirect(request.referrer or url_for('consultation'))
+
+
+# ==================== OPTIMIZATION API (from computer_vision branch) ====================
+
+@app.route('/api/optimize', methods=['POST'])
+@login_required
+def api_optimize():
+    """Run appointment optimization for a single patient."""
+    if not OPTIM_AVAILABLE:
+        return jsonify({"error": "Optimization module not available"}), 503
+    
+    data = request.get_json()
+    if data is None:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    patient_id = data.get("patient_id")
+    patients = data.get("patients")
+    doctors = data.get("doctors")
+    timeslots = data.get("timeslots")
+    weights = data.get("weights")
+
+    if not all([patient_id, patients, doctors, timeslots]):
+        return jsonify({
+            "error": "Missing required fields: patient_id, patients, doctors, timeslots"
+        }), 400
+
+    recs, notification = get_top3_recommendations(
+        patient_id=patient_id,
+        patients=patients,
+        doctors=doctors,
+        timeslots=timeslots,
+        weights=weights,
+    )
+
+    return jsonify({
+        "patient_id": patient_id,
+        "recommendations": recs,
+        "notification": notification,
+    })
+
+
+@app.route('/api/optimize/all', methods=['POST'])
+@login_required
+def api_optimize_all():
+    """Run appointment optimization for all patients."""
+    if not OPTIM_AVAILABLE:
+        return jsonify({"error": "Optimization module not available"}), 503
+    
+    data = request.get_json()
+    if data is None:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    patients = data.get("patients")
+    doctors = data.get("doctors")
+    timeslots = data.get("timeslots")
+    weights = data.get("weights")
+
+    if not all([patients, doctors, timeslots]):
+        return jsonify({
+            "error": "Missing required fields: patients, doctors, timeslots"
+        }), 400
+
+    results = optimize_all_patients(
+        patients=patients,
+        doctors=doctors,
+        timeslots=timeslots,
+        weights=weights,
+    )
+
+    return jsonify({"results": results})
+
+
+@app.route('/api/optimize/demo', methods=['GET'])
+def api_optimize_demo():
+    """Run optimization with built-in demo data. No input needed."""
+    if not OPTIM_AVAILABLE:
+        return jsonify({"error": "Optimization module not available"}), 503
+    
+    patients, doctors, timeslots = build_demo_data()
+    results = optimize_all_patients(patients, doctors, timeslots)
+    return jsonify({"results": results})
+
+
+# ==================== CV/ML LIVE FEEDBACK API (from computer_vision branch) ====================
+
+# Global/session state for CV feedback
+SESSION_STATE = {
+    "scores": [],
+    "threshold": 30.0,
+    "cooldown_until": 0
+}
+
+@app.route("/api/session/start", methods=["POST"])
+def api_session_start():
+    """Start a new exercise session for CV tracking"""
+    data = request.get_json(force=True) or {}
+    SESSION_STATE["scores"] = []
+    SESSION_STATE["threshold"] = float(data.get("threshold", 30.0))
+    SESSION_STATE["cooldown_until"] = 0
+    return jsonify({"ok": True, "threshold": SESSION_STATE["threshold"]})
+
+
+@app.route("/api/live_feedback", methods=["POST"])
+def api_live_feedback():
+    """
+    Live feedback endpoint for CV/ML exercise analysis.
+    Input: { "frame_b64": "data:image/jpeg;base64,...." }
+    Output: score + form status + feedback list
+    
+    Note: Requires CV modules to be installed and configured.
+    """
+    try:
+        # Try to import CV modules
+        from cv_utils import decode_dataurl_to_bgr, pose_to_kimore_like_features, model_predict_score, get_llm_feedback
+        
+        data = request.get_json(force=True)
+        frame_b64 = data.get("frame_b64")
+        
+        if not frame_b64:
+            return jsonify({"error": "Missing frame_b64"}), 400
+
+        # 1) decode frame -> np array (BGR)
+        frame = decode_dataurl_to_bgr(frame_b64)
+
+        # 2) extract pose -> features
+        X = pose_to_kimore_like_features(frame)
+
+        # 3) model predict -> score in 0..50
+        score = float(model_predict_score(X))
+        SESSION_STATE["scores"].append(score)
+
+        # 4) form status
+        status = "CORRECT" if score >= SESSION_STATE["threshold"] else "WRONG"
+
+        # 5) LLM feedback only if wrong
+        feedback = []
+        if status == "WRONG":
+            feedback = get_llm_feedback(frame)
+
+        return jsonify({
+            "frame_score": round(score, 2),
+            "form_status": status,
+            "llm_feedback": feedback
+        })
+    except ImportError:
+        # CV modules not available - return mock response for testing
+        return jsonify({
+            "frame_score": 35.0,
+            "form_status": "CORRECT",
+            "llm_feedback": [],
+            "warning": "CV modules not installed - returning mock data"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ==================== DATABASE INITIALIZATION ====================
@@ -783,6 +1010,7 @@ def ensure_tables_exist():
             avg_pain_level REAL DEFAULT 0,
             avg_quality_score REAL DEFAULT 0,
             completed_sessions INTEGER DEFAULT 0,
+            streak_days INTEGER DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
         
@@ -794,6 +1022,55 @@ def ensure_tables_exist():
             FOREIGN KEY (doctor_id) REFERENCES users(id),
             FOREIGN KEY (patient_id) REFERENCES users(id),
             UNIQUE(doctor_id, patient_id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS caregiver_patient (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            caregiver_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            relationship TEXT,
+            FOREIGN KEY (caregiver_id) REFERENCES users(id),
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            UNIQUE(caregiver_id, patient_id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS exercises (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            category TEXT,
+            difficulty INTEGER DEFAULT 1,
+            video_url TEXT
+        );
+        
+        CREATE TABLE IF NOT EXISTS workouts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            exercise_id INTEGER NOT NULL,
+            sets INTEGER DEFAULT 3,
+            reps INTEGER DEFAULT 10,
+            frequency TEXT DEFAULT 'Daily',
+            instructions TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            FOREIGN KEY (exercise_id) REFERENCES exercises(id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            workout_id INTEGER NOT NULL,
+            pain_before INTEGER DEFAULT 0,
+            pain_after INTEGER DEFAULT 0,
+            effort_level INTEGER DEFAULT 5,
+            quality_score REAL DEFAULT 0,
+            sets_completed INTEGER DEFAULT 0,
+            reps_completed INTEGER DEFAULT 0,
+            notes TEXT,
+            completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            FOREIGN KEY (workout_id) REFERENCES workouts(id)
         );
         
         CREATE TABLE IF NOT EXISTS appointments (

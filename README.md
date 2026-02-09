@@ -69,3 +69,22 @@ python main.py
 
 Than run it on localhost!
 
+DB design:
+
+<img width="1536" height="1024" alt="ChatGPT Image Feb 9, 2026, 12_39_58 PM" src="https://github.com/user-attachments/assets/73b76900-89af-4d27-b2ad-d920980889d3" />
+
+
+
+## Database Tables (8)
+
+
+| Table Name           | Description                                   |
+|----------------------|-----------------------------------------------|
+| `users`              | Central authentication & user info           |
+| `patients`           | Extended patient medical data                 |
+| `doctor_patient`     | Doctor–patient assignments                    |
+| `caregiver_patient`  | Caregiver monitoring relationships            |
+| `exercises`          | Exercise library                              |
+| `workouts`           | Patient exercise prescriptions                |
+| `sessions`           | Completed rehabilitation sessions             |
+| `appointments`       | Scheduled consultations                        |
