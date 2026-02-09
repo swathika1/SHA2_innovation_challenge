@@ -266,14 +266,12 @@ def patient_dashboard():
         LIMIT 5
     ''', (session['user_id'],))
     
-    # Get upcoming appointments
+    # Get upcoming appointments (simpler query - just get all scheduled)
     upcoming_appointments = query_db('''
         SELECT a.*, u.name as doctor_name
         FROM appointments a
         JOIN users u ON a.doctor_id = u.id
         WHERE a.patient_id = ? AND a.status = 'scheduled'
-        AND (a.appointment_date > date('now') OR 
-             (a.appointment_date = date('now') AND a.appointment_time >= time('now')))
         ORDER BY a.appointment_date, a.appointment_time
         LIMIT 3
     ''', (session['user_id'],))
