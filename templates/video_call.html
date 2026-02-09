@@ -1,0 +1,434 @@
+{% extends 'base.html' %}
+
+{% block title %}Video Call - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1>📹 Video Consultation</h1>
+    <nav class="nav-links">
+        {% if is_doctor %}
+        <a href="{{ url_for('consultation') }}">← Back to Consultations</a>
+        {% else %}
+        <a href="{{ url_for('patient_appointments') }}">← Back to Appointments</a>
+        {% endif %}
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<style>
+    .video-container {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 20px;
+        height: calc(100vh - 180px);
+        min-height: 500px;
+    }
+    
+    .video-main {
+        background: #1a1a2e;
+        border-radius: 12px;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    .video-main iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+    }
+    
+    .video-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .call-info {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .call-info h3 {
+        margin: 0 0 15px 0;
+        color: #333;
+        font-size: 1.1rem;
+    }
+    
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    
+    .info-label {
+        color: #666;
+        font-size: 0.9rem;
+    }
+    
+    .info-value {
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .patient-stats {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .stat-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .stat-item:last-child {
+        border-bottom: none;
+    }
+    
+    .stat-label {
+        color: #666;
+        font-size: 0.85rem;
+    }
+    
+    .stat-value {
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+    
+    .stat-value.good { color: #28a745; }
+    .stat-value.warning { color: #ffc107; }
+    .stat-value.danger { color: #dc3545; }
+    
+    .call-actions {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .call-actions .btn {
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 12px;
+        font-size: 1rem;
+    }
+    
+    .call-actions .btn:last-child {
+        margin-bottom: 0;
+    }
+    
+    .btn-end-call {
+        background: #dc3545;
+        color: white;
+    }
+    
+    .btn-end-call:hover {
+        background: #c82333;
+    }
+    
+    .connection-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 15px;
+        background: #d4edda;
+        border-radius: 6px;
+        margin-bottom: 15px;
+    }
+    
+    .status-dot {
+        width: 10px;
+        height: 10px;
+        background: #28a745;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid rgba(255,255,255,0.3);
+        border-top-color: #28a745;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 20px 0;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    .waiting-room {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: white;
+        text-align: center;
+    }
+    
+    .waiting-room h2 {
+        margin-bottom: 20px;
+    }
+    
+    .waiting-room p {
+        opacity: 0.8;
+        margin-bottom: 30px;
+    }
+    
+    .join-btn {
+        background: #28a745;
+        color: white;
+        padding: 15px 40px;
+        font-size: 1.2rem;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .join-btn:hover {
+        background: #218838;
+        transform: scale(1.05);
+    }
+    
+    @media (max-width: 900px) {
+        .video-container {
+            grid-template-columns: 1fr;
+            height: auto;
+        }
+        
+        .video-main {
+            height: 400px;
+        }
+    }
+</style>
+
+<div class="video-container">
+    <!-- Main Video Area -->
+    <div class="video-main" id="videoContainer">
+        <!-- Jitsi Meet will be embedded here automatically -->
+        <div class="waiting-room" id="waitingRoom">
+            <h2>📹 Connecting to Video Call...</h2>
+            <p>{{ appointment.patient_name }} {% if is_doctor %}(Patient){% else %}with {{ appointment.doctor_name }}{% endif %}</p>
+            <p style="font-size: 0.9rem;">{{ appointment.appointment_date }} at {{ appointment.appointment_time }}</p>
+            <div class="loading-spinner"></div>
+            <p style="font-size: 0.8rem; margin-top: 20px; opacity: 0.6;">
+                Please allow camera and microphone access when prompted
+            </p>
+        </div>
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="video-sidebar">
+        <!-- Connection Status -->
+        <div class="connection-status">
+            <div class="status-dot"></div>
+            <span>Ready to connect</span>
+        </div>
+        
+        <!-- Call Info -->
+        <div class="call-info">
+            <h3>📅 Appointment Details</h3>
+            <div class="info-row">
+                <span class="info-label">Date</span>
+                <span class="info-value">{{ appointment.appointment_date }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Time</span>
+                <span class="info-value">{{ appointment.appointment_time }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Duration</span>
+                <span class="info-value">{{ appointment.duration }} min</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">{% if is_doctor %}Patient{% else %}Doctor{% endif %}</span>
+                <span class="info-value">{% if is_doctor %}{{ appointment.patient_name }}{% else %}{{ appointment.doctor_name }}{% endif %}</span>
+            </div>
+        </div>
+        
+        {% if is_doctor and appointment.condition %}
+        <!-- Patient Stats (for doctors only) -->
+        <div class="patient-stats">
+            <h3>📊 Patient Quick View</h3>
+            <div class="stat-item">
+                <span class="stat-label">Condition</span>
+                <span class="stat-value">{{ appointment.condition }}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Adherence Rate</span>
+                <span class="stat-value {% if appointment.adherence_rate >= 70 %}good{% elif appointment.adherence_rate >= 50 %}warning{% else %}danger{% endif %}">
+                    {{ appointment.adherence_rate|round|int }}%
+                </span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Avg Pain Level</span>
+                <span class="stat-value {% if appointment.avg_pain_level <= 3 %}good{% elif appointment.avg_pain_level <= 6 %}warning{% else %}danger{% endif %}">
+                    {{ appointment.avg_pain_level|round(1) }}/10
+                </span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Quality Score</span>
+                <span class="stat-value {% if appointment.avg_quality_score >= 70 %}good{% elif appointment.avg_quality_score >= 50 %}warning{% else %}danger{% endif %}">
+                    {{ appointment.avg_quality_score|round|int }}
+                </span>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Call Actions -->
+        <div class="call-actions">
+            <button class="btn btn-primary" onclick="joinVideoCall()">
+                🎥 Join/Rejoin Call
+            </button>
+            {% if is_doctor %}
+            <a href="{{ url_for('patient_detail', patient_id=appointment.patient_id) }}" class="btn" style="display: block; text-align: center;">
+                👤 View Full Profile
+            </a>
+            {% endif %}
+            <form action="{{ url_for('complete_appointment', appointment_id=appointment.id) }}" method="POST" style="margin: 0;">
+                <button type="submit" class="btn btn-end-call" onclick="return confirm('Mark this appointment as completed?')">
+                    ✓ End & Complete Call
+                </button>
+            </form>
+        </div>
+        
+        {% if appointment.notes %}
+        <div class="call-info">
+            <h3>📝 Notes</h3>
+            <p style="color: #666; font-size: 0.9rem;">{{ appointment.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script src="https://meet.jit.si/external_api.js"></script>
+<script>
+    const roomId = "{{ room_id }}";
+    const userName = "{{ user_name }}";
+    const isDoctor = {{ 'true' if is_doctor else 'false' }};
+    let api = null;
+    
+    // Auto-start Jitsi when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        startJitsiMeet();
+    });
+    
+    function startJitsiMeet() {
+        const domain = "meet.jit.si";
+        const options = {
+            roomName: roomId,
+            width: '100%',
+            height: '100%',
+            parentNode: document.getElementById('videoContainer'),
+            userInfo: {
+                displayName: userName
+            },
+            configOverwrite: {
+                prejoinPageEnabled: false,  // Skip the prejoin page - join immediately
+                startWithAudioMuted: false,
+                startWithVideoMuted: false,
+                disableDeepLinking: true,
+                enableWelcomePage: false,
+                enableClosePage: false,
+                disableInviteFunctions: true,
+                hideConferenceSubject: false,
+                subject: 'Home Rehab Consultation'
+            },
+            interfaceConfigOverwrite: {
+                TOOLBAR_BUTTONS: [
+                    'microphone', 'camera', 'desktop', 'fullscreen',
+                    'chat', 'raisehand', 'tileview', 'hangup'
+                ],
+                SHOW_JITSI_WATERMARK: false,
+                SHOW_WATERMARK_FOR_GUESTS: false,
+                DEFAULT_BACKGROUND: '#1a1a2e',
+                DISABLE_JOIN_LEAVE_NOTIFICATIONS: false,
+                MOBILE_APP_PROMO: false,
+                HIDE_INVITE_MORE_HEADER: true
+            }
+        };
+        
+        // Create the Jitsi Meet API instance
+        api = new JitsiMeetExternalAPI(domain, options);
+        
+        // Update connection status when someone joins
+        api.addListener('participantJoined', function(participant) {
+            updateConnectionStatus('connected', participant.displayName + ' joined the call');
+        });
+        
+        api.addListener('participantLeft', function(participant) {
+            updateConnectionStatus('waiting', 'Participant left the call');
+        });
+        
+        api.addListener('videoConferenceJoined', function(data) {
+            updateConnectionStatus('connected', 'You are now in the call');
+        });
+        
+        api.addListener('videoConferenceLeft', function(data) {
+            updateConnectionStatus('disconnected', 'Call ended');
+        });
+        
+        // Handle errors
+        api.addListener('errorOccurred', function(error) {
+            console.error('Jitsi error:', error);
+            updateConnectionStatus('error', 'Connection error - please refresh');
+        });
+    }
+    
+    function updateConnectionStatus(status, message) {
+        const statusEl = document.querySelector('.connection-status');
+        let color = '#28a745'; // green
+        if (status === 'waiting') color = '#ffc107'; // yellow
+        if (status === 'disconnected') color = '#6c757d'; // gray
+        if (status === 'error') color = '#dc3545'; // red
+        
+        statusEl.innerHTML = `
+            <div class="status-dot" style="background: ${color};"></div>
+            <span>${message}</span>
+        `;
+    }
+    
+    function joinVideoCall() {
+        // If API exists, rejoin. Otherwise start fresh
+        if (api) {
+            api.dispose();
+        }
+        startJitsiMeet();
+    }
+    
+    // Copy room link functionality
+    function copyRoomLink() {
+        const link = `https://meet.jit.si/${roomId}`;
+        navigator.clipboard.writeText(link).then(() => {
+            alert('Room link copied! Share this with the other participant.');
+        });
+    }
+    
+    // Cleanup when leaving the page
+    window.addEventListener('beforeunload', function() {
+        if (api) {
+            api.dispose();
+        }
+    });
+</script>
+{% endblock %}

@@ -128,7 +128,7 @@ CREATE TABLE sessions (
 
 -- =============================================
 -- 8. APPOINTMENTS TABLE
--- Scheduled consultations
+-- Scheduled consultations with video call support
 -- =============================================
 CREATE TABLE appointments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,6 +139,7 @@ CREATE TABLE appointments (
     duration INTEGER DEFAULT 30,
     status TEXT DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'completed', 'cancelled')),
     notes TEXT,
+    room_id TEXT,  -- Unique room ID for video calls
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (doctor_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (patient_id) REFERENCES users(id) ON DELETE CASCADE
@@ -198,8 +199,9 @@ INSERT INTO workouts (patient_id, exercise_id, sets, reps, frequency, instructio
 (2, 1, 3, 10, '3x per week', 'Keep back straight. Stop if pain exceeds 4/10.'),
 (2, 2, 2, 1, 'Daily', 'Hold for 30 seconds each side.');
 
--- Sample appointments
-INSERT INTO appointments (doctor_id, patient_id, appointment_date, appointment_time, duration, notes) VALUES
-(1, 2, '2026-02-08', '10:00 AM', 30, 'Weekly check-in'),
-(1, 3, '2026-02-09', '2:00 PM', 30, 'Pain assessment'),
-(1, 5, '2026-02-12', '11:00 AM', 15, 'Quick follow-up');
+-- Sample appointments with room_ids for video calls
+INSERT INTO appointments (doctor_id, patient_id, appointment_date, appointment_time, duration, notes, room_id) VALUES
+(1, 2, '2026-02-10', '10:00', 30, 'Weekly check-in', 'rehab-1-2-abc12345'),
+(1, 3, '2026-02-11', '14:00', 30, 'Pain assessment', 'rehab-1-3-def67890'),
+(1, 5, '2026-02-12', '11:00', 15, 'Quick follow-up', 'rehab-1-5-ghi11223'),
+(1, 4, '2026-02-13', '09:30', 45, 'ACL progress review', 'rehab-1-4-jkl44556');

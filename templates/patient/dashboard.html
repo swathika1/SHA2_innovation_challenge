@@ -7,6 +7,7 @@
     <h1>🏠 Home Rehab Coach</h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('patient_appointments') }}">📅 Appointments</a>
         <a href="{{ url_for('progress_history') }}">Progress</a>
         <a href="{{ url_for('logout') }}">Logout</a>
     </nav>
@@ -85,6 +86,37 @@
         {% endif %}
     </div>
     
+    <!-- Upcoming Appointments -->
+    <div class="card">
+        <div class="card-header">📹 Upcoming Video Calls</div>
+        {% if upcoming_appointments %}
+            {% for apt in upcoming_appointments %}
+            <div style="padding: 12px; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-radius: 8px; margin-bottom: 10px; border-left: 3px solid #28a745;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>{{ apt.doctor_name }}</strong>
+                        <p style="font-size: 0.85rem; color: #666; margin: 3px 0 0 0;">
+                            📅 {{ apt.appointment_date }} at {{ apt.appointment_time }}
+                        </p>
+                    </div>
+                    <a href="{{ url_for('video_call', appointment_id=apt.id) }}" class="btn btn-success" style="padding: 8px 15px; font-size: 0.85rem;">
+                        🎥 Join
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+            <a href="{{ url_for('patient_appointments') }}" style="display: block; text-align: center; color: #007bff; margin-top: 10px;">
+                View all appointments →
+            </a>
+        {% else %}
+            <p style="color: #666; text-align: center; padding: 20px;">
+                No upcoming video consultations scheduled.
+            </p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-2" style="margin-top: 20px;">
     <!-- Recent Sessions -->
     <div class="card">
         <div class="card-header">📊 Recent Sessions</div>
@@ -109,8 +141,6 @@
         {% endif %}
     </div>
 </div>
-
-<!-- Calendar Widget -->
 <div class="calendar-widget" style="margin-top: 20px;">
     <div class="calendar-header">
         <button class="btn">← Prev</button>

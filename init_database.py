@@ -69,4 +69,13 @@ def init_database():
     print("\n🚀 You can now run: python main.py")
 
 if __name__ == '__main__':
+    # Safety check - don't wipe existing data accidentally
+    import os
+    if os.path.exists(DATABASE):
+        print("⚠️  WARNING: Database already exists!")
+        print("   Running this will DELETE ALL existing users!")
+        confirm = input("   Type 'YES' to continue, anything else to cancel: ")
+        if confirm != 'YES':
+            print("   Cancelled. Your data is safe.")
+            exit(0)
     init_database()
