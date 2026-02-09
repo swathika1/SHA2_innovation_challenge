@@ -8,132 +8,150 @@
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
         <a href="{{ url_for('progress_history') }}">Progress</a>
-        <a href="{{ url_for('landing') }}">Logout</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
     </nav>
 </header>
 {% endblock %}
 
 {% block content %}
+<!-- Flash Messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}" style="padding: 10px; margin-bottom: 20px; border-radius: 4px; 
+                {% if category == 'error' %}background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+                {% else %}background: #d4edda; color: #155724; border: 1px solid #c3e6cb;{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
 <div class="dashboard-header">
-    <h2>Welcome back, Patient!</h2>
-    <span>Today: February 7, 2026</span>
+    <h2>Welcome back, {{ user.name }}!</h2>
+    <span>{{ patient.condition }} - Week {{ patient.current_week }}</span>
 </div>
 
-<!-- Stats Row -->
+<!-- Stats Row (from database) -->
 <div class="stats-row">
     <div class="stat-box">
-        <div class="stat-value">87%</div>
+        <div class="stat-value">{{ patient.adherence_rate|round|int }}%</div>
         <div class="stat-label">Adherence Rate</div>
     </div>
     <div class="stat-box">
-        <div class="stat-value">🔥 12</div>
+        <div class="stat-value">🔥 {{ patient.streak_days }}</div>
         <div class="stat-label">Day Streak</div>
     </div>
     <div class="stat-box">
-        <div class="stat-value">78</div>
+        <div class="stat-value">{{ patient.avg_quality_score|round|int }}</div>
         <div class="stat-label">Avg. Quality Score</div>
     </div>
     <div class="stat-box">
-        <div class="stat-value">3/4</div>
-        <div class="stat-label">Sessions This Week</div>
+        <div class="stat-value">{{ patient.avg_pain_level|round(1) }}</div>
+        <div class="stat-label">Avg. Pain Level</div>
     </div>
 </div>
 
 <!-- Primary CTA -->
 <div class="card" style="text-align: center; padding: 40px;">
     <h3 style="margin-bottom: 20px;">Today's Session</h3>
-    <p style="color: #666; margin-bottom: 20px;">Knee Rehabilitation - Set 4 of 5</p>
+    <p style="color: #666; margin-bottom: 20px;">
+        {{ patient.condition }} Exercises
+        {% if workouts %}({{ workouts|length }} exercises assigned){% endif %}
+    </p>
     <a href="{{ url_for('rehab_session') }}" class="btn btn-primary btn-large">▶ Start Today's Session</a>
 </div>
 
 <div class="grid grid-2">
-    <!-- Calendar Widget -->
-    <div class="calendar-widget">
-        <div class="calendar-header">
-            <button class="btn">← Prev</button>
-            <h3>February 2026</h3>
-            <button class="btn">Next →</button>
-        </div>
-        <div class="calendar-grid">
-            <div class="calendar-day">Su</div>
-            <div class="calendar-day">Mo</div>
-            <div class="calendar-day">Tu</div>
-            <div class="calendar-day">We</div>
-            <div class="calendar-day">Th</div>
-            <div class="calendar-day">Fr</div>
-            <div class="calendar-day">Sa</div>
-            
-            <div class="calendar-day">1</div>
-            <div class="calendar-day completed">2</div>
-            <div class="calendar-day completed">3</div>
-            <div class="calendar-day completed">4</div>
-            <div class="calendar-day missed">5</div>
-            <div class="calendar-day completed">6</div>
-            <div class="calendar-day today upcoming">7</div>
-            
-            <div class="calendar-day upcoming">8</div>
-            <div class="calendar-day upcoming">9</div>
-            <div class="calendar-day upcoming">10</div>
-            <div class="calendar-day upcoming">11</div>
-            <div class="calendar-day upcoming">12</div>
-            <div class="calendar-day upcoming">13</div>
-            <div class="calendar-day">14</div>
-        </div>
-        <div style="margin-top: 15px; font-size: 0.85rem;">
-            <span style="display: inline-block; margin-right: 15px;">
-                <span style="background: #d4edda; padding: 2px 8px; border-radius: 3px;">■</span> Completed
-            </span>
-            <span style="display: inline-block; margin-right: 15px;">
-                <span style="background: #f8d7da; padding: 2px 8px; border-radius: 3px;">■</span> Missed
-            </span>
-            <span style="display: inline-block;">
-                <span style="background: #fff3cd; padding: 2px 8px; border-radius: 3px;">■</span> Upcoming
-            </span>
-        </div>
+    <!-- My Exercises -->
+    <div class="card">
+        <div class="card-header">📋 My Exercise Plan</div>
+        {% if workouts %}
+            {% for workout in workouts %}
+            <div style="padding: 12px; background: #f5f5f5; border-radius: 4px; margin-bottom: 10px;">
+                <strong>{{ workout.exercise_name }}</strong>
+                <p style="font-size: 0.9rem; color: #666; margin: 5px 0;">
+                    {{ workout.sets }} sets × {{ workout.reps }} reps | {{ workout.frequency }}
+                </p>
+                {% if workout.instructions %}
+                <p style="font-size: 0.85rem; color: #888;">{{ workout.instructions }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <p style="color: #666; text-align: center; padding: 20px;">
+                No exercises assigned yet. Your clinician will create your plan soon.
+            </p>
+        {% endif %}
     </div>
     
-    <!-- Weekly Progress Summary -->
+    <!-- Recent Sessions -->
     <div class="card">
-        <div class="card-header">Weekly Quality Score Trend</div>
-        <div class="chart-placeholder">
-            <div class="bars">
-                <div class="bar" style="height: 60%;"></div>
-                <div class="bar" style="height: 75%;"></div>
-                <div class="bar" style="height: 70%;"></div>
-                <div class="bar" style="height: 85%;"></div>
-                <div class="bar" style="height: 80%;"></div>
-                <div class="bar" style="height: 90%;"></div>
-                <div class="bar" style="height: 78%;"></div>
+        <div class="card-header">📊 Recent Sessions</div>
+        {% if recent_sessions %}
+            {% for sess in recent_sessions %}
+            <div style="padding: 10px; border-bottom: 1px solid #eee;">
+                <div style="display: flex; justify-content: space-between;">
+                    <strong>{{ sess.exercise_name }}</strong>
+                    <span style="color: #666; font-size: 0.85rem;">{{ sess.completed_at }}</span>
+                </div>
+                <div style="font-size: 0.9rem; color: #666; margin-top: 5px;">
+                    Quality: {{ sess.quality_score }}/100 | 
+                    Pain: {{ sess.pain_after }}/10 |
+                    Sets: {{ sess.sets_completed }}
+                </div>
             </div>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #666;">
-            <span>Mon</span>
-            <span>Tue</span>
-            <span>Wed</span>
-            <span>Thu</span>
-            <span>Fri</span>
-            <span>Sat</span>
-            <span>Sun</span>
-        </div>
+            {% endfor %}
+        {% else %}
+            <p style="color: #666; text-align: center; padding: 20px;">
+                No sessions completed yet. Start your first session!
+            </p>
+        {% endif %}
     </div>
 </div>
 
-<!-- Upcoming Sessions -->
-<div class="card" style="margin-top: 20px;">
-    <div class="card-header">Upcoming Sessions</div>
-    <div style="display: flex; flex-direction: column; gap: 10px;">
-        <div style="display: flex; justify-content: space-between; padding: 10px; background: #f5f5f5; border-radius: 4px;">
-            <span><strong>Knee Extension</strong> - 3 sets × 10 reps</span>
-            <span>Today, 2:00 PM</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding: 10px; background: #f5f5f5; border-radius: 4px;">
-            <span><strong>Hip Flexor Stretch</strong> - 2 sets × 30 sec</span>
-            <span>Tomorrow, 10:00 AM</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding: 10px; background: #f5f5f5; border-radius: 4px;">
-            <span><strong>Quad Strengthening</strong> - 3 sets × 12 reps</span>
-            <span>Feb 9, 2:00 PM</span>
-        </div>
+<!-- Calendar Widget -->
+<div class="calendar-widget" style="margin-top: 20px;">
+    <div class="calendar-header">
+        <button class="btn">← Prev</button>
+        <h3>February 2026</h3>
+        <button class="btn">Next →</button>
+    </div>
+    <div class="calendar-grid">
+        <div class="calendar-day">Su</div>
+        <div class="calendar-day">Mo</div>
+        <div class="calendar-day">Tu</div>
+        <div class="calendar-day">We</div>
+        <div class="calendar-day">Th</div>
+        <div class="calendar-day">Fr</div>
+        <div class="calendar-day">Sa</div>
+        
+        <div class="calendar-day">1</div>
+        <div class="calendar-day completed">2</div>
+        <div class="calendar-day completed">3</div>
+        <div class="calendar-day completed">4</div>
+        <div class="calendar-day missed">5</div>
+        <div class="calendar-day completed">6</div>
+        <div class="calendar-day today upcoming">7</div>
+        
+        <div class="calendar-day upcoming">8</div>
+        <div class="calendar-day upcoming">9</div>
+        <div class="calendar-day upcoming">10</div>
+        <div class="calendar-day upcoming">11</div>
+        <div class="calendar-day upcoming">12</div>
+        <div class="calendar-day upcoming">13</div>
+        <div class="calendar-day">14</div>
+    </div>
+    <div style="margin-top: 15px; font-size: 0.85rem;">
+        <span style="display: inline-block; margin-right: 15px;">
+            <span style="background: #d4edda; padding: 2px 8px; border-radius: 3px;">■</span> Completed
+        </span>
+        <span style="display: inline-block; margin-right: 15px;">
+            <span style="background: #f8d7da; padding: 2px 8px; border-radius: 3px;">■</span> Missed
+        </span>
+        <span style="display: inline-block;">
+            <span style="background: #fff3cd; padding: 2px 8px; border-radius: 3px;">■</span> Upcoming
+        </span>
     </div>
 </div>
 {% endblock %}

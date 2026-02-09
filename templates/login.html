@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}Login - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1>🏠 Home Rehab Coach</h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('landing') }}">Home</a>
+        <a href="{{ url_for('signup') }}">Sign Up</a>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 400px; margin: 40px auto; padding: 30px;">
+    <h2 style="text-align: center; margin-bottom: 30px;">🔐 Login</h2>
+    
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}" style="padding: 10px; margin-bottom: 20px; border-radius: 4px; 
+                    {% if category == 'error' %}background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+                    {% else %}background: #d4edda; color: #155724; border: 1px solid #c3e6cb;{% endif %}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <form method="POST" action="{{ url_for('login') }}">
+        <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" class="form-control" 
+                   placeholder="your@email.com" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" class="form-control" 
+                   placeholder="Enter your password" required>
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 20px;">
+            Login
+        </button>
+    </form>
+    
+    <p style="text-align: center; margin-top: 20px; color: #666;">
+        Don't have an account? <a href="{{ url_for('signup') }}">Sign up here</a>
+    </p>
+</div>
+
+<!-- Quick Demo Login Info -->
+<div class="card" style="max-width: 400px; margin: 20px auto; padding: 20px; background: #f8f9fa;">
+    <h4 style="margin-bottom: 15px;">🧪 Demo Accounts</h4>
+    <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">
+        <strong>Doctor:</strong> dr.smith@clinic.com<br>
+        <strong>Patient:</strong> john@email.com<br>
+        <strong>Caregiver:</strong> caregiver@email.com<br>
+        <em>(Use any password - demo mode)</em>
+    </p>
+</div>
+{% endblock %}

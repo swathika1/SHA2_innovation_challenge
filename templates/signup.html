@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block title %}Sign Up - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1>🏠 Home Rehab Coach</h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('landing') }}">Home</a>
+        <a href="{{ url_for('login') }}">Login</a>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 40px auto; padding: 30px;">
+    <h2 style="text-align: center; margin-bottom: 30px;">📝 Create Account</h2>
+    
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}" style="padding: 10px; margin-bottom: 20px; border-radius: 4px; 
+                    {% if category == 'error' %}background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+                    {% else %}background: #d4edda; color: #155724; border: 1px solid #c3e6cb;{% endif %}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <form method="POST" action="{{ url_for('signup') }}">
+        <div class="form-group">
+            <label for="name">Full Name</label>
+            <input type="text" id="name" name="name" class="form-control" 
+                   placeholder="John Smith" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" class="form-control" 
+                   placeholder="your@email.com" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" class="form-control" 
+                   placeholder="Create a password" required minlength="6">
+        </div>
+        
+        <div class="form-group">
+            <label for="role">I am a...</label>
+            <select id="role" name="role" class="form-control" required onchange="togglePatientFields()">
+                <option value="">-- Select your role --</option>
+                <option value="patient">Patient</option>
+                <option value="doctor">Doctor / Clinician</option>
+                <option value="caregiver">Caregiver / Family Member</option>
+            </select>
+        </div>
+        
+        <!-- Patient-specific fields (shown only when role=patient) -->
+        <div id="patient-fields" style="display: none;">
+            <div class="form-group">
+                <label for="condition">Medical Condition</label>
+                <select id="condition" name="condition" class="form-control">
+                    <option value="Knee Replacement">Knee Replacement</option>
+                    <option value="Hip Surgery">Hip Surgery</option>
+                    <option value="ACL Reconstruction">ACL Reconstruction</option>
+                    <option value="Shoulder Rehab">Shoulder Rehab</option>
+                    <option value="Back Rehab">Back Rehab</option>
+                    <option value="Ankle Rehab">Ankle Rehab</option>
+                    <option value="General Rehab">General Rehab</option>
+                </select>
+            </div>
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 20px;">
+            Create Account
+        </button>
+    </form>
+    
+    <p style="text-align: center; margin-top: 20px; color: #666;">
+        Already have an account? <a href="{{ url_for('login') }}">Login here</a>
+    </p>
+</div>
+
+<script>
+function togglePatientFields() {
+    const role = document.getElementById('role').value;
+    const patientFields = document.getElementById('patient-fields');
+    
+    if (role === 'patient') {
+        patientFields.style.display = 'block';
+    } else {
+        patientFields.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

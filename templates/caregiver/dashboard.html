@@ -7,66 +7,84 @@
     <h1>👨‍👩‍👧 Caregiver Dashboard</h1>
     <nav class="nav-links">
         <a href="{{ url_for('caregiver_dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('landing') }}">Logout</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
     </nav>
 </header>
 {% endblock %}
 
 {% block content %}
+<!-- Flash Messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}" style="padding: 10px; margin-bottom: 20px; border-radius: 4px; 
+                {% if category == 'error' %}background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+                {% else %}background: #d4edda; color: #155724; border: 1px solid #c3e6cb;{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+{% if patients %}
+{% for patient in patients %}
 <div class="dashboard-header">
-    <h2>Monitoring: John Smith</h2>
-    <span>Relationship: Family Member</span>
+    <h2>Monitoring: {{ patient.name }}</h2>
+    <span>{{ patient.condition }} | Relationship: {{ patient.relationship or 'Caregiver' }}</span>
 </div>
 
-<!-- Quick Stats -->
+<!-- Quick Stats (from database) -->
 <div class="stats-row">
     <div class="stat-box">
-        <div class="stat-value">45%</div>
+        <div class="stat-value">{{ patient.adherence_rate|round|int }}%</div>
         <div class="stat-label">Weekly Adherence</div>
     </div>
     <div class="stat-box">
-        <div class="stat-value">3/7</div>
-        <div class="stat-label">Sessions Completed</div>
+        <div class="stat-value">{{ patient.streak_days }}</div>
+        <div class="stat-label">Day Streak</div>
     </div>
     <div class="stat-box">
-        <div class="stat-value">68</div>
+        <div class="stat-value">{{ patient.avg_quality_score|round|int }}</div>
         <div class="stat-label">Avg. Quality Score</div>
     </div>
     <div class="stat-box">
-        <div class="stat-value">4.2</div>
+        <div class="stat-value">{{ patient.avg_pain_level|round(1) }}</div>
         <div class="stat-label">Avg. Pain Level</div>
     </div>
 </div>
+{% endfor %}
+{% else %}
+<div class="dashboard-header">
+    <h2>Welcome, {{ session.user_name }}</h2>
+    <span>No patients assigned to monitor yet.</span>
+</div>
+{% endif %}
 
 <div class="grid grid-2">
-    <!-- Alerts Section -->
+    <!-- Recent Activity from Database -->
     <div>
         <div class="card">
-            <div class="card-header">⚠️ Missed Session Alerts</div>
-            
-            <div class="alert-card">
-                <h4>Missed Session - Today</h4>
-                <p style="margin: 5px 0;">Knee Extension exercise was scheduled for 10:00 AM</p>
-                <span class="time">2 hours ago</span>
-            </div>
-            
-            <div class="alert-card">
-                <h4>Missed Session - Feb 5</h4>
-                <p style="margin: 5px 0;">Hip Flexor Stretch was scheduled for 2:00 PM</p>
-                <span class="time">2 days ago</span>
-            </div>
-            
-            <div class="alert-card warning">
-                <h4>Pain Spike Reported - Feb 6</h4>
-                <p style="margin: 5px 0;">Patient reported pain level 6/10 after session</p>
-                <span class="time">1 day ago</span>
-            </div>
-            
-            <div class="alert-card warning">
-                <h4>Low Quality Session - Feb 4</h4>
-                <p style="margin: 5px 0;">Form quality score dropped to 52 (below threshold)</p>
-                <span class="time">3 days ago</span>
-            </div>
+            <div class="card-header">🕐 Recent Activity</div>
+            {% if recent_sessions %}
+                {% for sess in recent_sessions %}
+                <div style="display: flex; gap: 15px; align-items: start; padding: 15px 0; border-bottom: 1px solid #eee;">
+                    <div style="background: {% if sess.quality_score >= 70 %}#d4edda{% elif sess.quality_score >= 50 %}#fff3cd{% else %}#f8d7da{% endif %}; padding: 10px; border-radius: 50%; min-width: 40px; text-align: center;">
+                        {% if sess.quality_score >= 70 %}✓{% elif sess.quality_score >= 50 %}⚠️{% else %}!{% endif %}
+                    </div>
+                    <div>
+                        <strong>{{ sess.patient_name }} - {{ sess.exercise_name }}</strong>
+                        <p style="color: #666; font-size: 0.9rem;">
+                            Quality: {{ sess.quality_score }}/100 | Pain: {{ sess.pain_after }}/10
+                        </p>
+                        <span style="font-size: 0.8rem; color: #999;">{{ sess.completed_at }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p style="color: #666; text-align: center; padding: 20px;">
+                    No recent sessions to display.
+                </p>
+            {% endif %}
         </div>
     </div>
     
@@ -75,86 +93,43 @@
         <div class="card">
             <div class="card-header">📊 Weekly Progress Summary</div>
             
-            <!-- Calendar Mini View -->
-            <div style="margin-bottom: 20px;">
-                <h4 style="margin-bottom: 10px;">This Week's Sessions</h4>
-                <div style="display: flex; gap: 5px;">
-                    <div style="flex: 1; text-align: center; padding: 10px; background: #d4edda; border-radius: 4px;">
-                        <div style="font-weight: 600;">Mon</div>
-                        <div>✓</div>
-                    </div>
-                    <div style="flex: 1; text-align: center; padding: 10px; background: #d4edda; border-radius: 4px;">
-                        <div style="font-weight: 600;">Tue</div>
-                        <div>✓</div>
-                    </div>
-                    <div style="flex: 1; text-align: center; padding: 10px; background: #f8d7da; border-radius: 4px;">
-                        <div style="font-weight: 600;">Wed</div>
-                        <div>✗</div>
-                    </div>
-                    <div style="flex: 1; text-align: center; padding: 10px; background: #d4edda; border-radius: 4px;">
-                        <div style="font-weight: 600;">Thu</div>
-                        <div>✓</div>
-                    </div>
-                    <div style="flex: 1; text-align: center; padding: 10px; background: #f8d7da; border-radius: 4px;">
-                        <div style="font-weight: 600;">Fri</div>
-                        <div>✗</div>
-                    </div>
-                    <div style="flex: 1; text-align: center; padding: 10px; background: #fff3cd; border-radius: 4px;">
-                        <div style="font-weight: 600;">Sat</div>
-                        <div>—</div>
-                    </div>
-                    <div style="flex: 1; text-align: center; padding: 10px; background: #fff3cd; border-radius: 4px;">
-                        <div style="font-weight: 600;">Sun</div>
-                        <div>—</div>
-                    </div>
-                </div>
-            </div>
-            
+            {% if patients %}
+            {% set patient = patients[0] %}
             <!-- Progress Metrics -->
-            <div style="display: flex; flex-direction: column; gap: 15px;">
+            <div style="display: flex; flex-direction: column; gap: 15px; padding: 15px 0;">
                 <div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                         <span>Adherence</span>
-                        <span>45%</span>
+                        <span>{{ patient.adherence_rate|round|int }}%</span>
                     </div>
                     <div style="background: #eee; height: 10px; border-radius: 5px;">
-                        <div style="background: #dc3545; height: 100%; width: 45%; border-radius: 5px;"></div>
+                        <div style="background: {% if patient.adherence_rate >= 70 %}#28a745{% elif patient.adherence_rate >= 50 %}#ffc107{% else %}#dc3545{% endif %}; height: 100%; width: {{ patient.adherence_rate }}%; border-radius: 5px;"></div>
                     </div>
                 </div>
                 <div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                         <span>Form Quality</span>
-                        <span>68/100</span>
+                        <span>{{ patient.avg_quality_score|round|int }}/100</span>
                     </div>
                     <div style="background: #eee; height: 10px; border-radius: 5px;">
-                        <div style="background: #ffc107; height: 100%; width: 68%; border-radius: 5px;"></div>
+                        <div style="background: {% if patient.avg_quality_score >= 70 %}#28a745{% elif patient.avg_quality_score >= 50 %}#ffc107{% else %}#dc3545{% endif %}; height: 100%; width: {{ patient.avg_quality_score }}%; border-radius: 5px;"></div>
                     </div>
                 </div>
                 <div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span>Pain Trend</span>
-                        <span>4.2/10</span>
+                        <span>Pain Level</span>
+                        <span>{{ patient.avg_pain_level|round(1) }}/10</span>
                     </div>
                     <div style="background: #eee; height: 10px; border-radius: 5px;">
-                        <div style="background: #ffc107; height: 100%; width: 42%; border-radius: 5px;"></div>
+                        <div style="background: {% if patient.avg_pain_level <= 3 %}#28a745{% elif patient.avg_pain_level <= 6 %}#ffc107{% else %}#dc3545{% endif %}; height: 100%; width: {{ (patient.avg_pain_level * 10)|int }}%; border-radius: 5px;"></div>
                     </div>
                 </div>
             </div>
-        </div>
-        
-        <!-- Upcoming Sessions -->
-        <div class="card" style="margin-top: 20px;">
-            <div class="card-header">📅 Upcoming Sessions</div>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
-                <div style="display: flex; justify-content: space-between; padding: 10px; background: #f5f5f5; border-radius: 4px;">
-                    <span>Knee Extension</span>
-                    <span>Tomorrow, 10:00 AM</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; padding: 10px; background: #f5f5f5; border-radius: 4px;">
-                    <span>Hip Flexor Stretch</span>
-                    <span>Feb 9, 2:00 PM</span>
-                </div>
-            </div>
+            {% else %}
+            <p style="color: #666; text-align: center; padding: 20px;">
+                Assign a patient to see their progress.
+            </p>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -179,37 +154,6 @@
         <!-- Custom Message -->
         <textarea placeholder="Or write a custom message..." style="width: 100%; padding: 15px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; resize: none; height: 100px;"></textarea>
         <button class="btn btn-primary" style="margin-top: 10px;">Send Message</button>
-    </div>
-</div>
-
-<!-- Recent Activity -->
-<div class="card" style="margin-top: 20px;">
-    <div class="card-header">🕐 Recent Activity</div>
-    <div style="display: flex; flex-direction: column; gap: 15px;">
-        <div style="display: flex; gap: 15px; align-items: start; padding-bottom: 15px; border-bottom: 1px solid #eee;">
-            <div style="background: #d4edda; padding: 10px; border-radius: 50%; min-width: 40px; text-align: center;">✓</div>
-            <div>
-                <strong>Session Completed</strong>
-                <p style="color: #666; font-size: 0.9rem;">Knee Extension - Quality Score: 72</p>
-                <span style="font-size: 0.8rem; color: #999;">Yesterday, 2:30 PM</span>
-            </div>
-        </div>
-        <div style="display: flex; gap: 15px; align-items: start; padding-bottom: 15px; border-bottom: 1px solid #eee;">
-            <div style="background: #fff3cd; padding: 10px; border-radius: 50%; min-width: 40px; text-align: center;">⚠️</div>
-            <div>
-                <strong>Pain Report</strong>
-                <p style="color: #666; font-size: 0.9rem;">Reported pain level 6/10 after session</p>
-                <span style="font-size: 0.8rem; color: #999;">Feb 6, 3:00 PM</span>
-            </div>
-        </div>
-        <div style="display: flex; gap: 15px; align-items: start;">
-            <div style="background: #f8d7da; padding: 10px; border-radius: 50%; min-width: 40px; text-align: center;">✗</div>
-            <div>
-                <strong>Session Missed</strong>
-                <p style="color: #666; font-size: 0.9rem;">Hip Flexor Stretch was not completed</p>
-                <span style="font-size: 0.8rem; color: #999;">Feb 5, 2:00 PM</span>
-            </div>
-        </div>
     </div>
 </div>
 {% endblock %}
