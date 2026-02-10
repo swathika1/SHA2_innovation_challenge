@@ -96,8 +96,8 @@
 
     <!-- Session Controls -->
     <div class="session-controls">
-      <button class="btn" style="flex: 1;">⏸️ Pause</button>
-      <button class="btn btn-danger" style="flex: 1;">⏹️ Stop Session</button>
+      <button id="pauseBtn" class="btn" style="flex: 1;">⏸️ Pause</button>
+      <button id="stopBtn" class="btn btn-danger" style="flex: 1;">⏹️ Stop Session</button>
     </div>
 
     <!-- Next Step -->
@@ -142,6 +142,50 @@
   let lastSpokenHash = "";
   let lastSpokenAt = 0;
   const SPEAK_COOLDOWN_MS = 8000;
+
+  // ---- Session control state ----
+  let isPaused = false;
+  let pollTimer = null;
+  let streamRef = null;
+
+  const pauseBtn = document.getElementById("pauseBtn");
+  const stopBtn  = document.getElementById("stopBtn");
+
+  function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      if (!isPaused) pollFeedback();
+    }, POLL_MS);
+  }
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function stopCamera() {
+    try {
+      // Stop all media tracks (turns off camera light)
+      if (VIDEO && VIDEO.srcObject) {
+        const tracks = VIDEO.srcObject.getTracks();
+        tracks.forEach(t => t.stop());
+        VIDEO.srcObject = null;
+      }
+    } catch (e) {
+      console.warn("stopCamera failed:", e);
+    }
+  }
+
+  function pauseCameraPreview() {
+    try { VIDEO.pause(); } catch(e) {}
+  }
+
+  async function resumeCameraPreview() {
+    try { await VIDEO.play(); } catch(e) {}
+  }
+
 
   // Chrome loads voices asynchronously sometimes
   if (window.speechSynthesis) {
@@ -225,6 +269,7 @@
   async function startWebcam() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      streamRef = stream;
       VIDEO.srcObject = stream;
       await VIDEO.play();
       if (camErrorOverlay) camErrorOverlay.style.display = "none";
@@ -235,6 +280,7 @@
       return false;
     }
   }
+
 
   /* ---------------- Backend session init ---------------- */
   async function startSession() {
@@ -368,6 +414,51 @@
       setStatus("ERROR", 0);
       renderFeedback(["Network error: failed to reach backend"]);
     }
+  }
+
+    // ---- Button handlers ----
+  if (pauseBtn) {
+    pauseBtn.addEventListener("click", async () => {
+      isPaused = !isPaused;
+
+      if (isPaused) {
+        pauseBtn.textContent = "▶️ Resume";
+        pauseCameraPreview();
+        // optional: stop speaking when pausing
+        try { window.speechSynthesis?.cancel(); } catch(e) {}
+      } else {
+        pauseBtn.textContent = "⏸️ Pause";
+        await resumeCameraPreview();
+        // optional: immediately fetch once on resume
+        await pollFeedback();
+      }
+    });
+  }
+
+  if (stopBtn) {
+    stopBtn.addEventListener("click", async () => {
+      // stop everything
+      isPaused = true;
+      stopPolling();
+      stopCamera();
+
+      // stop any TTS
+      try { window.speechSynthesis?.cancel(); } catch(e) {}
+
+      // optional: inform backend (only if you implement this endpoint)
+      try {
+        await fetch("/api/session/stop", { method: "POST" });
+      } catch (e) {
+        // ignore if endpoint doesn't exist
+      }
+
+      // UI feedback
+      if (pauseBtn) pauseBtn.disabled = true;
+      stopBtn.disabled = true;
+      stopBtn.textContent = "✅ Session Stopped";
+      setStatus("NO_FRAME", 0);
+      renderFeedback(["Session stopped."]);
+    });
   }
 
   /* ---------------- Init ---------------- */

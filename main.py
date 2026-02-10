@@ -409,6 +409,15 @@ def api_live_feedback():
     out = PIPELINE.process_frame_dataurl(frame_b64)
     return jsonify(out)
 
+@app.post("/api/session/stop")
+def api_session_stop():  # sourcery skip: use-contextlib-suppress
+    global PIPELINE
+    try:
+        PIPELINE.reset()  # if you have it
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
