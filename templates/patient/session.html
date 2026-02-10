@@ -472,7 +472,9 @@
     await pollFeedback();
 
     // then every POLL_MS
-    setInterval(pollFeedback, POLL_MS);
+    // setInterval(pollFeedback, POLL_MS);
+    startPolling();
+
   })();
 </script>
 
