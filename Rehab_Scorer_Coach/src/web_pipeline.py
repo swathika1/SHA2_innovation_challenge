@@ -68,6 +68,9 @@ class WebRehabPipeline:
         self.cooldown_seconds = 10.0
         self.last_llm_time = 0.0
         self.exercise_name = "exercise"
+        
+        self.last_feedback_list: list[str] = []
+        self.last_feedback_at: float = 0.0
 
     def reset(self, threshold=30.0, exercise_name="exercise", cooldown_seconds=10.0):
         self.feat_buffer.clear()

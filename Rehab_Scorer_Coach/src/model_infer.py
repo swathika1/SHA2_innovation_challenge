@@ -53,5 +53,5 @@ class ScoreModel:
         X_scaled = self.x_scaler.transform(X_seq_1.reshape(-1, F)).reshape(1, T, F)
         pred_z = self.model.predict(X_scaled, verbose=0).reshape(-1)[0]
 
-        y_hat = self.a * float(pred_z) + self.b
+        y_hat = self.a * float(pred_z) + self.b # +  15.0
         return float(np.clip(y_hat, 0.0, 50.0))
