@@ -20,3 +20,17 @@
     {% block scripts %}{% endblock %}
 </body>
 </html>
+<style>
+    body{
+        background: url("{{ url_for('static', filename='img/bg.jpg') }}") no-repeat center center fixed;
+        background-size: cover;
+    }
+    /* optional: add a readable overlay so text/cards pop */
+    body::before{
+        content:"";
+        position: fixed;
+        inset: 0;
+        background: rgba(255,255,255,0.65);  /* increase/decrease */
+        z-index: -1;
+    }
+</style>

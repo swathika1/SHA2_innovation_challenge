@@ -4,217 +4,385 @@
 
 {% block header %}
 <header class="header">
-    <h1>🏋️ Rehab Session</h1>
-    <nav class="nav-links">
-        <a href="{{ url_for('patient_dashboard') }}">← Back to Dashboard</a>
-    </nav>
+  <h1>🏋️ Rehab Session</h1>
+  <nav class="nav-links">
+    <a href="{{ url_for('patient_dashboard') }}">← Back to Dashboard</a>
+  </nav>
 </header>
 {% endblock %}
 
 {% block content %}
 <div class="session-layout">
-    <!-- Video Panel -->
-    <div class="video-panel">
-        <div class="skeleton-overlay">
-            <strong>Skeleton Tracking: ON</strong><br>
-            <small>Pose detection active</small>
-        </div>
-
-        <!-- ✅ Replace placeholder with REAL webcam video -->
-        <div class="video-placeholder" style="padding: 0; overflow: hidden;">
-            <video id="webcamVideo" autoplay playsinline muted style="width:100%; height:100%; object-fit: cover; background:#000;"></video>
-            <!-- optional: show overlay text if camera fails -->
-            <div id="camErrorOverlay" style="display:none; position:absolute; inset:0; align-items:center; justify-content:center; flex-direction:column; color:#fff;">
-                <div class="icon">📹</div>
-                <p>Live Webcam Feed</p>
-                <p style="font-size: 0.8rem; opacity: 0.7;">Allow camera access to start</p>
-            </div>
-        </div>
+  <!-- Video Panel -->
+  <div class="video-panel">
+    <div class="skeleton-overlay">
+      <strong>Skeleton Tracking: ON</strong><br />
+      <small>Pose detection active</small>
     </div>
 
-    <!-- Feedback Panel -->
-    <div class="feedback-panel">
-        <!-- Rep Counter (still placeholder) -->
-        <div class="rep-counter">
-            <div class="count">7 / 10</div>
-            <div class="label">Reps (Set 2 of 3)</div>
-        </div>
+    <!-- REAL webcam video -->
+    <div class="video-placeholder" style="padding: 0; overflow: hidden; position: relative;">
+      <video id="webcamVideo"
+             autoplay playsinline muted
+             style="width:100%; height:100%; object-fit: cover; background:#000;">
+      </video>
 
-        <!-- ✅ Form Status (dynamic) -->
-        <div class="form-status">
-            <h4 style="margin-bottom: 10px;">Form Status</h4>
-
-            <!-- ✅ single indicator (remove duplicates) -->
-            <div id="statusIndicator" class="status-indicator correct">
-                ✓ CORRECT FORM
-            </div>
-
-            <div style="margin-top: 10px; text-align:center; color:#666;">
-                Score: <span id="frameScoreText">--</span> / 50
-            </div>
-        </div>
-
-        <!-- ✅ Real-time Feedback (dynamic) -->
-        <div class="error-messages">
-            <h4>Real-time Feedback</h4>
-
-            <!-- This will be replaced by JS -->
-            <div id="feedbackList">
-                <div class="error-item">
-                    Waiting for feedback...
-                </div>
-            </div>
-        </div>
-
-        <!-- Audio Indicator (still placeholder UI) -->
-        <div class="audio-indicator">
-            <div class="audio-icon">🔊</div>
-            <div>
-                <strong>Voice Feedback: ON</strong><br>
-                <small>Audio cues are active</small>
-            </div>
-        </div>
-
-        <!-- Exercise Info -->
-        <div class="card" style="padding: 15px;">
-            <h4>Current Exercise</h4>
-            <p style="color: #666; margin-top: 5px;" id="exerciseNameText">Knee Extension</p>
-            <p style="font-size: 0.85rem; margin-top: 10px;">
-                Target: 3 sets × 10 reps<br>
-                ROM Target: 90° flexion
-            </p>
-        </div>
-
-        <!-- Session Controls -->
-        <div class="session-controls">
-            <button class="btn" style="flex: 1;">⏸️ Pause</button>
-            <button class="btn btn-danger" style="flex: 1;">⏹️ Stop Session</button>
-        </div>
-
-        <!-- Next Step -->
-        <a href="{{ url_for('pain_checkin') }}" class="btn btn-success" style="text-align: center;">
-            Complete Set → Check-in
-        </a>
+      <!-- overlay text if camera fails -->
+      <div id="camErrorOverlay"
+           style="display:none; position:absolute; inset:0; align-items:center; justify-content:center; flex-direction:column; color:#fff; background:rgba(0,0,0,0.6);">
+        <div class="icon">📹</div>
+        <p>Live Webcam Feed</p>
+        <p style="font-size: 0.8rem; opacity: 0.85;">Allow camera access to start</p>
+      </div>
     </div>
+  </div>
+
+  <!-- Feedback Panel -->
+  <div class="feedback-panel">
+    <!-- Rep Counter (placeholder) -->
+    <div class="rep-counter">
+      <div class="count">7 / 10</div>
+      <div class="label">Reps (Set 2 of 3)</div>
+    </div>
+
+    <!-- Form Status (dynamic) -->
+    <div class="form-status">
+      <h4 style="margin-bottom: 10px;">Form Status</h4>
+
+      <!-- single indicator (no duplicates) -->
+      <div id="statusIndicator" class="status-indicator correct">
+        ✓ CORRECT FORM
+      </div>
+
+      <div style="margin-top: 10px; text-align:center; color:#666;">
+        Score: <span id="frameScoreText">--</span> / 50
+      </div>
+    </div>
+
+    <!-- Real-time Feedback (dynamic + sticky) -->
+    <div class="error-messages">
+      <h4>Real-time Feedback</h4>
+
+      <div id="feedbackList">
+        <div class="error-item">Waiting for feedback...</div>
+      </div>
+    </div>
+
+    <!-- Audio Indicator (UI + toggle) -->
+    <div class="audio-indicator" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="audio-icon">🔊</div>
+        <div>
+          <strong>Voice Feedback: <span id="voiceStatusText">ON</span></strong><br>
+          <small id="voiceHintText">Audio cues are active</small>
+        </div>
+      </div>
+
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input id="voiceToggle" type="checkbox" checked />
+        <span style="font-weight:600;">Enable</span>
+      </label>
+    </div>
+
+    <!-- Exercise Info -->
+    <div class="card" style="padding: 15px;">
+      <h4>Current Exercise</h4>
+      <p style="color: #666; margin-top: 5px;" id="exerciseNameText">Knee Extension</p>
+      <p style="font-size: 0.85rem; margin-top: 10px;">
+        Target: 3 sets × 10 reps<br />
+        ROM Target: 90° flexion
+      </p>
+    </div>
+
+    <!-- Session Controls -->
+    <div class="session-controls">
+      <button class="btn" style="flex: 1;">⏸️ Pause</button>
+      <button class="btn btn-danger" style="flex: 1;">⏹️ Stop Session</button>
+    </div>
+
+    <!-- Next Step -->
+    <a href="{{ url_for('pain_checkin') }}" class="btn btn-success" style="text-align: center;">
+      Complete Set → Check-in
+    </a>
+  </div>
 </div>
 
-<!-- ✅ JS: camera + polling + UI updates -->
 <script>
-const VIDEO = document.getElementById("webcamVideo");
-const camErrorOverlay = document.getElementById("camErrorOverlay");
+  /* ---------------- DOM ---------------- */
+  const VIDEO = document.getElementById("webcamVideo");
+  const camErrorOverlay = document.getElementById("camErrorOverlay");
 
-const statusIndicator = document.getElementById("statusIndicator");
-const scoreSpan = document.getElementById("frameScoreText");
-const feedbackBox = document.getElementById("feedbackList");
-const exerciseNameText = document.getElementById("exerciseNameText");
+  const statusIndicator = document.getElementById("statusIndicator");
+  const scoreSpan = document.getElementById("frameScoreText");
+  const feedbackBox = document.getElementById("feedbackList");
+  const exerciseNameText = document.getElementById("exerciseNameText");
 
-const canvas = document.createElement("canvas");
-const ctx = canvas.getContext("2d");
+  const voiceToggle = document.getElementById("voiceToggle");
+  const voiceStatusText = document.getElementById("voiceStatusText");
+  const voiceHintText = document.getElementById("voiceHintText");
 
-// You can wire this later to a dropdown / backend variable
-const EXERCISE_NAME = exerciseNameText ? exerciseNameText.textContent.trim() : "exercise";
-const THRESHOLD = 30.0;
-const COOLDOWN_SECONDS = 10;
-const POLL_MS = 2000;
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
 
-async function startWebcam() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        VIDEO.srcObject = stream;
-        await VIDEO.play();
-        if (camErrorOverlay) camErrorOverlay.style.display = "none";
-        return true;
-    } catch (err) {
-        console.error("Camera error:", err);
-        if (camErrorOverlay) {
-            camErrorOverlay.style.display = "flex";
-        }
-        return false;
-    }
-}
+  /* -------------- Session params -------------- */
+  const EXERCISE_NAME = exerciseNameText ? exerciseNameText.textContent.trim() : "exercise";
+  const THRESHOLD = 30.0;
 
-async function startSession() {
-    await fetch("/api/session/start", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            threshold: THRESHOLD,
-            exercise_name: EXERCISE_NAME,
-            cooldown_seconds: COOLDOWN_SECONDS
-        })
+  // If backend cooldown is long, UI will often receive [].
+  // Keep it small for demo.
+  const COOLDOWN_SECONDS = 2;
+
+  const POLL_MS = 2000;
+
+  /* -------------- Sticky feedback -------------- */
+  let LAST_FEEDBACK = null;
+  let LAST_FEEDBACK_TIME = 0;
+
+  /* -------------- Voice / TTS -------------- */
+  let lastSpokenHash = "";
+  let lastSpokenAt = 0;
+  const SPEAK_COOLDOWN_MS = 8000;
+
+  // Chrome loads voices asynchronously sometimes
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      try { window.speechSynthesis.getVoices(); } catch(e) {}
+    };
+  }
+
+  function setVoiceUI(on) {
+    if (voiceStatusText) voiceStatusText.textContent = on ? "ON" : "OFF";
+    if (voiceHintText) voiceHintText.textContent = on ? "Audio cues are active" : "Audio cues are muted";
+  }
+
+  function stopSpeaking() {
+    try { window.speechSynthesis.cancel(); } catch(e) {}
+  }
+
+  function speakText(text) {
+    if (!text || !window.speechSynthesis) return;
+    if (voiceToggle && !voiceToggle.checked) return;
+
+    stopSpeaking();
+
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.98;
+    u.pitch = 1.0;
+    u.volume = 1.0;
+
+    // Better voice selection for Chrome/macOS
+    const voices = window.speechSynthesis.getVoices?.() || [];
+    const preferredNames = ["Samantha", "Daniel", "Karen", "Moira", "Tessa", "Alex"];
+
+    let chosen =
+      voices.find(v => preferredNames.includes(v.name)) ||
+      voices.find(v => (v.lang || "").toLowerCase().startsWith("en-us")) ||
+      voices.find(v => (v.lang || "").toLowerCase().startsWith("en-gb")) ||
+      voices.find(v => (v.lang || "").toLowerCase().startsWith("en")) ||
+      voices[0];
+
+    if (chosen) u.voice = chosen;
+
+    window.speechSynthesis.speak(u);
+  }
+
+  function speakFeedbackList(items) {
+    if (!items || items.length === 0) return;
+
+    const now = Date.now();
+    if (now - lastSpokenAt < SPEAK_COOLDOWN_MS) return;
+
+    const hash = items.join("|");
+    if (hash === lastSpokenHash) return;
+
+    // Read only 1–2 key points
+    const short = items.slice(0, 2).join(". ");
+    speakText(short);
+
+    lastSpokenHash = hash;
+    lastSpokenAt = now;
+  }
+
+  if (voiceToggle) {
+    setVoiceUI(voiceToggle.checked);
+    voiceToggle.addEventListener("change", () => {
+      setVoiceUI(voiceToggle.checked);
+      if (!voiceToggle.checked) stopSpeaking();
     });
-}
+  }
 
-function grabFrameDataURL() {
+  // Prime speech once after a user gesture (Chrome policy)
+  document.addEventListener("click", () => {
+    try {
+      const u = new SpeechSynthesisUtterance("Voice feedback enabled.");
+      u.volume = 0; // silent prime
+      window.speechSynthesis.speak(u);
+      window.speechSynthesis.cancel();
+    } catch (e) {}
+  }, { once: true });
+
+  /* ---------------- Webcam ---------------- */
+  async function startWebcam() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      VIDEO.srcObject = stream;
+      await VIDEO.play();
+      if (camErrorOverlay) camErrorOverlay.style.display = "none";
+      return true;
+    } catch (err) {
+      console.error("Camera error:", err);
+      if (camErrorOverlay) camErrorOverlay.style.display = "flex";
+      return false;
+    }
+  }
+
+  /* ---------------- Backend session init ---------------- */
+  async function startSession() {
+    try {
+      await fetch("/api/session/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threshold: THRESHOLD,
+          exercise_name: EXERCISE_NAME,
+          cooldown_seconds: COOLDOWN_SECONDS
+        })
+      });
+    } catch (e) {
+      console.error("startSession failed:", e);
+    }
+  }
+
+  /* ---------------- Frame capture ---------------- */
+  function grabFrameDataURL() {
     const w = VIDEO.videoWidth, h = VIDEO.videoHeight;
     if (!w || !h) return null;
-    canvas.width = w; canvas.height = h;
+    canvas.width = w;
+    canvas.height = h;
     ctx.drawImage(VIDEO, 0, 0, w, h);
     return canvas.toDataURL("image/jpeg", 0.85);
-}
+  }
 
-function setStatus(status, score) {
+  /* ---------------- UI update helpers ---------------- */
+  function setStatus(status, score) {
     scoreSpan.textContent = Number(score || 0).toFixed(2);
 
-    // reset classes
     statusIndicator.classList.remove("correct", "incorrect");
 
     if (status === "CORRECT") {
-        statusIndicator.classList.add("correct");
-        statusIndicator.textContent = "✓ CORRECT FORM";
+      statusIndicator.classList.add("correct");
+      statusIndicator.textContent = "✓ CORRECT FORM";
     } else if (status === "WRONG") {
-        statusIndicator.classList.add("incorrect");
-        statusIndicator.textContent = "✗ FORM NEEDS ADJUSTMENT";
+      statusIndicator.classList.add("incorrect");
+      statusIndicator.textContent = "✗ FORM NEEDS ADJUSTMENT";
     } else if (status === "NO_POSE") {
-        statusIndicator.classList.add("incorrect");
-        statusIndicator.textContent = "… POSE NOT DETECTED";
+      statusIndicator.classList.add("incorrect");
+      statusIndicator.textContent = "… POSE NOT DETECTED";
+    } else if (status === "NO_FRAME") {
+      statusIndicator.classList.add("incorrect");
+      statusIndicator.textContent = "… NO FRAME";
+    } else if (status === "WARMUP") {
+      statusIndicator.classList.add("incorrect");
+      statusIndicator.textContent = "… WARMING UP";
+    } else if (status === "ERROR") {
+      statusIndicator.classList.add("incorrect");
+      statusIndicator.textContent = "✗ ERROR";
     } else {
-        statusIndicator.classList.add("incorrect");
-        statusIndicator.textContent = "… PROCESSING";
+      statusIndicator.classList.add("incorrect");
+      statusIndicator.textContent = "… PROCESSING";
     }
-}
+  }
 
-function renderFeedback(items) {
+  function renderFeedback(items) {
+    // If backend sent new feedback, store it
+    if (items && items.length > 0) {
+      LAST_FEEDBACK = items;
+      LAST_FEEDBACK_TIME = Date.now();
+    }
+
+    const displayItems = (LAST_FEEDBACK && LAST_FEEDBACK.length > 0) ? LAST_FEEDBACK : null;
+
     feedbackBox.innerHTML = "";
 
-    if (!items || items.length === 0) {
-        const div = document.createElement("div");
-        div.className = "error-item";
-        div.textContent = "No new feedback.";
-        feedbackBox.appendChild(div);
-        return;
+    if (!displayItems) {
+      const div = document.createElement("div");
+      div.className = "error-item";
+      div.textContent = "Waiting for feedback...";
+      feedbackBox.appendChild(div);
+      return;
     }
 
-    items.slice(0, 4).forEach((txt, idx) => {
-        const div = document.createElement("div");
-        div.className = "error-item";
-        div.textContent = "⚠️ " + txt;
-        feedbackBox.appendChild(div);
+    displayItems.slice(0, 4).forEach((txt) => {
+      const div = document.createElement("div");
+      div.className = "error-item";
+      div.textContent = "⚠️ " + txt;
+      feedbackBox.appendChild(div);
     });
-}
 
-async function pollFeedback() {
+    const ageSec = Math.round((Date.now() - LAST_FEEDBACK_TIME) / 1000);
+    const ts = document.createElement("div");
+    ts.style.fontSize = "0.8rem";
+    ts.style.opacity = "0.6";
+    ts.style.marginTop = "8px";
+    ts.textContent = `Last updated ${ageSec}s ago`;
+    feedbackBox.appendChild(ts);
+  }
+
+  /* ---------------- Polling ---------------- */
+  async function pollFeedback() {
     const frame_b64 = grabFrameDataURL();
     if (!frame_b64) return;
 
-    const res = await fetch("/api/live_feedback", {
+    try {
+      const res = await fetch("/api/live_feedback", {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ frame_b64 })
-    });
+      });
 
-    const out = await res.json();
-    setStatus(out.form_status, out.frame_score);
-    renderFeedback(out.llm_feedback);
-}
+      const out = await res.json();
 
-(async function init() {
+      if (!res.ok) {
+        setStatus("ERROR", 0);
+        renderFeedback([out.error || "Backend error"]);
+        return;
+      }
+
+      setStatus(out.form_status, out.frame_score);
+
+      // Normalize feedback to list[str]
+      let fb = out.llm_feedback;
+      if (typeof fb === "string") fb = [fb];
+
+      renderFeedback(fb);
+
+      // IMPORTANT FIXES:
+      // 1) Typo: was peakFeedbackList -> speakFeedbackList
+      // 2) Only speak when WRONG and we actually have feedback
+      if (out.form_status === "WRONG" && fb && fb.length > 0) {
+        speakFeedbackList(fb);
+      }
+
+    } catch (e) {
+      console.error("pollFeedback failed:", e);
+      setStatus("ERROR", 0);
+      renderFeedback(["Network error: failed to reach backend"]);
+    }
+  }
+
+  /* ---------------- Init ---------------- */
+  (async function init() {
     const camOk = await startWebcam();
     if (!camOk) return;
 
     await startSession();
+
+    // first tick immediately
+    await pollFeedback();
+
+    // then every POLL_MS
     setInterval(pollFeedback, POLL_MS);
-})();
+  })();
 </script>
 
 {% endblock %}

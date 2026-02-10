@@ -9,6 +9,9 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from datetime import datetime
 import os
 from optim import get_top3_recommendations, optimize_all_patients, build_demo_data, load_dataset
+import base64
+import cv2
+import numpy as np
 
 # Create instance folder if it doesn't exist
 os.makedirs('instance', exist_ok=True)
@@ -319,19 +322,12 @@ def api_optimize_demo():
 
 # Global/session state (simple demo)
 SESSION_STATE = {
-  "scores": [],
-  "threshold": 30.0,
-  "cooldown_until": 0
+    "scores": [],
+    "threshold": 30.0,
+    "cooldown_until": 0
 }
 
-@app.route("/api/session/start", methods=["POST"])
-def api_session_start():
-    data = request.get_json(force=True) or {}
-    SESSION_STATE["scores"] = []
-    SESSION_STATE["threshold"] = float(data.get("threshold", 30.0))
-    SESSION_STATE["cooldown_until"] = 0
-    return jsonify({"ok": True, "threshold": SESSION_STATE["threshold"]})
-
+old_route = """
 @app.route("/api/session/start", methods=["POST"])
 def api_session_start():
     data = request.get_json(force=True) or {}
@@ -341,8 +337,19 @@ def api_session_start():
 
     PIPELINE.reset(threshold=threshold, exercise_name=exercise_name, cooldown_seconds=cooldown_seconds)
     return jsonify({"ok": True, "threshold": threshold, "exercise_name": exercise_name})
+"""
 
+@app.route("/api/session/start", methods=["POST"])
+def api_session_start():
+    data = request.get_json(force=True) or {}
+    threshold = float(data.get("threshold", 30.0))
+    exercise_name = data.get("exercise_name", "exercise")
+    cooldown_seconds = float(data.get("cooldown_seconds", 10.0))
 
+    PIPELINE.reset(threshold=threshold, exercise_name=exercise_name, cooldown_seconds=cooldown_seconds)
+    return jsonify({"ok": True, "threshold": threshold, "exercise_name": exercise_name, "cooldown_seconds": cooldown_seconds})
+
+old_routes = """
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():
     data = request.get_json(force=True) or {}
@@ -352,18 +359,23 @@ def api_live_feedback():
 
     out = PIPELINE.process_frame_dataurl(frame_b64)
     return jsonify(out)
+"""
 
+old_code = """
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():
-    """
-    Input: { "frame_b64": "data:image/jpeg;base64,...." }
-    Output: score + form status + feedback list
-    """
+    #Input: { "frame_b64": "data:image/jpeg;base64,...." }
+    #Output: score + form status + feedback list
+    
     data = request.get_json(force=True)
     frame_b64 = data["frame_b64"]
 
     # 1) decode frame -> np array (BGR)
-    frame = decode_dataurl_to_bgr(frame_b64)
+    # Extract base64 string from data URL
+    header, encoded = frame_b64.split(',', 1)
+    frame_data = base64.b64decode(encoded)
+    frame_array = np.frombuffer(frame_data, np.uint8)
+    frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
 
     # 2) extract pose -> (100,100) (or your expected shape)
     X = pose_to_kimore_like_features(frame)   # your function
@@ -385,6 +397,17 @@ def api_live_feedback():
         "form_status": status,
         "llm_feedback": feedback
     })
+    """
+
+@app.route("/api/live_feedback", methods=["POST"])
+def api_live_feedback():
+    data = request.get_json(force=True) or {}
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    out = PIPELINE.process_frame_dataurl(frame_b64)
+    return jsonify(out)
 
 if __name__ == '__main__':
     with app.app_context():
@@ -392,4 +415,4 @@ if __name__ == '__main__':
         print("Database tables created successfully!")
         print(f"Database location: {os.path.join(basedir, 'instance', 'rehab_app.db')}")
     
-    app.run(debug=True)
+    app.run(host="127.0.0.1", port=5050, debug=True)
