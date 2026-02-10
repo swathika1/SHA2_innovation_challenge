@@ -160,5 +160,30 @@ def api_optimize_demo():
     return jsonify({"results": results})
 
 
+@app.route('/api/optimize/consultation', methods=['GET'])
+def api_optimize_consultation():
+    """Return patient list + per-patient optimization results for the
+    consultation scheduling page.
+
+    Uses demo data for now. To switch to a custom dataset, swap the
+    data source lines below.
+    """
+    # === DATA SOURCE (swap when custom dataset is ready) ===
+    patients, doctors, timeslots = build_demo_data()
+    # patients, doctors, timeslots = load_dataset('Optim_dataset/your_dataset.json')
+
+    results = optimize_all_patients(patients, doctors, timeslots)
+
+    patient_list = [
+        {"id": p["id"], "label": p["label"], "score": p["score"]}
+        for p in patients
+    ]
+
+    return jsonify({
+        "patients": patient_list,
+        "results": results,
+    })
+
+
 if __name__ == '__main__':
     app.run(debug=True)

@@ -4,9 +4,9 @@
 
 {% block header %}
 <header class="header">
-    <h1>📅 Consultation & Scheduling</h1>
+    <h1>Consultation & Scheduling</h1>
     <nav class="nav-links">
-        <a href="{{ url_for('clinician_dashboard') }}">← Back to Dashboard</a>
+        <a href="{{ url_for('clinician_dashboard') }}">Back to Dashboard</a>
         <a href="{{ url_for('plan_editor') }}">Plan Editor</a>
     </nav>
 </header>
@@ -16,17 +16,50 @@
 <div class="consultation-layout">
     <!-- Left Column: Scheduling & Appointments -->
     <div>
-        <!-- Book New Consultation -->
+        <!-- Smart Scheduling (Optimization) -->
         <div class="card">
-            <div class="card-header">Book Video Consultation</div>
+            <div class="card-header">Smart Scheduling</div>
             <div class="form-group">
-                <label>Select Patient</label>
-                <select class="form-control">
-                    <option>John Smith (PT-001)</option>
-                    <option>Maria Garcia (PT-002)</option>
-                    <option>Robert Johnson (PT-003)</option>
-                    <option>Emily Chen (PT-004)</option>
+                <label for="optim-patient-select">Select Patient</label>
+                <select id="optim-patient-select" class="form-control">
+                    <option value="">-- Loading patients... --</option>
                 </select>
+            </div>
+            <button id="btn-get-recommendations" class="btn btn-primary" style="width: 100%;" disabled>
+                Get Optimal Recommendations
+            </button>
+            <p id="optim-loading" style="display: none; text-align: center; margin-top: 10px; color: #666;">
+                Running optimization...
+            </p>
+        </div>
+
+        <!-- Notification Banner (hidden by default) -->
+        <div id="optim-notification" style="display: none;">
+            <strong id="notif-level"></strong>
+            <span id="notif-message"></span>
+        </div>
+
+        <!-- Recommendations (hidden by default) -->
+        <div id="optim-results" class="card" style="display: none;">
+            <div class="card-header">Top 3 Recommended Appointments</div>
+            <div id="recommendations-list"></div>
+        </div>
+
+        <!-- Book Video Consultation -->
+        <div id="booking-form-card" class="card" style="margin-top: 20px;">
+            <div class="card-header">Book Video Consultation</div>
+            <input type="hidden" id="book-patient-id" value="">
+            <input type="hidden" id="book-doctor-id" value="">
+            <input type="hidden" id="book-timeslot-label" value="">
+            <div class="form-group">
+                <label>Patient</label>
+                <input type="text" id="book-patient-name" class="form-control" readonly
+                       placeholder="Select from recommendations above" style="background: #f5f5f5;">
+            </div>
+            <div class="form-group">
+                <label>Doctor</label>
+                <input type="text" id="book-doctor-name" class="form-control" readonly
+                       placeholder="Auto-filled from recommendation" style="background: #f5f5f5;">
             </div>
             <div class="form-group">
                 <label>Date</label>
@@ -58,11 +91,11 @@
             </div>
             <button class="btn btn-primary" style="width: 100%;">Schedule Consultation</button>
         </div>
-        
+
         <!-- Upcoming Appointments -->
         <div class="appointment-list" style="margin-top: 20px;">
             <div class="card-header">Upcoming Appointments</div>
-            
+
             <div class="appointment-item">
                 <div>
                     <strong>John Smith</strong>
@@ -73,7 +106,7 @@
                     <button class="btn" style="padding: 5px 15px;">Reschedule</button>
                 </div>
             </div>
-            
+
             <div class="appointment-item">
                 <div>
                     <strong>Maria Garcia</strong>
@@ -84,7 +117,7 @@
                     <button class="btn" style="padding: 5px 15px;">Reschedule</button>
                 </div>
             </div>
-            
+
             <div class="appointment-item">
                 <div>
                     <strong>Emily Chen</strong>
@@ -97,12 +130,12 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Right Column: Video Call Preview -->
     <div>
         <div class="card">
             <div class="card-header">Video Call Interface</div>
-            
+
             <!-- Main Video Area -->
             <div class="video-call-preview">
                 <div style="text-align: center;">
@@ -111,7 +144,7 @@
                     <p style="font-size: 0.8rem; opacity: 0.7;">Join a scheduled call to start</p>
                 </div>
             </div>
-            
+
             <!-- Self View (Picture-in-Picture) -->
             <div style="display: flex; gap: 15px; margin-top: 15px;">
                 <div style="flex: 1; background: #333; border-radius: 4px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.8rem;">
@@ -121,7 +154,7 @@
                     [ Screen Share ]
                 </div>
             </div>
-            
+
             <!-- Call Controls -->
             <div style="display: flex; justify-content: center; gap: 15px; margin-top: 20px;">
                 <button class="btn" style="border-radius: 50%; width: 50px; height: 50px; padding: 0;">🎤</button>
@@ -130,7 +163,7 @@
                 <button class="btn btn-danger" style="border-radius: 50%; width: 50px; height: 50px; padding: 0;">📞</button>
             </div>
         </div>
-        
+
         <!-- Quick Patient Info During Call -->
         <div class="card" style="margin-top: 20px;">
             <div class="card-header">Patient Quick View</div>
@@ -154,4 +187,141 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // === STATE ===
+    var optimData = null;
+
+    // === DOM REFERENCES ===
+    var patientSelect = document.getElementById('optim-patient-select');
+    var btnRecommend = document.getElementById('btn-get-recommendations');
+    var loadingText = document.getElementById('optim-loading');
+    var notifBanner = document.getElementById('optim-notification');
+    var notifLevel = document.getElementById('notif-level');
+    var notifMessage = document.getElementById('notif-message');
+    var resultsPanel = document.getElementById('optim-results');
+    var recsList = document.getElementById('recommendations-list');
+
+    // === FETCH OPTIMIZATION DATA ON PAGE LOAD ===
+    function loadOptimizationData() {
+        fetch('/api/optimize/consultation')
+            .then(function(response) {
+                if (!response.ok) throw new Error('Network error');
+                return response.json();
+            })
+            .then(function(data) {
+                optimData = data;
+                populatePatientDropdown(data.patients);
+            })
+            .catch(function(err) {
+                patientSelect.innerHTML = '<option value="">Error loading patients</option>';
+                console.error('Failed to load optimization data:', err);
+            });
+    }
+
+    // === POPULATE DROPDOWN ===
+    function populatePatientDropdown(patients) {
+        patientSelect.innerHTML = '<option value="">-- Select a patient --</option>';
+        patients.forEach(function(p) {
+            var opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.label + ' (Score: ' + p.score + ')';
+            patientSelect.appendChild(opt);
+        });
+        btnRecommend.disabled = true;
+    }
+
+    // === ENABLE BUTTON WHEN PATIENT SELECTED ===
+    patientSelect.addEventListener('change', function() {
+        btnRecommend.disabled = (this.value === '');
+        // Clear previous results when patient changes
+        notifBanner.style.display = 'none';
+        resultsPanel.style.display = 'none';
+    });
+
+    // === SHOW RECOMMENDATIONS ===
+    btnRecommend.addEventListener('click', function() {
+        var patientId = patientSelect.value;
+        if (!patientId || !optimData) return;
+
+        var patientResult = optimData.results[patientId];
+        if (!patientResult) {
+            recsList.innerHTML = '<p style="color: #666; padding: 10px;">No data available for this patient.</p>';
+            resultsPanel.style.display = 'block';
+            notifBanner.style.display = 'none';
+            return;
+        }
+
+        // Show notification if present
+        if (patientResult.notification) {
+            var notif = patientResult.notification;
+            notifLevel.textContent = notif.level === 'critical' ? 'CRITICAL: ' : 'NOTICE: ';
+            notifMessage.textContent = notif.message;
+            notifBanner.className = notif.level === 'critical'
+                ? 'optim-notification-critical'
+                : 'optim-notification-concerning';
+            notifBanner.style.display = 'block';
+        } else {
+            notifBanner.style.display = 'none';
+        }
+
+        // Render recommendations
+        var recs = patientResult.recommendations;
+        if (recs.length === 0) {
+            recsList.innerHTML = '<p style="color: #666; padding: 10px;">No feasible appointments found for this patient.</p>';
+        } else {
+            var html = '';
+            recs.forEach(function(rec) {
+                html += '<div class="appointment-item" style="margin-bottom: 10px;">';
+                html += '  <div>';
+                html += '    <strong>#' + rec.rank + ' - ' + rec.doctor_label + '</strong>';
+                html += '    <p style="font-size: 0.85rem; color: #666;">';
+                html += rec.timeslot_label + ' | ' + rec.dist_km + ' km away';
+                html += '    </p>';
+                html += '  </div>';
+                html += '  <div style="display: flex; align-items: center; gap: 10px;">';
+                html += '    <span style="font-weight: 600; font-size: 0.9rem;">Score: ' + rec.score.toFixed(2) + '</span>';
+                html += '    <button class="btn btn-success" style="padding: 5px 15px;"';
+                html += '      data-doctor-id="' + rec.doctor_id + '"';
+                html += '      data-doctor-label="' + rec.doctor_label + '"';
+                html += '      data-timeslot-label="' + rec.timeslot_label + '"';
+                html += '      onclick="bookRecommendation(this)">Book</button>';
+                html += '  </div>';
+                html += '</div>';
+            });
+            recsList.innerHTML = html;
+        }
+
+        resultsPanel.style.display = 'block';
+    });
+
+    // === BOOK A RECOMMENDATION ===
+    function bookRecommendation(btn) {
+        var doctorLabel = btn.getAttribute('data-doctor-label');
+        var timeslotLabel = btn.getAttribute('data-timeslot-label');
+        var patientLabel = patientSelect.options[patientSelect.selectedIndex].textContent;
+
+        // Fill the booking form
+        document.getElementById('book-patient-name').value = patientLabel;
+        document.getElementById('book-patient-id').value = patientSelect.value;
+        document.getElementById('book-doctor-id').value = btn.getAttribute('data-doctor-id');
+        document.getElementById('book-doctor-name').value = doctorLabel;
+        document.getElementById('book-timeslot-label').value = timeslotLabel;
+
+        // Visual feedback: highlight the clicked recommendation
+        var items = recsList.querySelectorAll('.appointment-item');
+        items.forEach(function(item) {
+            item.style.border = '';
+        });
+        btn.closest('.appointment-item').style.border = '2px solid #28a745';
+
+        // Scroll to booking form
+        document.getElementById('booking-form-card').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // === INIT ===
+    loadOptimizationData();
+</script>
 {% endblock %}
