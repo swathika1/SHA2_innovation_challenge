@@ -3,13 +3,17 @@ main.py - Home Rehab Coach Flask Application
 With SQLite database integration, Video Call features, and CV/ML Pipeline
 """
 
+import sys
+import os
+# Ensure current directory is in sys.path for local imports
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from database import get_db, close_db, query_db, execute_db
 from functools import wraps
 from datetime import datetime, date
 import uuid
-import os
 
 # Import optimization module (from computer_vision branch)
 try:
@@ -582,15 +586,17 @@ def consultation():
         JOIN doctor_patient dp ON p.user_id = dp.patient_id
         WHERE dp.doctor_id = ?
     ''', (session['user_id'],))
-    
-    # If no assigned patients, show ALL patients
-    if not patients:
+
+    # If no assigned patients, show ALL patients (for demo/new doctors)
+    if not patients or len(patients) == 0:
         patients = query_db('''
             SELECT u.id, u.name
             FROM users u
             JOIN patients p ON u.id = p.user_id
         ''')
-    
+
+    print('[DEBUG] Consultation patients:', patients)
+
     appointments = query_db('''
         SELECT a.*, u.name as patient_name, p.condition, p.adherence_rate, p.avg_pain_level, p.avg_quality_score
         FROM appointments a
@@ -897,8 +903,8 @@ def api_optimize_demo():
     return jsonify({"results": results})
 
 
-<<<<<<< HEAD
 @app.route('/api/optimize/consultation', methods=['GET'])
+@login_required
 def api_optimize_consultation():
     """Return patient list + per-patient optimization results for the
     consultation scheduling page.
@@ -906,6 +912,9 @@ def api_optimize_consultation():
     Uses demo data for now. To switch to a custom dataset, swap the
     data source lines below.
     """
+    if not OPTIM_AVAILABLE:
+        return jsonify({"error": "Optimization module not available"}), 503
+
     # === DATA SOURCE (swap when custom dataset is ready) ===
     patients, doctors, timeslots = build_demo_data()
     # patients, doctors, timeslots = load_dataset('Optim_dataset/your_dataset.json')
@@ -921,7 +930,37 @@ def api_optimize_consultation():
         "patients": patient_list,
         "results": results,
     })
-=======
+
+
+@app.route('/api/optimize/patient/<int:patient_id>', methods=['GET'])
+@login_required
+@role_required('doctor')
+def api_optimize_patient(patient_id):
+    """Return top 3 optimization suggestions for a specific patient."""
+    if not OPTIM_AVAILABLE:
+        return jsonify({"error": "Optimization module not available"}), 503
+
+    # Use demo data for now; replace with real data as needed
+    patients, doctors, timeslots = build_demo_data()
+    # Find the patient in the demo data
+    patient = next((p for p in patients if p['id'] == patient_id), None)
+    if not patient:
+        return jsonify({"error": "Patient not found in optimization data"}), 404
+
+    recs, notification = get_top3_recommendations(
+        patient_id=patient_id,
+        patients=patients,
+        doctors=doctors,
+        timeslots=timeslots,
+        weights=None
+    )
+    return jsonify({
+        "patient_id": patient_id,
+        "recommendations": recs,
+        "notification": notification
+    })
+
+
 # ==================== CV/ML LIVE FEEDBACK API (from computer_vision branch) ====================
 
 # Global/session state for CV feedback
@@ -1117,8 +1156,16 @@ def ensure_tables_exist():
 
 # Ensure tables exist on startup
 ensure_tables_exist()
->>>>>>> origin/main
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = 8000
+    # Allow port override via command line argument: python main.py --port 5050
+    if '--port' in sys.argv:
+        idx = sys.argv.index('--port')
+        if idx + 1 < len(sys.argv):
+            try:
+                port = int(sys.argv[idx + 1])
+            except ValueError:
+                pass
+    app.run(debug=True, host='0.0.0.0', port=port, ssl_context=("cert.pem", "key.pem"))

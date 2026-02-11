@@ -204,6 +204,20 @@
     </div>
 </div>
 
+<!-- Patient selection dropdown (ensure correct ID) -->
+<label for="optim-patient-select"><strong>Select Patient:</strong></label>
+<select id="optim-patient-select" class="form-control mb-3">
+  <option value="">-- Select --</option>
+  {% for patient in patients %}
+    <option value="{{ patient.id }}">{{ patient.name }}</option>
+  {% endfor %}
+</select>
+
+<!-- Recommendations panel (ensure correct ID) -->
+<div id="optim-recommendations" class="alert alert-secondary" style="min-height: 60px;">
+  <em>Select a patient to view suggestions.</em>
+</div>
+
 <style>
     .consultation-layout {
         display: grid;
@@ -389,7 +403,74 @@
         }
     });
 
+    // === CAMERA PERMISSION TEST ===
+    function requestCameraPermission() {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(stream) {
+                    alert('Camera permission granted!');
+                    // Stop all tracks immediately after permission
+                    stream.getTracks().forEach(track => track.stop());
+                })
+                .catch(function(err) {
+                    alert('Camera permission denied or error: ' + err.message);
+                });
+        } else {
+            alert('Camera access is not supported in this browser.');
+        }
+    }
+
+    // Only declare patientSelect once and wrap in DOMContentLoaded to avoid redeclaration
+    window.addEventListener('DOMContentLoaded', function() {
+        // Fetch and display top 3 optimization suggestions for selected patient
+        function fetchAndDisplayTop3Suggestions(patientId) {
+            if (!patientId) {
+                document.getElementById('optim-recommendations').innerHTML = '<em>Select a patient to view suggestions.</em>';
+                return;
+            }
+            fetch(`/api/optimize/patient/${patientId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('optim-recommendations').innerHTML = `<span class='text-danger'>${data.error}</span>`;
+                        return;
+                    }
+                    const recs = data.recommendations || [];
+                    if (recs.length === 0) {
+                        document.getElementById('optim-recommendations').innerHTML = '<em>No suggestions available.</em>';
+                        return;
+                    }
+                    let html = '<ol>';
+                    recs.forEach(rec => {
+                        html += `<li><strong>${rec.title || rec.label || 'Suggestion'}</strong><br><span>${rec.description || rec.reason || ''}</span></li>`;
+                    });
+                    html += '</ol>';
+                    if (data.notification) {
+                        html += `<div class='alert alert-info mt-2'>${data.notification}</div>`;
+                    }
+                    document.getElementById('optim-recommendations').innerHTML = html;
+                })
+                .catch(err => {
+                    document.getElementById('optim-recommendations').innerHTML = `<span class='text-danger'>Error loading suggestions.</span>`;
+                });
+        }
+
+        // Attach event listener to patient select dropdown
+        const patientSelect = document.getElementById('optim-patient-select');
+        if (patientSelect) {
+            patientSelect.addEventListener('change', function() {
+                const patientId = this.value;
+                fetchAndDisplayTop3Suggestions(patientId);
+            });
+            // Optionally, trigger on page load if a patient is pre-selected
+            if (patientSelect.value) {
+                fetchAndDisplayTop3Suggestions(patientSelect.value);
+            }
+        }
+    });
+
     // === INIT ===
     loadOptimizationData();
 </script>
+<button onclick="requestCameraPermission()" class="btn btn-primary" style="margin: 20px 0;">Test Camera Permission</button>
 {% endblock %}

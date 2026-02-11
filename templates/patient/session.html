@@ -233,26 +233,31 @@
     
     // Start webcam
     async function startWebcam() {
-        try {
-            webcamStream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 640, height: 480, facingMode: 'user' },
-                audio: false
-            });
-            
-            const video = document.getElementById('webcamVideo');
-            video.srcObject = webcamStream;
-            
-            document.getElementById('videoPlaceholder').style.display = 'none';
-            document.getElementById('videoContainer').style.display = 'block';
-            
-            // Start pose analysis loop
-            isAnalyzing = true;
-            analyzePose();
-            
-            addFeedback('success', '✓ Camera connected - Begin your exercise');
-        } catch (err) {
-            console.error('Error accessing webcam:', err);
-            addFeedback('error', '✗ Could not access camera. Please allow camera permissions.');
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            try {
+                webcamStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: 'user' },
+                    audio: false
+                });
+                
+                const video = document.getElementById('webcamVideo');
+                video.srcObject = webcamStream;
+                
+                document.getElementById('videoPlaceholder').style.display = 'none';
+                document.getElementById('videoContainer').style.display = 'block';
+                
+                // Start pose analysis loop
+                isAnalyzing = true;
+                analyzePose();
+                
+                addFeedback('success', '✓ Camera connected - Begin your exercise');
+            } catch (err) {
+                console.error('Error accessing webcam:', err);
+                addFeedback('error', '✗ Could not access camera. Please allow camera permissions.');
+            }
+        } else {
+            alert('Camera access is not supported in this browser.');
+            addFeedback('error', '✗ Camera access is not supported in this browser.');
         }
     }
     
