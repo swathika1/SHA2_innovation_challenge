@@ -404,6 +404,57 @@ def patient_appointments():
                          past_appointments=past_appointments if past_appointments else [])
 
 
+@app.route('/patient/book-appointment', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_book_appointment():
+    """Patient books an appointment with a doctor"""
+    doctor_name = request.form.get('doctor_name', '').strip()
+    appointment_date = request.form['appointment_date']
+    appointment_time = request.form['appointment_time']
+    duration = request.form.get('duration', 30)
+    notes = request.form.get('notes', '')
+
+    # Find doctor by name (looking for "Dr. Smith" format)
+    doctor = query_db('''
+        SELECT id FROM users
+        WHERE role = 'doctor' AND name LIKE ?
+    ''', (f'%{doctor_name}%',), one=True)
+
+    if not doctor:
+        # Try without "Dr." prefix
+        doctor_name_clean = doctor_name.replace('Dr.', '').strip()
+        doctor = query_db('''
+            SELECT id FROM users
+            WHERE role = 'doctor' AND name LIKE ?
+        ''', (f'%{doctor_name_clean}%',), one=True)
+
+    if not doctor:
+        flash('Doctor not found. Please try again.', 'error')
+        return redirect(url_for('patient_appointments'))
+
+    doctor_id = doctor['id']
+    patient_id = session['user_id']
+
+    # Generate unique room ID for video call
+    room_id = f"rehab-{doctor_id}-{patient_id}-{uuid.uuid4().hex[:8]}"
+
+    # Create appointment
+    try:
+        execute_db('''
+            INSERT INTO appointments
+            (doctor_id, patient_id, appointment_date, appointment_time, duration, notes, room_id, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled')
+        ''', (doctor_id, patient_id, appointment_date, appointment_time, duration, notes, room_id))
+
+        flash('Appointment request sent successfully! Your doctor will be notified.', 'success')
+    except Exception as e:
+        flash('Failed to book appointment. Please try again.', 'error')
+        print(f'[ERROR] Failed to book appointment: {e}')
+
+    return redirect(url_for('patient_appointments'))
+
+
 # ==================== CLINICIAN ROUTES ====================
 
 @app.route('/clinician/dashboard')
@@ -956,6 +1007,59 @@ def api_optimize_patient(patient_id):
     )
     return jsonify({
         "patient_id": patient_id,
+        "recommendations": recs,
+        "notification": notification
+    })
+
+
+@app.route('/api/patient/recommendations', methods=['GET'])
+@login_required
+@role_required('patient')
+def api_patient_recommendations():
+    """Return optimized doctor/appointment recommendations for the logged-in patient."""
+    if not OPTIM_AVAILABLE:
+        return jsonify({"error": "Optimization module not available"}), 503
+
+    # Get the logged-in patient's information
+    patient_id = session['user_id']
+
+    # Get patient rehab data to determine their optimization patient_id
+    patient_data = query_db(
+        'SELECT * FROM patients WHERE user_id = ?',
+        (patient_id,),
+        one=True
+    )
+
+    if not patient_data:
+        return jsonify({"error": "Patient profile not found"}), 404
+
+    # Use demo data for now (map based on patient condition or use a default)
+    # In production, this would map to the actual patient_id in the optimization system
+    patients, doctors, timeslots = build_demo_data()
+
+    # For demo: use patient_1 as default (could be enhanced to map based on condition)
+    optim_patient_id = "patient_1"  # Default to patient_1 for demo
+
+    # Try to find matching patient in demo data based on rehab score
+    rehab_score = patient_data['avg_quality_score']
+    if rehab_score < 4.0:
+        optim_patient_id = "patient_1"  # Low score patient
+    elif rehab_score >= 7.0:
+        optim_patient_id = "patient_2"  # High score patient
+    else:
+        optim_patient_id = "patient_3"  # Medium score patient
+
+    # Get recommendations
+    recs, notification = get_top3_recommendations(
+        patient_id=optim_patient_id,
+        patients=patients,
+        doctors=doctors,
+        timeslots=timeslots,
+        weights=None
+    )
+
+    return jsonify({
+        "patient_name": patient_data['condition'],
         "recommendations": recs,
         "notification": notification
     })
