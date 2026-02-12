@@ -903,3 +903,23 @@ a:focus {
     clip: rect(0, 0, 0, 0);
     border: 0;
 }
+
+/* ==================== Optimization Notifications ==================== */
+
+.optim-notification-critical {
+    background: #f8d7da;
+    border-left: 4px solid #dc3545;
+    color: #721c24;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.optim-notification-concerning {
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    color: #856404;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
