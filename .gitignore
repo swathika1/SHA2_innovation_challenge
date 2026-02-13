@@ -1,2 +1,27 @@
 venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Flask session files
+flask_session/
+
+# Database files
+*.db
+instance/
+
+# SSL certificates (if they contain sensitive data)
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
 .DS_Store

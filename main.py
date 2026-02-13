@@ -94,6 +94,12 @@ def login():
                 session['role'] = user['role']
                 session.permanent = True  # Make session persistent
                 
+                # Log login to login_history table
+                execute_db(
+                    'INSERT INTO login_history (user_id, name, email, role) VALUES (?, ?, ?, ?)',
+                    (user['id'], user['name'], user['email'], user['role'])
+                )
+                
                 flash(f'Welcome back, {user["name"]}!', 'success')
                 
                 # Redirect based on role
@@ -139,6 +145,12 @@ def api_login():
     session['user_id'] = user['id']
     session['user_name'] = user['name']
     session['role'] = user['role']
+    
+    # Log login to login_history table
+    execute_db(
+        'INSERT INTO login_history (user_id, name, email, role) VALUES (?, ?, ?, ?)',
+        (user['id'], user['name'], user['email'], user['role'])
+    )
     
     # Map role names for compatibility
     role_map = {'doctor': 'clinician', 'patient': 'patient', 'caregiver': 'caregiver'}
@@ -251,6 +263,20 @@ def patient_dashboard():
         one=True
     )
     
+    # If patient record doesn't exist yet, create one with default values
+    if not patient_info:
+        execute_db('''
+            INSERT INTO patients (user_id, condition, current_week, adherence_rate, 
+                                  streak_days, avg_quality_score, avg_pain_level)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (session['user_id'], 'General Rehabilitation', 1, 0, 0, 0, 0))
+        
+        patient_info = query_db(
+            'SELECT * FROM patients WHERE user_id = ?',
+            (session['user_id'],),
+            one=True
+        )
+    
     # Get patient's workouts
     workouts = query_db('''
         SELECT w.*, e.name as exercise_name, e.description
@@ -259,9 +285,10 @@ def patient_dashboard():
         WHERE w.patient_id = ? AND w.is_active = 1
     ''', (session['user_id'],))
     
-    # Get recent sessions
+    # Get recent sessions (last 5)
     recent_sessions = query_db('''
-        SELECT s.*, e.name as exercise_name
+        SELECT s.*, e.name as exercise_name,
+               strftime('%Y-%m-%d %H:%M', s.completed_at) as formatted_date
         FROM sessions s
         JOIN workouts w ON s.workout_id = w.id
         JOIN exercises e ON w.exercise_id = e.id
@@ -280,12 +307,28 @@ def patient_dashboard():
         LIMIT 3
     ''', (session['user_id'],))
     
+    # Calculate dynamic statistics from sessions
+    # Count distinct session groups (one session = one sitting with potentially multiple exercises)
+    # Falls back to counting rows for legacy data without session_group_id
+    total_sessions = query_db('''
+        SELECT COUNT(DISTINCT COALESCE(session_group_id, id)) as count FROM sessions 
+        WHERE patient_id = ?
+    ''', (session['user_id'],), one=True)
+    
+    sessions_this_week = query_db('''
+        SELECT COUNT(DISTINCT COALESCE(session_group_id, id)) as count FROM sessions 
+        WHERE patient_id = ? 
+        AND completed_at >= date('now', '-7 days')
+    ''', (session['user_id'],), one=True)
+    
     return render_template('patient/dashboard.html',
                          user=user,
                          patient=patient_info,
                          workouts=workouts if workouts else [],
                          recent_sessions=recent_sessions if recent_sessions else [],
-                         upcoming_appointments=upcoming_appointments if upcoming_appointments else [])
+                         upcoming_appointments=upcoming_appointments if upcoming_appointments else [],
+                         total_sessions=total_sessions['count'] if total_sessions else 0,
+                         sessions_this_week=sessions_this_week['count'] if sessions_this_week else 0)
 
 
 @app.route('/patient/session')
@@ -1075,7 +1118,190 @@ def api_session_start():
     SESSION_STATE["scores"] = []
     SESSION_STATE["threshold"] = float(data.get("threshold", 30.0))
     SESSION_STATE["cooldown_until"] = 0
+    SESSION_STATE["workout_id"] = data.get("workout_id")  # Store workout_id for later saving
     return jsonify({"ok": True, "threshold": SESSION_STATE["threshold"]})
+
+
+@app.route("/api/session/save", methods=["POST"])
+@login_required
+def api_session_save():
+    """
+    Save completed session data to database.
+    Expected JSON payload:
+    {
+        "workout_id": int,
+        "pain_before": int (0-10),
+        "pain_after": int (0-10),
+        "effort_level": int (1-10),
+        "quality_score": float (0-100),
+        "sets_completed": int,
+        "reps_completed": int,
+        "notes": str (optional)
+    }
+    """
+    try:
+        data = request.get_json(force=True) or {}
+        
+        # Validate required fields
+        workout_id = data.get("workout_id")
+        if not workout_id:
+            return jsonify({"error": "workout_id is required"}), 400
+        
+        # Verify workout belongs to current user
+        workout = query_db(
+            'SELECT * FROM workouts WHERE id = ? AND patient_id = ?',
+            (workout_id, session['user_id']),
+            one=True
+        )
+        
+        if not workout:
+            return jsonify({"error": "Workout not found or access denied"}), 404
+        
+        # Calculate average quality score from SESSION_STATE if available
+        avg_score = data.get("quality_score", 0)
+        if SESSION_STATE.get("scores"):
+            avg_score = sum(SESSION_STATE["scores"]) / len(SESSION_STATE["scores"])
+            avg_score = min(100, avg_score * 2)  # Convert 0-50 scale to 0-100
+        
+        # Insert session record
+        session_id = execute_db('''
+            INSERT INTO sessions (
+                patient_id, workout_id, session_group_id, pain_before, pain_after,
+                effort_level, quality_score, sets_completed, reps_completed,
+                notes, completed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (
+            session['user_id'],
+            workout_id,
+            data.get("session_group_id", None),
+            data.get("pain_before", 0),
+            data.get("pain_after", 0),
+            data.get("effort_level", 5),
+            avg_score,
+            data.get("sets_completed", 0),
+            data.get("reps_completed", 0),
+            data.get("notes", "")
+        ))
+        
+        # Update patient metrics (adherence, streak, avg scores)
+        update_patient_metrics(session['user_id'])
+        
+        # Clear session state
+        SESSION_STATE["scores"] = []
+        
+        return jsonify({
+            "ok": True,
+            "session_id": session_id,
+            "message": "Session saved successfully!"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def update_patient_metrics(patient_id):
+    """
+    Update patient's aggregate metrics based on completed sessions.
+    Calculates: adherence_rate, avg_quality_score, avg_pain_level, streak_days
+    """
+    try:
+        # Calculate average quality score from recent sessions
+        quality_result = query_db('''
+            SELECT AVG(quality_score) as avg_quality
+            FROM sessions
+            WHERE patient_id = ?
+            AND completed_at >= date('now', '-30 days')
+        ''', (patient_id,), one=True)
+        
+        avg_quality = quality_result['avg_quality'] if quality_result['avg_quality'] else 70.0
+        
+        # Calculate average pain level (after exercise)
+        pain_result = query_db('''
+            SELECT AVG(pain_after) as avg_pain
+            FROM sessions
+            WHERE patient_id = ?
+            AND completed_at >= date('now', '-30 days')
+        ''', (patient_id,), one=True)
+        
+        avg_pain = pain_result['avg_pain'] if pain_result['avg_pain'] else 3.0
+        
+        # Calculate adherence rate (sessions completed vs expected)
+        # Expected: count of active workouts * 30 days (if daily)
+        workouts_count = query_db('''
+            SELECT COUNT(*) as count
+            FROM workouts
+            WHERE patient_id = ? AND is_active = 1
+        ''', (patient_id,), one=True)
+        
+        sessions_count = query_db('''
+            SELECT COUNT(DISTINCT COALESCE(session_group_id, id)) as count
+            FROM sessions
+            WHERE patient_id = ?
+            AND completed_at >= date('now', '-30 days')
+        ''', (patient_id,), one=True)
+        
+        expected_sessions = workouts_count['count'] * 30  # Assuming daily frequency
+        actual_sessions = sessions_count['count']
+        adherence = min(100, (actual_sessions / expected_sessions * 100) if expected_sessions > 0 else 0)
+        
+        # Calculate streak (consecutive days with at least one session)
+        streak = calculate_streak(patient_id)
+        
+        # Update patient record
+        execute_db('''
+            UPDATE patients
+            SET adherence_rate = ?,
+                avg_quality_score = ?,
+                avg_pain_level = ?,
+                streak_days = ?
+            WHERE user_id = ?
+        ''', (adherence, avg_quality, avg_pain, streak, patient_id))
+        
+    except Exception as e:
+        print(f"Error updating patient metrics: {e}")
+
+
+def calculate_streak(patient_id):
+    """Calculate consecutive days with at least one completed session."""
+    try:
+        # Get all session dates, ordered from most recent
+        sessions = query_db('''
+            SELECT DISTINCT date(completed_at) as session_date
+            FROM sessions
+            WHERE patient_id = ?
+            ORDER BY session_date DESC
+        ''', (patient_id,))
+        
+        if not sessions:
+            return 0
+        
+        # Check if there's a session today or yesterday
+        from datetime import datetime, timedelta
+        today = datetime.now().date()
+        
+        # Convert to list of dates
+        session_dates = [datetime.strptime(s['session_date'], '%Y-%m-%d').date() for s in sessions]
+        
+        # If no session today or yesterday, streak is broken
+        if session_dates[0] < today - timedelta(days=1):
+            return 0
+        
+        # Count consecutive days
+        streak = 1
+        expected_date = session_dates[0] - timedelta(days=1)
+        
+        for session_date in session_dates[1:]:
+            if session_date == expected_date:
+                streak += 1
+                expected_date -= timedelta(days=1)
+            else:
+                break
+        
+        return streak
+        
+    except Exception as e:
+        print(f"Error calculating streak: {e}")
+        return 0
 
 
 @app.route("/api/live_feedback", methods=["POST"])
@@ -1221,6 +1447,7 @@ def ensure_tables_exist():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             patient_id INTEGER NOT NULL,
             workout_id INTEGER NOT NULL,
+            session_group_id TEXT,
             pain_before INTEGER DEFAULT 0,
             pain_after INTEGER DEFAULT 0,
             effort_level INTEGER DEFAULT 5,
@@ -1247,8 +1474,27 @@ def ensure_tables_exist():
             FOREIGN KEY (doctor_id) REFERENCES users(id),
             FOREIGN KEY (patient_id) REFERENCES users(id)
         );
+        
+        CREATE TABLE IF NOT EXISTS login_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            role TEXT NOT NULL,
+            login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
     ''')
     conn.commit()
+    
+    # --- Migrations for existing databases ---
+    # Add session_group_id column to sessions table if it doesn't exist
+    try:
+        cursor.execute("ALTER TABLE sessions ADD COLUMN session_group_id TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
     conn.close()
 
 

@@ -30,7 +30,7 @@
 
 <div class="dashboard-header">
     <h2>Welcome back, {{ user.name }}!</h2>
-    <span>{{ patient.condition }} - Week {{ patient.current_week }}</span>
+    <span>{{ patient.condition }} - Week {{ patient.current_week }} | {{ total_sessions }} sessions completed</span>
 </div>
 
 <!-- Stats Row -->
@@ -120,12 +120,12 @@
             <div style="padding: 10px; border-bottom: 1px solid #eee;">
                 <div style="display: flex; justify-content: space-between;">
                     <strong>{{ sess.exercise_name }}</strong>
-                    <span style="color: #666; font-size: 0.85rem;">{{ sess.completed_at }}</span>
+                    <span style="color: #666; font-size: 0.85rem;">{{ sess.formatted_date }}</span>
                 </div>
                 <div style="font-size: 0.9rem; color: #666; margin-top: 5px;">
-                    Quality: {{ sess.quality_score }}/100 | 
+                    Quality: {{ sess.quality_score|round|int }}/100 | 
                     Pain: {{ sess.pain_after }}/10 |
-                    Sets: {{ sess.sets_completed }}
+                    Sets: {{ sess.sets_completed }} ({{ sess.reps_completed }} reps)
                 </div>
             </div>
             {% endfor %}

@@ -140,6 +140,23 @@
         width: 100%;
         height: 100%;
     }
+    
+    @keyframes pulse {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+        50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+    }
+    
+    .exercise-step {
+        transition: background 0.3s, color 0.3s;
+    }
+    
+    #nextExerciseBtn {
+        font-size: 1rem;
+        font-weight: bold;
+        padding: 12px;
+        margin-top: 8px;
+    }
 </style>
 
 <div class="session-layout">
@@ -200,10 +217,40 @@
         <!-- Exercise Info -->
         <div class="card" style="padding: 15px;">
             <h4>Current Exercise</h4>
-            <p style="color: #666; margin-top: 5px;" id="exerciseName">Knee Extension</p>
+            {% if workouts %}
+            <div id="exerciseProgress" style="margin-top: 8px; font-size: 0.85rem; color: #666;">
+                Exercise <span id="exerciseIndex">1</span> of {{ workouts|length }}
+            </div>
+            <div id="exerciseNameDisplay" style="font-size: 1.1rem; font-weight: bold; margin-top: 6px; color: #333;">
+                {{ workouts[0].exercise_name }}
+            </div>
+            <!-- Hidden select to keep workout IDs available to JS -->
+            <select id="workoutSelect" style="display: none;">
+                {% for w in workouts %}
+                <option value="{{ w.id }}" data-name="{{ w.exercise_name }}" data-sets="{{ w.sets }}" data-reps="{{ w.reps }}">
+                    {{ w.exercise_name }}
+                </option>
+                {% endfor %}
+            </select>
+            <!-- Exercise step indicators -->
+            <div id="exerciseSteps" style="display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;">
+                {% for w in workouts %}
+                <span class="exercise-step {% if loop.first %}active{% endif %}" id="step-{{ loop.index0 }}"
+                      style="padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;
+                             {% if loop.first %}background: #007bff; color: white;{% else %}background: #e9ecef; color: #666;{% endif %}">
+                    {{ loop.index }}. {{ w.exercise_name }}
+                </span>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p style="color: #c00; margin-top: 5px;">⚠️ No exercises assigned yet. Ask your clinician to create a plan.</p>
+            {% endif %}
             <p style="font-size: 0.85rem; margin-top: 10px;" id="exerciseTarget">
-                Target: 3 sets × 10 reps<br>
-                ROM Target: 90° flexion
+                {% if workouts %}
+                Target: {{ workouts[0].sets }} sets × {{ workouts[0].reps }} reps
+                {% else %}
+                No target set
+                {% endif %}
             </p>
         </div>
         
@@ -213,10 +260,12 @@
             <button class="btn btn-danger" style="flex: 1;" onclick="stopSession()">⏹️ Stop Session</button>
         </div>
         
-        <!-- Next Step -->
-        <a href="{{ url_for('pain_checkin') }}" class="btn btn-success" style="text-align: center;">
-            Complete Set → Check-in
-        </a>
+        {% if workouts and workouts|length > 1 %}
+        <!-- Next Exercise Button -->
+        <button id="nextExerciseBtn" class="btn btn-success" style="text-align: center; width: 100%;" onclick="nextExercise()">
+            Next Exercise ➡️
+        </button>
+        {% endif %}
     </div>
 </div>
 
@@ -228,8 +277,137 @@
     let audioEnabled = false;
     let currentRep = 0;
     let currentSet = 1;
-    let targetReps = 10;
-    let targetSets = 3;
+    let targetReps = {{ workouts[0].reps if workouts else 10 }};
+    let targetSets = {{ workouts[0].sets if workouts else 3 }};
+    let sessionStartTime = null;
+    let allScores = [];  // Track all quality scores during session
+    
+    // Unique session group ID — groups all exercises done in one sitting
+    const sessionGroupId = 'SG-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+    
+    // Helper: calculate total reps completed across all finished sets + current partial set
+    function getTotalRepsCompleted() {
+        // If exercise finished (currentRep == targetReps && currentSet == targetSets), all reps done
+        if (currentRep >= targetReps && currentSet >= targetSets) {
+            return targetSets * targetReps;
+        }
+        // Otherwise: completed sets * reps + partial reps in current set
+        return ((currentSet - 1) * targetReps) + currentRep;
+    }
+    
+    // Get workout ID from the exercise selector dropdown
+    function getWorkoutId() {
+        const sel = document.getElementById('workoutSelect');
+        return sel ? parseInt(sel.value) : null;
+    }
+    
+    // Update display when user picks a different exercise
+    function onWorkoutChange() {
+        const sel = document.getElementById('workoutSelect');
+        if (!sel) return;
+        const opt = sel.options[sel.selectedIndex];
+        const sets = opt.dataset.sets || 3;
+        const reps = opt.dataset.reps || 10;
+        targetSets = parseInt(sets);
+        targetReps = parseInt(reps);
+        currentRep = 0;
+        currentSet = 1;
+        allScores = [];
+        isAnalyzing = true;
+        updateRepCounter();
+        document.getElementById('exerciseTarget').textContent =
+            'Target: ' + sets + ' sets × ' + reps + ' reps';
+        
+        // Update exercise name display
+        const nameDisplay = document.getElementById('exerciseNameDisplay');
+        if (nameDisplay) nameDisplay.textContent = opt.dataset.name || opt.textContent.trim();
+        
+        // Update progress indicator
+        const indexDisplay = document.getElementById('exerciseIndex');
+        if (indexDisplay) indexDisplay.textContent = sel.selectedIndex + 1;
+        
+        // Update step indicators
+        document.querySelectorAll('.exercise-step').forEach((step, i) => {
+            if (i < sel.selectedIndex) {
+                step.style.background = '#28a745'; step.style.color = 'white'; // completed
+            } else if (i === sel.selectedIndex) {
+                step.style.background = '#007bff'; step.style.color = 'white'; // current
+            } else {
+                step.style.background = '#e9ecef'; step.style.color = '#666'; // upcoming
+            }
+        });
+        
+        // Update Next Exercise button label
+        updateNextExerciseBtn();
+    }
+    
+    // Update Next Exercise button text based on current position
+    function updateNextExerciseBtn() {
+        const btn = document.getElementById('nextExerciseBtn');
+        if (!btn) return;
+        const sel = document.getElementById('workoutSelect');
+        if (!sel) return;
+        if (sel.selectedIndex >= sel.options.length - 1) {
+            btn.textContent = '✅ Finish Session';
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-primary');
+        } else {
+            btn.textContent = 'Next Exercise ➡️';
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-success');
+        }
+    }
+    
+    // Advance to the next exercise (save current exercise data first)
+    async function nextExercise() {
+        const sel = document.getElementById('workoutSelect');
+        if (!sel) return;
+        
+        isAnalyzing = false;
+        
+        // Save current exercise session silently
+        const workoutId = getWorkoutId();
+        if (workoutId) {
+            const duration = Math.floor((Date.now() - (sessionStartTime || Date.now())) / 1000);
+            const avgScore = allScores.length > 0
+                ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length)
+                : 0;
+            
+            try {
+                await fetch('/api/session/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        workout_id: workoutId,
+                        session_group_id: sessionGroupId,
+                        duration_seconds: duration,
+                        reps_completed: getTotalRepsCompleted(),
+                        sets_completed: currentSet,
+                        quality_score: avgScore,
+                        pain_level_before: 0,
+                        pain_level_after: 0,
+                        perceived_effort: 5,
+                        notes: 'Auto-saved on exercise advance'
+                    })
+                });
+                addFeedback('success', '💾 Exercise progress saved!');
+            } catch (err) {
+                console.error('Error saving exercise:', err);
+            }
+        }
+        
+        // If this was the last exercise, show the completion modal
+        if (sel.selectedIndex >= sel.options.length - 1) {
+            stopSession();
+            return;
+        }
+        
+        // Move to next exercise
+        sel.selectedIndex += 1;
+        sessionStartTime = Date.now();
+        onWorkoutChange();
+        addFeedback('info', '➡️ Moving to next exercise: ' + sel.options[sel.selectedIndex].dataset.name);
+    }
     
     // Start webcam
     async function startWebcam() {
@@ -245,6 +423,17 @@
                 
                 document.getElementById('videoPlaceholder').style.display = 'none';
                 document.getElementById('videoContainer').style.display = 'block';
+                
+                // Initialize session on backend
+                sessionStartTime = Date.now();
+                await fetch('/api/session/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        threshold: 30.0,
+                        workout_id: getWorkoutId()
+                    })
+                });
                 
                 // Start pose analysis loop
                 isAnalyzing = true;
@@ -288,6 +477,7 @@
         const scoreText = document.getElementById('frameScoreText');
         
         scoreText.textContent = score;
+        allScores.push(score);  // Track score for averaging
         
         if (score >= 40) {
             badge.className = 'badge correct';
@@ -340,13 +530,27 @@
     function incrementRep() {
         currentRep++;
         if (currentRep >= targetReps) {
-            currentRep = 0;
-            currentSet++;
-            if (currentSet > targetSets) {
-                addFeedback('success', '🎉 Exercise complete! Great job!');
+            if (currentSet >= targetSets) {
+                // All sets complete — don't increment currentSet past targetSets
+                currentRep = targetReps; // keep display at full reps for last set
                 isAnalyzing = false;
+                const sel = document.getElementById('workoutSelect');
+                const hasMore = sel && sel.selectedIndex < sel.options.length - 1;
+                if (hasMore) {
+                    addFeedback('success', '🎉 Exercise complete! Click "Next Exercise ➡️" to continue.');
+                    // Pulse the Next Exercise button to draw attention
+                    const btn = document.getElementById('nextExerciseBtn');
+                    if (btn) {
+                        btn.style.animation = 'pulse 1s infinite';
+                        setTimeout(() => { btn.style.animation = ''; }, 5000);
+                    }
+                } else {
+                    addFeedback('success', '🎉 All exercises complete! Great job!');
+                }
             } else {
-                addFeedback('success', `✓ Set ${currentSet - 1} complete! Starting set ${currentSet}`);
+                addFeedback('success', `✓ Set ${currentSet} complete! Starting set ${currentSet + 1}`);
+                currentRep = 0;
+                currentSet++;
             }
         }
         updateRepCounter();
@@ -384,13 +588,126 @@
     }
     
     // Stop session
-    function stopSession() {
-        if (confirm('End this session?')) {
-            isAnalyzing = false;
-            if (webcamStream) {
-                webcamStream.getTracks().forEach(track => track.stop());
+    async function stopSession() {
+        if (!confirm('End this session and save your progress?')) {
+            return;
+        }
+        
+        if (!getWorkoutId()) {
+            alert('No exercise assigned. Please ask your clinician to create a plan first.');
+            window.location.href = "{{ url_for('patient_dashboard') }}";
+            return;
+        }
+        
+        isAnalyzing = false;
+        if (webcamStream) {
+            webcamStream.getTracks().forEach(track => track.stop());
+        }
+        
+        // Show completion modal with pain/effort check-in
+        showCompletionModal();
+    }
+    
+    // Show completion modal for pain and effort check-in
+    function showCompletionModal() {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: flex; align-items: center;
+            justify-content: center; z-index: 1000;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%;">
+                <h2 style="margin-top: 0;">Session Complete! 🎉</h2>
+                <p style="color: #666;">You completed ${getTotalRepsCompleted()} total reps across ${currentSet} sets.</p>
+                
+                <form id="completionForm" style="margin-top: 20px;">
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Pain Before (0-10):</label>
+                        <input type="range" id="painBefore" name="pain_before" min="0" max="10" value="0" 
+                               style="width: 100%;" oninput="document.getElementById('painBeforeVal').textContent = this.value">
+                        <span id="painBeforeVal">0</span>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Pain After (0-10):</label>
+                        <input type="range" id="painAfter" name="pain_after" min="0" max="10" value="0" 
+                               style="width: 100%;" oninput="document.getElementById('painAfterVal').textContent = this.value">
+                        <span id="painAfterVal">0</span>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Effort Level (1-10):</label>
+                        <input type="range" id="effortLevel" name="effort_level" min="1" max="10" value="5" 
+                               style="width: 100%;" oninput="document.getElementById('effortVal').textContent = this.value">
+                        <span id="effortVal">5</span>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Notes (optional):</label>
+                        <textarea id="notes" name="notes" rows="3" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd;"></textarea>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="button" onclick="saveSessionData()" class="btn btn-primary" style="flex: 1;">
+                            Save & Continue
+                        </button>
+                        <button type="button" onclick="location.href='{{ url_for('patient_dashboard') }}'" class="btn" style="flex: 1;">
+                            Skip
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        window.completionModal = modal;
+    }
+    
+    // Save session data to database
+    async function saveSessionData() {
+        const painBefore = parseInt(document.getElementById('painBefore').value);
+        const painAfter = parseInt(document.getElementById('painAfter').value);
+        const effortLevel = parseInt(document.getElementById('effortLevel').value);
+        const notes = document.getElementById('notes').value;
+        
+        // Calculate average quality score
+        const avgQuality = allScores.length > 0 
+            ? allScores.reduce((a, b) => a + b, 0) / allScores.length 
+            : 0;
+        
+        // Prepare session data
+        const sessionData = {
+            workout_id: getWorkoutId(),
+            session_group_id: sessionGroupId,
+            pain_before: painBefore,
+            pain_after: painAfter,
+            effort_level: effortLevel,
+            quality_score: avgQuality,
+            sets_completed: currentSet,
+            reps_completed: getTotalRepsCompleted(),
+            notes: notes
+        };
+        
+        try {
+            const response = await fetch('/api/session/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(sessionData)
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                alert('Session saved successfully! 🎉');
+                window.location.href = "{{ url_for('patient_dashboard') }}";
+            } else {
+                alert('Error saving session: ' + (result.error || 'Unknown error'));
             }
-            window.location.href = "{{ url_for('pain_checkin') }}";
+        } catch (error) {
+            console.error('Error saving session:', error);
+            alert('Error saving session. Please try again.');
         }
     }
     

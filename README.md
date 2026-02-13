@@ -69,6 +69,35 @@ python main.py
 
 Than run it on localhost!
 
+---
+
+## ✅ NEW: Session Logging & Dynamic Dashboard (Feb 2026)
+
+### Features Implemented:
+- 📊 **Session Data Logging**: Exercise sessions automatically saved to database
+- 📈 **Dynamic Metrics**: Dashboard powered by real-time database calculations
+- 🎯 **Automatic Updates**: Adherence, quality scores, pain levels, and streaks auto-calculated
+- 💾 **Complete History**: All session data stored with timestamps for analysis
+
+### Quick Test:
+```bash
+# 1. Run the test suite
+python3 test_session_logging.py
+
+# 2. Start app (already running)
+python3 main.py
+
+# 3. Login as patient → Start session → Complete → See metrics update!
+```
+
+### Documentation:
+- **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** - Complete overview
+- **[Quick Start Guide](QUICK_START_GUIDE.md)** - How to use the features
+- **[Visual Flow Diagram](VISUAL_FLOW_DIAGRAM.md)** - Step-by-step visual guide
+- **[Technical Details](SESSION_LOGGING_IMPLEMENTATION.md)** - Full technical documentation
+
+---
+
 DB design:
 
 <img width="1536" height="1024" alt="ChatGPT Image Feb 9, 2026, 12_39_58 PM" src="https://github.com/user-attachments/assets/73b76900-89af-4d27-b2ad-d920980889d3" />
