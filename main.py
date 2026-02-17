@@ -679,6 +679,56 @@ def patient_book_appointment():
 
 # ==================== CLINICIAN ROUTES ====================
 
+@app.route('/clinician/profile')
+@login_required
+@role_required('doctor')
+def clinician_profile():
+    """Clinician Profile - personal details + all patients with their caregivers"""
+    doctor_id = session['user_id']
+
+    # Doctor's own info
+    user_info = query_db(
+        'SELECT id, name, email, role, phone, created_at FROM users WHERE id = ?',
+        (doctor_id,), one=True
+    )
+
+    # All patients assigned to this doctor, with their caregiver info
+    patients_with_caregivers = query_db('''
+        SELECT 
+            u.id, u.name, u.email, u.phone,
+            p.condition, p.surgery_date, p.current_week,
+            p.adherence_rate, p.avg_pain_level, p.completed_sessions,
+            dp.assigned_date,
+            cg_u.name  AS caregiver_name,
+            cg_u.email AS caregiver_email,
+            cg_u.phone AS caregiver_phone,
+            cp.relationship AS caregiver_relationship
+        FROM users u
+        JOIN patients p ON u.id = p.user_id
+        JOIN doctor_patient dp ON p.user_id = dp.patient_id
+        LEFT JOIN caregiver_patient cp ON u.id = cp.patient_id
+        LEFT JOIN users cg_u ON cp.caregiver_id = cg_u.id
+        WHERE dp.doctor_id = ?
+        ORDER BY u.name
+    ''', (doctor_id,))
+
+    patients_with_caregivers = patients_with_caregivers if patients_with_caregivers else []
+
+    # Summary stats
+    total_patients = len(patients_with_caregivers)
+    patients_with_cg = sum(1 for p in patients_with_caregivers if p['caregiver_name'])
+    avg_adherence = round(
+        sum(p['adherence_rate'] for p in patients_with_caregivers) / total_patients, 1
+    ) if total_patients > 0 else 0
+
+    return render_template('clinician/profile.html',
+                         user_info=user_info,
+                         patients=patients_with_caregivers,
+                         total_patients=total_patients,
+                         patients_with_cg=patients_with_cg,
+                         avg_adherence=avg_adherence)
+
+
 @app.route('/clinician/dashboard')
 @login_required
 @role_required('doctor')
@@ -824,27 +874,11 @@ def add_clinician_note(patient_id):
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
 
-@app.route('/clinician/plan-editor', methods=['GET', 'POST'])
+@app.route('/clinician/plan-editor', methods=['GET'])
 @login_required
 @role_required('doctor')
 def plan_editor():
-    """Rehab Plan Editor"""
-    if request.method == 'POST':
-        patient_id = request.form['patient_id']
-        exercise_id = request.form['exercise_id']
-        sets = request.form.get('sets', 3)
-        reps = request.form.get('reps', 10)
-        frequency = request.form.get('frequency', 'Daily')
-        instructions = request.form.get('instructions', '')
-        
-        execute_db('''
-            INSERT INTO workouts 
-            (patient_id, exercise_id, sets, reps, frequency, instructions)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (patient_id, exercise_id, sets, reps, frequency, instructions))
-        
-        flash('Exercise added to patient\'s plan!', 'success')
-    
+    """Rehab Plan Editor — all patients' plans in one view"""
     # Get patients assigned to this doctor
     patients = query_db('''
         SELECT u.id, u.name, p.condition
@@ -853,7 +887,7 @@ def plan_editor():
         JOIN doctor_patient dp ON p.user_id = dp.patient_id
         WHERE dp.doctor_id = ?
     ''', (session['user_id'],))
-    
+
     # If no assigned patients, show ALL patients
     if not patients:
         patients = query_db('''
@@ -861,24 +895,97 @@ def plan_editor():
             FROM users u
             JOIN patients p ON u.id = p.user_id
         ''')
-    
-    exercises = query_db('SELECT * FROM exercises ORDER BY category, name')
-    
-    selected_patient_id = request.args.get('patient_id')
-    current_workouts = []
-    if selected_patient_id:
-        current_workouts = query_db('''
-            SELECT w.*, e.name as exercise_name, e.category
+
+    patients = [dict(p) for p in patients] if patients else []
+
+    # For every patient, fetch their active workouts
+    for pat in patients:
+        workouts = query_db('''
+            SELECT w.id, w.exercise_id, w.sets, w.reps, w.frequency,
+                   w.instructions, e.name AS exercise_name, e.category,
+                   e.description AS exercise_desc
             FROM workouts w
             JOIN exercises e ON w.exercise_id = e.id
             WHERE w.patient_id = ? AND w.is_active = 1
-        ''', (selected_patient_id,))
-    
+            ORDER BY w.id
+        ''', (pat['id'],))
+        pat['workouts'] = [dict(w) for w in workouts] if workouts else []
+
+    exercises = query_db('SELECT * FROM exercises ORDER BY category, name')
+    exercises = [dict(e) for e in exercises] if exercises else []
+
     return render_template('clinician/plan_editor.html',
-                         patients=patients if patients else [],
-                         exercises=exercises if exercises else [],
-                         current_workouts=current_workouts if current_workouts else [],
-                         selected_patient_id=selected_patient_id)
+                           patients=patients,
+                           exercises=exercises)
+
+
+# ---------- Plan-Editor API endpoints (JSON) ----------
+
+@app.route('/api/plan/add-exercise', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_plan_add_exercise():
+    """Add an exercise to a patient's plan (AJAX)"""
+    data = request.get_json()
+    patient_id = data.get('patient_id')
+    exercise_id = data.get('exercise_id')
+    sets = data.get('sets', 3)
+    reps = data.get('reps', 10)
+    frequency = data.get('frequency', 'Daily')
+    instructions = data.get('instructions', '')
+
+    if not patient_id or not exercise_id:
+        return jsonify({'error': 'Missing patient_id or exercise_id'}), 400
+
+    execute_db('''
+        INSERT INTO workouts
+        (patient_id, exercise_id, sets, reps, frequency, instructions)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (patient_id, exercise_id, sets, reps, frequency, instructions))
+
+    # Return the newly-created workout
+    new_w = query_db('''
+        SELECT w.id, w.exercise_id, w.sets, w.reps, w.frequency,
+               w.instructions, e.name AS exercise_name, e.category
+        FROM workouts w
+        JOIN exercises e ON w.exercise_id = e.id
+        WHERE w.patient_id = ? AND w.is_active = 1
+        ORDER BY w.id DESC LIMIT 1
+    ''', (patient_id,), one=True)
+
+    return jsonify({'ok': True, 'workout': dict(new_w) if new_w else {}})
+
+
+@app.route('/api/plan/update-workout/<int:workout_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_plan_update_workout(workout_id):
+    """Update sets/reps/frequency/instructions for a workout"""
+    data = request.get_json()
+    sets = data.get('sets')
+    reps = data.get('reps')
+    frequency = data.get('frequency')
+    instructions = data.get('instructions')
+
+    execute_db('''
+        UPDATE workouts
+        SET sets = COALESCE(?, sets),
+            reps = COALESCE(?, reps),
+            frequency = COALESCE(?, frequency),
+            instructions = COALESCE(?, instructions)
+        WHERE id = ?
+    ''', (sets, reps, frequency, instructions, workout_id))
+
+    return jsonify({'ok': True})
+
+
+@app.route('/api/plan/remove-workout/<int:workout_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_plan_remove_workout(workout_id):
+    """Soft-delete a workout from a patient's plan"""
+    execute_db('UPDATE workouts SET is_active = 0 WHERE id = ?', (workout_id,))
+    return jsonify({'ok': True})
 
 
 @app.route('/clinician/consultation', methods=['GET', 'POST'])

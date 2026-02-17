@@ -1,0 +1,435 @@
+{% extends 'base.html' %}
+
+{% block title %}My Profile - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1><a href="{{ url_for('clinician_dashboard') }}">👨‍⚕️ RehabCoach</a></h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('clinician_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('plan_editor') }}">Plan Editor</a>
+        <a href="{{ url_for('consultation') }}">Consultations</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account">👤</button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>Dr. {{ session.get('user_name', 'Doctor') }}</strong></div>
+                    <a href="{{ url_for('clinician_profile') }}" class="active"><span class="dropdown-icon">👤</span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<style>
+    /* ── Layout ── */
+    .profile-layout {
+        display: flex;
+        gap: 28px;
+        margin-top: 10px;
+        min-height: 70vh;
+    }
+
+    .profile-sidebar {
+        width: 220px;
+        flex-shrink: 0;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.07);
+        padding: 20px 0;
+        align-self: flex-start;
+        position: sticky;
+        top: 90px;
+    }
+    .profile-sidebar h3 {
+        font-size: .85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #999;
+        padding: 0 20px;
+        margin: 0 0 12px;
+    }
+    .profile-sidebar a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 24px;
+        color: #333;
+        text-decoration: none;
+        font-weight: 500;
+        font-size: .95rem;
+        transition: background .15s, color .15s;
+        border-left: 3px solid transparent;
+    }
+    .profile-sidebar a:hover {
+        background: #f4f6fa;
+        color: #1a73e8;
+    }
+    .profile-sidebar a.active {
+        background: #eef3ff;
+        color: #1a73e8;
+        border-left-color: #1a73e8;
+        font-weight: 600;
+    }
+    .profile-sidebar .sidebar-icon { font-size: 1.15rem; }
+
+    .profile-content {
+        flex: 1;
+        min-width: 0;
+    }
+    .profile-page-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1a1a2e;
+        margin: 0 0 24px;
+    }
+
+    /* ── Info cards ── */
+    .info-card {
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.07);
+        padding: 28px 32px;
+        margin-bottom: 24px;
+    }
+    .info-card-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1a1a2e;
+        margin: 0 0 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .info-card-title .card-icon { font-size: 1.3rem; }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px 40px;
+    }
+    .info-item {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    .info-label {
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .8px;
+        color: #888;
+        font-weight: 600;
+    }
+    .info-value {
+        font-size: 1rem;
+        color: #1a1a2e;
+        font-weight: 500;
+    }
+    .info-value.role-badge {
+        display: inline-block;
+        background: #eef3ff;
+        color: #1a73e8;
+        padding: 2px 14px;
+        border-radius: 20px;
+        font-size: .85rem;
+        font-weight: 600;
+        width: fit-content;
+    }
+
+    /* ── Summary stat chips ── */
+    .stat-chips {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+    .stat-chip {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.06);
+        padding: 18px 24px;
+        flex: 1;
+        min-width: 150px;
+        text-align: center;
+    }
+    .stat-chip .chip-value {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #1a73e8;
+    }
+    .stat-chip .chip-label {
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .8px;
+        color: #888;
+        margin-top: 4px;
+        font-weight: 600;
+    }
+
+    /* ── Patient roster table ── */
+    .patient-roster {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .patient-roster thead th {
+        text-align: left;
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .8px;
+        color: #888;
+        font-weight: 700;
+        padding: 10px 14px;
+        border-bottom: 2px solid #e8ebf0;
+        position: sticky;
+        top: 0;
+        background: #fff;
+    }
+    .patient-roster tbody tr {
+        transition: background .15s;
+    }
+    .patient-roster tbody tr:hover {
+        background: #f6f8fc;
+    }
+    .patient-roster td {
+        padding: 14px;
+        font-size: .92rem;
+        color: #333;
+        border-bottom: 1px solid #f0f0f5;
+        vertical-align: top;
+    }
+    .patient-name-cell {
+        font-weight: 600;
+        color: #1a1a2e;
+    }
+    .patient-name-cell a {
+        color: #1a73e8;
+        text-decoration: none;
+    }
+    .patient-name-cell a:hover { text-decoration: underline; }
+    .patient-name-cell .patient-email {
+        font-weight: 400;
+        font-size: .82rem;
+        color: #888;
+        margin-top: 2px;
+    }
+
+    .condition-pill {
+        display: inline-block;
+        background: #eef3ff;
+        color: #1a73e8;
+        padding: 3px 12px;
+        border-radius: 20px;
+        font-size: .8rem;
+        font-weight: 600;
+    }
+
+    .adherence-bar {
+        width: 80px;
+        height: 7px;
+        background: #e8ebf0;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-top: 4px;
+    }
+    .adherence-bar-fill {
+        height: 100%;
+        border-radius: 10px;
+        transition: width .4s;
+    }
+
+    .caregiver-info {
+        font-size: .88rem;
+    }
+    .caregiver-info .cg-name {
+        font-weight: 600;
+        color: #28a745;
+    }
+    .caregiver-info .cg-detail {
+        color: #777;
+        font-size: .82rem;
+    }
+    .no-caregiver {
+        color: #bbb;
+        font-style: italic;
+        font-size: .85rem;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+        .profile-layout {
+            flex-direction: column;
+            gap: 16px;
+        }
+        .profile-sidebar {
+            width: 100%;
+            position: static;
+            display: flex;
+            flex-direction: row;
+            padding: 0;
+            border-radius: 12px;
+            overflow-x: auto;
+        }
+        .profile-sidebar h3 { display: none; }
+        .profile-sidebar a {
+            border-left: none;
+            border-bottom: 3px solid transparent;
+            padding: 14px 20px;
+            white-space: nowrap;
+            font-size: .9rem;
+        }
+        .profile-sidebar a.active {
+            border-bottom-color: #1a73e8;
+            border-left-color: transparent;
+        }
+        .info-grid { grid-template-columns: 1fr; }
+        .stat-chips { flex-direction: column; }
+        .patient-roster-wrap { overflow-x: auto; }
+    }
+</style>
+
+<div class="profile-layout">
+    <!-- Left Sidebar -->
+    <nav class="profile-sidebar">
+        <h3>Profile</h3>
+        <a href="{{ url_for('clinician_profile') }}" class="active">
+            <span class="sidebar-icon">👤</span> My Details
+        </a>
+        <a href="#patient-roster-section" onclick="document.getElementById('patient-roster-section').scrollIntoView({behavior:'smooth'});return false;">
+            <span class="sidebar-icon">🏥</span> My Patients
+        </a>
+    </nav>
+
+    <!-- Right Content -->
+    <div class="profile-content">
+        <h2 class="profile-page-title">My Profile</h2>
+
+        <!-- ── Account info card ── -->
+        <div class="info-card">
+            <div class="info-card-title">
+                <span class="card-icon">🪪</span> Account Information
+            </div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Full Name</span>
+                    <span class="info-value">Dr. {{ user_info.name }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Email Address</span>
+                    <span class="info-value">{{ user_info.email }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Role</span>
+                    <span class="info-value role-badge">Clinician</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Phone</span>
+                    <span class="info-value">{{ user_info.phone if user_info.phone else '— Not set' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Member Since</span>
+                    <span class="info-value">
+                        {% if user_info.created_at %}
+                            {{ user_info.created_at[:10] }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Summary stat chips ── -->
+        <div class="stat-chips">
+            <div class="stat-chip">
+                <div class="chip-value">{{ total_patients }}</div>
+                <div class="chip-label">Total Patients</div>
+            </div>
+            <div class="stat-chip">
+                <div class="chip-value">{{ patients_with_cg }}</div>
+                <div class="chip-label">With Caregiver</div>
+            </div>
+            <div class="stat-chip">
+                <div class="chip-value">{{ avg_adherence }}%</div>
+                <div class="chip-label">Avg Adherence</div>
+            </div>
+        </div>
+
+        <!-- ── Patient roster with caregivers ── -->
+        <div class="info-card" id="patient-roster-section">
+            <div class="info-card-title">
+                <span class="card-icon">🏥</span> Patient & Caregiver Roster
+            </div>
+
+            {% if patients|length > 0 %}
+            <div class="patient-roster-wrap">
+                <table class="patient-roster">
+                    <thead>
+                        <tr>
+                            <th>Patient</th>
+                            <th>Condition</th>
+                            <th>Week</th>
+                            <th>Adherence</th>
+                            <th>Sessions</th>
+                            <th>Caregiver</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in patients %}
+                        <tr>
+                            <td class="patient-name-cell">
+                                <a href="{{ url_for('patient_detail', patient_id=p.id) }}">{{ p.name }}</a>
+                                <div class="patient-email">{{ p.email }}</div>
+                                {% if p.phone %}
+                                <div class="patient-email">📞 {{ p.phone }}</div>
+                                {% endif %}
+                            </td>
+                            <td><span class="condition-pill">{{ p.condition }}</span></td>
+                            <td style="text-align:center;font-weight:600;">{{ p.current_week }}</td>
+                            <td>
+                                <span style="font-weight:600;
+                                    {% if p.adherence_rate >= 70 %}color:#28a745
+                                    {% elif p.adherence_rate >= 40 %}color:#ffc107
+                                    {% else %}color:#dc3545{% endif %}">
+                                    {{ p.adherence_rate|round(0)|int }}%
+                                </span>
+                                <div class="adherence-bar">
+                                    <div class="adherence-bar-fill" style="width:{{ p.adherence_rate }}%;
+                                        background:{% if p.adherence_rate >= 70 %}#28a745
+                                        {% elif p.adherence_rate >= 40 %}#ffc107
+                                        {% else %}#dc3545{% endif %}"></div>
+                                </div>
+                            </td>
+                            <td style="text-align:center;">{{ p.completed_sessions }}</td>
+                            <td>
+                                {% if p.caregiver_name %}
+                                <div class="caregiver-info">
+                                    <div class="cg-name">{{ p.caregiver_name }}</div>
+                                    <div class="cg-detail">✉️ {{ p.caregiver_email }}</div>
+                                    {% if p.caregiver_phone %}
+                                    <div class="cg-detail">📞 {{ p.caregiver_phone }}</div>
+                                    {% endif %}
+                                    {% if p.caregiver_relationship %}
+                                    <div class="cg-detail">🤝 {{ p.caregiver_relationship }}</div>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span class="no-caregiver">None assigned</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:#999;font-style:italic;padding:20px 0;">No patients assigned yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

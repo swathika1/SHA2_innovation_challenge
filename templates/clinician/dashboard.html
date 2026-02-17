@@ -4,12 +4,22 @@
 
 {% block header %}
 <header class="header">
-    <h1>👨‍⚕️ Clinician Dashboard</h1>
+    <h1><a href="{{ url_for('clinician_dashboard') }}">👨‍⚕️ RehabCoach</a></h1>
     <nav class="nav-links">
-        <a href="{{ url_for('clinician_dashboard') }}">Patients</a>
+        <a href="{{ url_for('clinician_dashboard') }}" class="active">Dashboard</a>
         <a href="{{ url_for('plan_editor') }}">Plan Editor</a>
         <a href="{{ url_for('consultation') }}">Consultations</a>
-        <a href="{{ url_for('logout') }}">Logout</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account">👤</button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>Dr. {{ session.get('user_name', 'Doctor') }}</strong></div>
+                    <a href="{{ url_for('clinician_profile') }}"><span class="dropdown-icon">👤</span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                </div>
+            </div>
+        </div>
     </nav>
 </header>
 {% endblock %}

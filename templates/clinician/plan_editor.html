@@ -4,50 +4,44 @@
 
 {% block header %}
 <header class="header">
-    <h1>📝 Rehab Plan Editor</h1>
+    <h1><a href="{{ url_for('clinician_dashboard') }}">👨‍⚕️ RehabCoach</a></h1>
     <nav class="nav-links">
-        <a href="{{ url_for('clinician_dashboard') }}">← Back to Dashboard</a>
+        <a href="{{ url_for('clinician_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('plan_editor') }}" class="active">Plan Editor</a>
         <a href="{{ url_for('consultation') }}">Consultations</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account">👤</button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>Dr. {{ session.get('user_name', 'Doctor') }}</strong></div>
+                    <a href="{{ url_for('clinician_profile') }}"><span class="dropdown-icon">👤</span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                </div>
+            </div>
+        </div>
     </nav>
 </header>
 {% endblock %}
 
 {% block content %}
-<!-- Flash Messages -->
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        {% for category, message in messages %}
-            <div class="alert alert-{{ category }}" style="padding: 10px; margin-bottom: 20px; border-radius: 4px; 
-                {% if category == 'error' %}background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
-                {% else %}background: #d4edda; color: #155724; border: 1px solid #c3e6cb;{% endif %}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-{% endwith %}
 
-<!-- Patient Selection -->
-<div class="card">
-    <div class="card-header">Select Patient</div>
-    <div class="form-group" style="margin-bottom: 0;">
-        <select id="patientSelect" class="form-control" onchange="loadPatientPlan()">
-            <option value="">-- Select a Patient --</option>
-            {% for patient in patients %}
-            <option value="{{ patient.id }}">{{ patient.name }} - {{ patient.condition or 'General Rehab' }}</option>
-            {% endfor %}
-        </select>
-    </div>
-</div>
+<!-- Toast notification -->
+<div id="toast" class="pe-toast"></div>
 
-<div class="plan-editor-layout" style="margin-top: 20px;">
-    <!-- Exercise Library -->
-    <div class="exercise-library">
-        <h3 style="margin-bottom: 15px;">Exercise Library</h3>
-        <input type="text" id="exerciseSearch" class="form-control" placeholder="Search exercises..." style="margin-bottom: 15px;" onkeyup="filterExercises()">
-        
-        <div style="margin-bottom: 15px;">
-            <strong>Category:</strong>
-            <select id="categoryFilter" class="form-control" style="margin-top: 5px;" onchange="filterExercises()">
+<!-- Two-column layout: Library (left) | Patient Plans (right) -->
+<div class="pe-layout">
+
+    <!-- LEFT: Exercise Library (always visible) -->
+    <aside class="pe-library">
+        <div class="pe-library-header">
+            <h3>📚 Exercise Library</h3>
+        </div>
+
+        <input type="text" id="libSearch" class="pe-lib-search" placeholder="Search exercises…" oninput="filterLibrary()">
+
+        <div class="pe-lib-filters">
+            <select id="libCategory" onchange="filterLibrary()">
                 <option value="">All Categories</option>
                 <option value="Knee">Knee</option>
                 <option value="Hip">Hip</option>
@@ -57,222 +51,553 @@
                 <option value="General">General</option>
             </select>
         </div>
-        
-        <div id="exerciseList">
+
+        <p class="pe-lib-hint">Drag an exercise and drop it onto a patient's plan</p>
+
+        <div class="pe-lib-list" id="libList">
             {% for exercise in exercises %}
-            <div class="exercise-item" data-id="{{ exercise.id }}" data-category="{{ exercise.category }}" onclick="selectExercise(this, {{ exercise.id }}, '{{ exercise.name }}')">
+            <div class="pe-lib-item"
+                 draggable="true"
+                 data-exercise-id="{{ exercise.id }}"
+                 data-exercise-name="{{ exercise.name }}"
+                 data-exercise-category="{{ exercise.category }}"
+                 ondragstart="handleDragStart(event, {{ exercise.id }}, '{{ exercise.name }}', '{{ exercise.category }}')">
                 <strong>{{ exercise.name }}</strong>
-                <span style="font-size: 0.75rem; background: #e3f2fd; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">{{ exercise.category }}</span>
-                <p style="font-size: 0.85rem; color: #666; margin-top: 5px;">{{ exercise.description or 'Rehabilitation exercise' }}</p>
-            </div>
-            {% else %}
-            <div style="text-align: center; color: #666; padding: 20px;">
-                <p>No exercises found in the library.</p>
-                <p style="font-size: 0.85rem;">Contact admin to add exercises.</p>
+                <span class="pe-cat-pill small">{{ exercise.category }}</span>
+                <p class="pe-lib-desc">{{ exercise.description or 'Rehabilitation exercise' }}</p>
             </div>
             {% endfor %}
         </div>
-    </div>
-    
-    <!-- Plan Configuration -->
-    <div class="plan-config">
-        <h3 style="margin-bottom: 20px;">Add Exercise to Plan</h3>
-        
-        <form method="POST" action="{{ url_for('plan_editor') }}" id="addExerciseForm">
-            <input type="hidden" name="patient_id" id="selectedPatientId">
-            <input type="hidden" name="exercise_id" id="selectedExerciseId">
-            
-            <div class="card">
-                <div style="margin-bottom: 15px;">
-                    <strong id="selectedExerciseName">Select an exercise from the library</strong>
+    </aside>
+
+    <!-- RIGHT: All Patient Plans -->
+    <div class="pe-plans">
+        <div class="pe-page-header">
+            <h2>All Patient Plans</h2>
+            <p>View and manage rehab plans for every patient under your care.</p>
+        </div>
+
+        {% if patients %}
+        {% for patient in patients %}
+        <div class="pe-patient-card" id="patient-{{ patient.id }}">
+            <!-- Patient header -->
+            <div class="pe-patient-header">
+                <div class="pe-patient-info">
+                    <h3>{{ patient.name }}</h3>
+                    <span class="pe-condition">{{ patient.condition or 'General Rehab' }}</span>
+                    <span class="pe-badge">{{ patient.workouts | length }} exercise{{ 's' if patient.workouts | length != 1 }}</span>
                 </div>
-                
-                <div class="config-row" style="margin-top: 15px;">
-                    <div class="form-group">
-                        <label>Sets</label>
-                        <input type="number" name="sets" class="form-control" value="3" min="1" max="10">
-                    </div>
-                    <div class="form-group">
-                        <label>Reps per Set</label>
-                        <input type="number" name="reps" class="form-control" value="10" min="1" max="50">
-                    </div>
-                    <div class="form-group">
-                        <label>Frequency</label>
-                        <select name="frequency" class="form-control">
-                            <option value="Daily">Daily</option>
-                            <option value="3x per week" selected>3x per week</option>
-                            <option value="2x per week">2x per week</option>
-                            <option value="Weekly">Weekly</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Special Instructions</label>
-                    <textarea name="instructions" class="form-control" rows="2" placeholder="Add any specific instructions for this exercise..."></textarea>
-                </div>
-                
-                <button type="submit" class="btn btn-primary" style="width: 100%;">+ Add Exercise to Plan</button>
+                <button class="btn pe-btn-edit" onclick="toggleEdit({{ patient.id }})" id="editBtn-{{ patient.id }}">
+                    ✏️ Edit Plan
+                </button>
             </div>
-        </form>
-        
-        <!-- Current Plan -->
-        <div class="card" style="margin-top: 20px;">
-            <div class="card-header">Current Assigned Workouts</div>
-            <div id="currentWorkouts">
-                {% if workouts %}
-                    {% for workout in workouts %}
-                    <div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <strong>{{ workout.exercise_name }}</strong>
-                            <p style="font-size: 0.85rem; color: #666; margin: 0;">
-                                {{ workout.sets }} sets × {{ workout.reps }} reps | {{ workout.frequency }}
-                            </p>
-                        </div>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                <div style="text-align: center; color: #666; padding: 20px;">
-                    <p>Select a patient to view their workout plan.</p>
-                </div>
-                {% endif %}
+
+            <!-- Workouts table -->
+            <div class="pe-workouts-table-wrap">
+                <table class="pe-workouts-table" id="workoutsTable-{{ patient.id }}">
+                    <thead>
+                        <tr>
+                            <th>Exercise</th>
+                            <th>Category</th>
+                            <th>Sets</th>
+                            <th>Reps</th>
+                            <th>Frequency</th>
+                            <th>Instructions</th>
+                            <th class="pe-col-actions" style="display:none;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="workoutsBody-{{ patient.id }}"
+                           data-patient-id="{{ patient.id }}">
+                        {% if patient.workouts %}
+                        {% for w in patient.workouts %}
+                        <tr data-workout-id="{{ w.id }}" class="pe-workout-row">
+                            <td class="pe-cell-name">{{ w.exercise_name }}</td>
+                            <td><span class="pe-cat-pill">{{ w.category }}</span></td>
+                            <td class="pe-cell-sets">
+                                <span class="pe-val">{{ w.sets }}</span>
+                                <input type="number" class="pe-inline-input" value="{{ w.sets }}" min="1" max="10" style="display:none;" data-field="sets">
+                            </td>
+                            <td class="pe-cell-reps">
+                                <span class="pe-val">{{ w.reps }}</span>
+                                <input type="number" class="pe-inline-input" value="{{ w.reps }}" min="1" max="50" style="display:none;" data-field="reps">
+                            </td>
+                            <td class="pe-cell-freq">
+                                <span class="pe-val">{{ w.frequency }}</span>
+                                <select class="pe-inline-input" style="display:none;" data-field="frequency">
+                                    <option value="Daily" {{ 'selected' if w.frequency == 'Daily' }}>Daily</option>
+                                    <option value="3x per week" {{ 'selected' if w.frequency == '3x per week' }}>3x per week</option>
+                                    <option value="2x per week" {{ 'selected' if w.frequency == '2x per week' }}>2x per week</option>
+                                    <option value="Weekly" {{ 'selected' if w.frequency == 'Weekly' }}>Weekly</option>
+                                </select>
+                            </td>
+                            <td class="pe-cell-instr">
+                                <span class="pe-val">{{ w.instructions or '—' }}</span>
+                                <input type="text" class="pe-inline-input" value="{{ w.instructions or '' }}" placeholder="Instructions…" style="display:none;" data-field="instructions">
+                            </td>
+                            <td class="pe-col-actions" style="display:none;">
+                                <button class="pe-btn-remove" onclick="removeWorkout({{ w.id }}, this)" title="Remove">🗑️</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr class="pe-empty-row">
+                            <td colspan="7" style="text-align:center; color:#999; padding:24px;">
+                                No exercises assigned yet. Click <b>Edit Plan</b> then drag exercises here.
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Drop zone (visible in edit mode) -->
+            <div class="pe-drop-zone" id="dropZone-{{ patient.id }}" style="display:none;"
+                 ondragover="handleDragOver(event)" ondrop="handleDrop(event, {{ patient.id }})" ondragleave="handleDragLeave(event)">
+                <span>📥 Drop exercise here to add to plan</span>
+            </div>
+
+            <!-- Save / Cancel (visible in edit mode) -->
+            <div class="pe-save-row" id="saveRow-{{ patient.id }}" style="display:none;">
+                <button class="btn btn-success pe-btn-save" onclick="saveChanges({{ patient.id }})">
+                    💾 Save Changes
+                </button>
+                <button class="btn pe-btn-cancel" onclick="cancelEdit({{ patient.id }})">
+                    Cancel
+                </button>
             </div>
         </div>
+        {% endfor %}
+        {% else %}
+        <div class="pe-patient-card" style="text-align:center; padding:40px;">
+            <h3>No patients found</h3>
+            <p style="color:#666;">When patients register and are assigned to you, their plans will appear here.</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 
 <style>
-    .plan-editor-layout {
-        display: grid;
-        grid-template-columns: 1fr 2fr;
-        gap: 20px;
+/* ---------- Two-column master layout ---------- */
+.pe-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 24px;
+    align-items: start;
+}
+
+/* ---------- LEFT: Exercise Library (static, in-flow) ---------- */
+.pe-library {
+    position: sticky;
+    top: 80px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 100px);
+    overflow: hidden;
+}
+.pe-library-header {
+    padding: 16px 18px 0;
+}
+.pe-library-header h3 { margin: 0; font-size: 1.05rem; }
+
+.pe-lib-search {
+    margin: 12px 16px 6px;
+    padding: 9px 12px;
+    border: 1px solid #ddd; border-radius: 8px;
+    font-size: 0.92rem;
+    width: calc(100% - 32px);
+}
+.pe-lib-filters { padding: 0 16px 6px; }
+.pe-lib-filters select {
+    width: 100%; padding: 7px 10px;
+    border: 1px solid #ddd; border-radius: 8px; font-size: 0.88rem;
+}
+
+.pe-lib-hint {
+    font-size: 0.78rem; color: #999; text-align: center;
+    margin: 2px 16px 8px; padding: 0;
+}
+
+.pe-lib-list {
+    flex: 1; overflow-y: auto; padding: 0 16px 16px;
+}
+.pe-lib-item {
+    padding: 12px; border: 1px solid #e0e0e0;
+    border-radius: 10px; margin-bottom: 8px;
+    cursor: grab; transition: all .2s; user-select: none;
+}
+.pe-lib-item:hover { border-color: #007bff; background: #f5f9ff; }
+.pe-lib-item:active { cursor: grabbing; opacity: 0.7; }
+.pe-lib-item strong { font-size: 0.92rem; }
+.pe-lib-desc { font-size: 0.78rem; color: #777; margin: 4px 0 0; }
+
+/* ---------- RIGHT: Patient plans column ---------- */
+.pe-plans { min-width: 0; }
+.pe-page-header { margin-bottom: 20px; }
+.pe-page-header h2 { margin-bottom: 2px; }
+.pe-page-header p  { color: #666; font-size: 0.92rem; margin: 0; }
+
+/* ---------- Patient card ---------- */
+.pe-patient-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    margin-bottom: 22px;
+    overflow: hidden;
+}
+.pe-patient-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 22px;
+    background: linear-gradient(135deg, #f8f9fc, #eef1f7);
+    border-bottom: 1px solid #e9ecef;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.pe-patient-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pe-patient-info h3 { margin: 0; font-size: 1.1rem; }
+.pe-condition {
+    font-size: 0.8rem; color: #555; background: #e8e8e8;
+    padding: 2px 10px; border-radius: 12px;
+}
+.pe-badge {
+    font-size: 0.76rem; color: #fff; background: #007bff;
+    padding: 2px 10px; border-radius: 12px; font-weight: 600;
+}
+
+/* ---------- Edit / Save buttons ---------- */
+.pe-btn-edit {
+    background: #17a2b8 !important; color: #fff !important;
+    border: none; padding: 7px 16px; border-radius: 8px;
+    cursor: pointer; font-size: 0.88rem; transition: background .2s;
+}
+.pe-btn-edit:hover { background: #138496 !important; }
+.pe-btn-edit.active { background: #dc3545 !important; }
+.pe-btn-edit.active:hover { background: #c82333 !important; }
+
+.pe-save-row {
+    display: flex; gap: 10px; padding: 12px 22px;
+    background: #f0fdf4; border-top: 1px solid #c3e6cb;
+    justify-content: flex-end;
+}
+.pe-btn-save { font-size: 0.92rem; }
+.pe-btn-cancel {
+    background: #6c757d !important; color: #fff !important;
+    border: none; padding: 7px 16px; border-radius: 8px;
+    cursor: pointer; font-size: 0.88rem;
+}
+
+/* ---------- Workouts table ---------- */
+.pe-workouts-table-wrap { overflow-x: auto; }
+.pe-workouts-table { width: 100%; border-collapse: collapse; }
+.pe-workouts-table th {
+    text-align: left; padding: 9px 12px;
+    font-size: 0.78rem; text-transform: uppercase;
+    color: #666; background: #fafbfc; border-bottom: 2px solid #e9ecef;
+    white-space: nowrap;
+}
+.pe-workouts-table td {
+    padding: 10px 12px; border-bottom: 1px solid #f0f0f0;
+    vertical-align: middle; font-size: 0.92rem;
+}
+.pe-workouts-table tr:last-child td { border-bottom: none; }
+.pe-workout-row { transition: background .15s; }
+.pe-workout-row:hover { background: #f8f9fa; }
+
+.pe-cat-pill {
+    font-size: 0.72rem; background: #e3f2fd; color: #1565c0;
+    padding: 2px 8px; border-radius: 6px; white-space: nowrap;
+}
+.pe-cat-pill.small { font-size: 0.68rem; }
+
+.pe-inline-input {
+    width: 72px; padding: 5px 7px; border: 1px solid #ced4da;
+    border-radius: 5px; font-size: 0.88rem;
+}
+.pe-inline-input[type="text"],
+select.pe-inline-input { width: 120px; }
+
+.pe-btn-remove {
+    background: none; border: none; cursor: pointer;
+    font-size: 1.05rem; padding: 4px 8px; border-radius: 6px;
+    transition: background .15s;
+}
+.pe-btn-remove:hover { background: #f8d7da; }
+
+/* ---------- Drop zone ---------- */
+.pe-drop-zone {
+    margin: 0 22px 14px;
+    padding: 20px;
+    border: 2px dashed #adb5bd;
+    border-radius: 10px;
+    text-align: center;
+    color: #888; font-size: 0.9rem;
+    transition: all .2s;
+}
+.pe-drop-zone.drag-over {
+    border-color: #28a745;
+    background: #f0fdf4;
+    color: #155724;
+}
+
+/* ---------- Toast ---------- */
+.pe-toast {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 12px 28px;
+    border-radius: 10px; font-size: 0.95rem;
+    opacity: 0; transition: opacity .3s; pointer-events: none;
+    z-index: 300;
+}
+.pe-toast.show { opacity: 1; }
+.pe-toast.success { background: #28a745; }
+.pe-toast.error   { background: #dc3545; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 850px) {
+    .pe-layout {
+        grid-template-columns: 1fr;
     }
-    
-    @media (max-width: 900px) {
-        .plan-editor-layout {
-            grid-template-columns: 1fr;
-        }
+    .pe-library {
+        position: static;
+        max-height: 350px;
     }
-    
-    .exercise-library {
-        background: white;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        max-height: 600px;
-        overflow-y: auto;
-    }
-    
-    .exercise-item {
-        padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        margin-bottom: 10px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    
-    .exercise-item:hover {
-        border-color: #007bff;
-        background: #f8f9fa;
-    }
-    
-    .exercise-item.selected {
-        border-color: #007bff;
-        background: #e7f1ff;
-    }
-    
-    .config-row {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 15px;
-    }
-    
-    @media (max-width: 600px) {
-        .config-row {
-            grid-template-columns: 1fr;
-        }
-    }
-    
-    .form-group {
-        margin-bottom: 15px;
-    }
-    
-    .form-group label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: 500;
-        color: #333;
-    }
-    
-    .form-control {
-        width: 100%;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 1rem;
-    }
+    .pe-patient-header { flex-direction: column; align-items: flex-start; }
+    .pe-inline-input { width: 60px !important; }
+    select.pe-inline-input { width: 100px !important; }
+}
 </style>
 
 <script>
-    let selectedExerciseId = null;
-    
-    function selectExercise(element, exerciseId, exerciseName) {
-        // Remove selection from other items
-        document.querySelectorAll('.exercise-item').forEach(item => {
-            item.classList.remove('selected');
+/* State */
+const editingPatients = new Set();
+let dragData = null;
+
+/* Toast */
+function showToast(msg, type) {
+    type = type || 'success';
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'pe-toast show ' + type;
+    setTimeout(function(){ t.className = 'pe-toast'; }, 2500);
+}
+
+/* Toggle edit mode */
+function toggleEdit(patientId) {
+    if (editingPatients.has(patientId)) cancelEdit(patientId);
+    else enterEdit(patientId);
+}
+
+function enterEdit(patientId) {
+    editingPatients.add(patientId);
+    var card = document.getElementById('patient-' + patientId);
+    var btn  = document.getElementById('editBtn-' + patientId);
+
+    btn.textContent = '✕ Close Edit';
+    btn.classList.add('active');
+
+    card.querySelectorAll('.pe-val').forEach(function(el){ el.style.display = 'none'; });
+    card.querySelectorAll('.pe-inline-input').forEach(function(el){ el.style.display = ''; });
+    card.querySelectorAll('.pe-col-actions').forEach(function(el){ el.style.display = ''; });
+    document.getElementById('dropZone-' + patientId).style.display = '';
+    document.getElementById('saveRow-' + patientId).style.display  = '';
+}
+
+function cancelEdit(patientId) {
+    editingPatients.delete(patientId);
+    var card = document.getElementById('patient-' + patientId);
+    var btn  = document.getElementById('editBtn-' + patientId);
+
+    btn.textContent = '✏️ Edit Plan';
+    btn.classList.remove('active');
+
+    card.querySelectorAll('.pe-val').forEach(function(el){ el.style.display = ''; });
+    card.querySelectorAll('.pe-inline-input').forEach(function(el){ el.style.display = 'none'; });
+    card.querySelectorAll('.pe-col-actions').forEach(function(el){ el.style.display = 'none'; });
+    document.getElementById('dropZone-' + patientId).style.display = 'none';
+    document.getElementById('saveRow-' + patientId).style.display  = 'none';
+
+    card.querySelectorAll('.pe-workout-row').forEach(function(row) {
+        row.querySelectorAll('.pe-inline-input').forEach(function(inp) {
+            var span = inp.parentElement.querySelector('.pe-val');
+            if (span) {
+                if (inp.tagName === 'SELECT') inp.value = span.textContent.trim();
+                else inp.value = span.textContent.trim() === '—' ? '' : span.textContent.trim();
+            }
         });
-        
-        // Add selection to clicked item
-        element.classList.add('selected');
-        
-        // Update form
-        selectedExerciseId = exerciseId;
-        document.getElementById('selectedExerciseId').value = exerciseId;
-        document.getElementById('selectedExerciseName').textContent = exerciseName;
-    }
-    
-    function loadPatientPlan() {
-        const patientId = document.getElementById('patientSelect').value;
-        document.getElementById('selectedPatientId').value = patientId;
-        
-        if (patientId) {
-            // Could add AJAX to load patient's current workouts
-            console.log('Loading plan for patient:', patientId);
-        }
-    }
-    
-    function filterExercises() {
-        const search = document.getElementById('exerciseSearch').value.toLowerCase();
-        const category = document.getElementById('categoryFilter').value;
-        
-        document.querySelectorAll('.exercise-item').forEach(item => {
-            const name = item.querySelector('strong').textContent.toLowerCase();
-            const itemCategory = item.dataset.category;
-            
-            const matchesSearch = name.includes(search);
-            const matchesCategory = !category || itemCategory === category;
-            
-            item.style.display = (matchesSearch && matchesCategory) ? 'block' : 'none';
-        });
-    }
-    
-    // Form validation
-    document.getElementById('addExerciseForm').addEventListener('submit', function(e) {
-        const patientId = document.getElementById('selectedPatientId').value;
-        const exerciseId = document.getElementById('selectedExerciseId').value;
-        
-        if (!patientId) {
-            e.preventDefault();
-            alert('Please select a patient first.');
-            return;
-        }
-        
-        if (!exerciseId) {
-            e.preventDefault();
-            alert('Please select an exercise from the library.');
-            return;
-        }
     });
+}
+
+/* Library filter */
+function filterLibrary() {
+    var search = document.getElementById('libSearch').value.toLowerCase();
+    var cat    = document.getElementById('libCategory').value;
+    document.querySelectorAll('.pe-lib-item').forEach(function(item) {
+        var name    = item.querySelector('strong').textContent.toLowerCase();
+        var itemCat = item.dataset.exerciseCategory;
+        item.style.display = (name.indexOf(search) >= 0 && (!cat || itemCat === cat)) ? '' : 'none';
+    });
+}
+
+/* Drag and Drop */
+function handleDragStart(e, exerciseId, exerciseName, category) {
+    dragData = { exerciseId: exerciseId, exerciseName: exerciseName, category: category };
+    e.dataTransfer.setData('text/plain', String(exerciseId));
+    e.dataTransfer.effectAllowed = 'copy';
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    e.currentTarget.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+}
+
+function handleDrop(e, patientId) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    if (!dragData) return;
+    addExerciseToPatient(patientId, dragData.exerciseId, dragData.exerciseName, dragData.category);
+    dragData = null;
+}
+
+/* Add exercise via API */
+function addExerciseToPatient(patientId, exerciseId, exerciseName, category) {
+    fetch('/api/plan/add-exercise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            patient_id: patientId,
+            exercise_id: exerciseId,
+            sets: 3, reps: 10, frequency: 'Daily', instructions: ''
+        })
+    })
+    .then(function(res){ return res.json(); })
+    .then(function(data){
+        if (!data.ok) { showToast('Failed to add exercise', 'error'); return; }
+        appendWorkoutRow(patientId, data.workout);
+        updateBadge(patientId);
+        showToast(exerciseName + ' added!');
+    })
+    .catch(function(){ showToast('Network error', 'error'); });
+}
+
+/* Append workout row */
+function appendWorkoutRow(patientId, w) {
+    var tbody = document.getElementById('workoutsBody-' + patientId);
+    var emptyRow = tbody.querySelector('.pe-empty-row');
+    if (emptyRow) emptyRow.remove();
+
+    var tr = document.createElement('tr');
+    tr.className = 'pe-workout-row';
+    tr.dataset.workoutId = w.id;
+    tr.innerHTML =
+        '<td class="pe-cell-name">' + w.exercise_name + '</td>' +
+        '<td><span class="pe-cat-pill">' + w.category + '</span></td>' +
+        '<td class="pe-cell-sets">' +
+            '<span class="pe-val" style="display:none;">' + w.sets + '</span>' +
+            '<input type="number" class="pe-inline-input" value="' + w.sets + '" min="1" max="10" data-field="sets">' +
+        '</td>' +
+        '<td class="pe-cell-reps">' +
+            '<span class="pe-val" style="display:none;">' + w.reps + '</span>' +
+            '<input type="number" class="pe-inline-input" value="' + w.reps + '" min="1" max="50" data-field="reps">' +
+        '</td>' +
+        '<td class="pe-cell-freq">' +
+            '<span class="pe-val" style="display:none;">' + w.frequency + '</span>' +
+            '<select class="pe-inline-input" data-field="frequency">' +
+                '<option value="Daily"' + (w.frequency==='Daily'?' selected':'') + '>Daily</option>' +
+                '<option value="3x per week"' + (w.frequency==='3x per week'?' selected':'') + '>3x per week</option>' +
+                '<option value="2x per week"' + (w.frequency==='2x per week'?' selected':'') + '>2x per week</option>' +
+                '<option value="Weekly"' + (w.frequency==='Weekly'?' selected':'') + '>Weekly</option>' +
+            '</select>' +
+        '</td>' +
+        '<td class="pe-cell-instr">' +
+            '<span class="pe-val" style="display:none;">—</span>' +
+            '<input type="text" class="pe-inline-input" value="" placeholder="Instructions…" data-field="instructions">' +
+        '</td>' +
+        '<td class="pe-col-actions">' +
+            '<button class="pe-btn-remove" onclick="removeWorkout(' + w.id + ', this)" title="Remove">🗑️</button>' +
+        '</td>';
+    tbody.appendChild(tr);
+}
+
+/* Remove workout */
+function removeWorkout(workoutId, btn) {
+    if (!confirm('Remove this exercise from the plan?')) return;
+    fetch('/api/plan/remove-workout/' + workoutId, { method: 'DELETE' })
+    .then(function(res){ return res.json(); })
+    .then(function(data){
+        if (data.ok) {
+            var tr    = btn.closest('tr');
+            var tbody = tr.parentElement;
+            var pid   = tbody.dataset.patientId;
+            tr.remove();
+            updateBadge(pid);
+            showToast('Exercise removed');
+            if (!tbody.querySelectorAll('.pe-workout-row').length) {
+                var empty = document.createElement('tr');
+                empty.className = 'pe-empty-row';
+                empty.innerHTML = '<td colspan="7" style="text-align:center;color:#999;padding:24px;">No exercises assigned yet. Click <b>Edit Plan</b> then drag exercises here.</td>';
+                tbody.appendChild(empty);
+            }
+        }
+    })
+    .catch(function(){ showToast('Network error', 'error'); });
+}
+
+/* Save changes */
+function saveChanges(patientId) {
+    var card = document.getElementById('patient-' + patientId);
+    var rows = card.querySelectorAll('.pe-workout-row');
+    var promises = [];
+
+    rows.forEach(function(row) {
+        var wid = row.dataset.workoutId;
+        var s = row.querySelector('[data-field="sets"]');
+        var r = row.querySelector('[data-field="reps"]');
+        var f = row.querySelector('[data-field="frequency"]');
+        var i = row.querySelector('[data-field="instructions"]');
+        promises.push(
+            fetch('/api/plan/update-workout/' + wid, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sets: parseInt(s.value), reps: parseInt(r.value),
+                    frequency: f.value, instructions: i.value
+                })
+            }).then(function(res){ return res.json(); })
+        );
+    });
+
+    Promise.all(promises).then(function(results) {
+        var allOk = results.every(function(d){ return d.ok; });
+        if (allOk) {
+            rows.forEach(function(row) {
+                row.querySelectorAll('.pe-inline-input').forEach(function(inp) {
+                    var span = inp.parentElement.querySelector('.pe-val');
+                    if (span) span.textContent = inp.value || '—';
+                });
+            });
+            cancelEdit(patientId);
+            showToast('Plan saved successfully!');
+        } else {
+            showToast('Some updates failed. Please try again.', 'error');
+        }
+    }).catch(function(){ showToast('Network error', 'error'); });
+}
+
+/* Badge count */
+function updateBadge(patientId) {
+    var tbody = document.getElementById('workoutsBody-' + patientId);
+    var count = tbody.querySelectorAll('.pe-workout-row').length;
+    var badge = document.querySelector('#patient-' + patientId + ' .pe-badge');
+    if (badge) badge.textContent = count + ' exercise' + (count !== 1 ? 's' : '');
+}
 </script>
+
 {% endblock %}
