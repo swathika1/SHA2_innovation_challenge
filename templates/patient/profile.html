@@ -1,0 +1,337 @@
+{% extends 'base.html' %}
+
+{% block title %}My Profile - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1><a href="{{ url_for('patient_dashboard') }}">🏠 Home Rehab Coach</a></h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('patient_appointments') }}">Consultations</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account">👤</button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>{{ user.name }}</strong></div>
+                    <a href="{{ url_for('patient_profile') }}" class="active"><span class="dropdown-icon">👤</span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<style>
+    .profile-layout {
+        display: flex;
+        gap: 28px;
+        margin-top: 10px;
+        min-height: 70vh;
+    }
+
+    /* ── Left sidebar ── */
+    .profile-sidebar {
+        width: 220px;
+        flex-shrink: 0;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.07);
+        padding: 20px 0;
+        align-self: flex-start;
+        position: sticky;
+        top: 90px;
+    }
+    .profile-sidebar h3 {
+        font-size: .85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #999;
+        padding: 0 20px;
+        margin: 0 0 12px;
+    }
+    .profile-sidebar a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 24px;
+        color: #333;
+        text-decoration: none;
+        font-weight: 500;
+        font-size: .95rem;
+        transition: background .15s, color .15s;
+        border-left: 3px solid transparent;
+    }
+    .profile-sidebar a:hover {
+        background: #f4f6fa;
+        color: #1a73e8;
+    }
+    .profile-sidebar a.active {
+        background: #eef3ff;
+        color: #1a73e8;
+        border-left-color: #1a73e8;
+        font-weight: 600;
+    }
+    .profile-sidebar .sidebar-icon {
+        font-size: 1.15rem;
+    }
+
+    /* ── Right content area ── */
+    .profile-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .profile-page-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1a1a2e;
+        margin: 0 0 24px;
+    }
+
+    /* ── Info cards ── */
+    .info-card {
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.07);
+        padding: 28px 32px;
+        margin-bottom: 24px;
+    }
+    .info-card-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1a1a2e;
+        margin: 0 0 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .info-card-title .card-icon {
+        font-size: 1.3rem;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px 40px;
+    }
+    .info-item {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    .info-label {
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .8px;
+        color: #888;
+        font-weight: 600;
+    }
+    .info-value {
+        font-size: 1rem;
+        color: #1a1a2e;
+        font-weight: 500;
+    }
+    .info-value.role-badge {
+        display: inline-block;
+        background: #eef3ff;
+        color: #1a73e8;
+        padding: 2px 14px;
+        border-radius: 20px;
+        font-size: .85rem;
+        font-weight: 600;
+        width: fit-content;
+    }
+
+    /* ── Care team cards ── */
+    .care-team-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    .care-person-card {
+        background: #f8f9fc;
+        border-radius: 12px;
+        padding: 22px 24px;
+        border: 1px solid #e8ebf0;
+    }
+    .care-person-card .cp-role {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 700;
+        margin: 0 0 10px;
+    }
+    .care-person-card.doctor .cp-role { color: #1a73e8; }
+    .care-person-card.caregiver .cp-role { color: #28a745; }
+    .care-person-card .cp-name {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1a1a2e;
+        margin: 0 0 8px;
+    }
+    .care-person-card .cp-detail {
+        font-size: .88rem;
+        color: #555;
+        margin: 4px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .care-person-card .cp-detail .cp-icon { font-size: .95rem; }
+
+    .no-assignment {
+        color: #999;
+        font-style: italic;
+        font-size: .92rem;
+        padding: 16px 0;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+        .profile-layout {
+            flex-direction: column;
+            gap: 16px;
+        }
+        .profile-sidebar {
+            width: 100%;
+            position: static;
+            display: flex;
+            flex-direction: row;
+            padding: 0;
+            border-radius: 12px;
+            overflow-x: auto;
+        }
+        .profile-sidebar h3 { display: none; }
+        .profile-sidebar a {
+            border-left: none;
+            border-bottom: 3px solid transparent;
+            padding: 14px 20px;
+            white-space: nowrap;
+            font-size: .9rem;
+        }
+        .profile-sidebar a.active {
+            border-bottom-color: #1a73e8;
+            border-left-color: transparent;
+        }
+        .info-grid,
+        .care-team-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="profile-layout">
+    <!-- Left Sidebar Navigation -->
+    <nav class="profile-sidebar">
+        <h3>Profile</h3>
+        <a href="{{ url_for('patient_profile') }}" class="active">
+            <span class="sidebar-icon">👤</span> Personal Details
+        </a>
+        <a href="{{ url_for('progress_history') }}">
+            <span class="sidebar-icon">📊</span> Your Progress
+        </a>
+    </nav>
+
+    <!-- Right Content -->
+    <div class="profile-content">
+        <h2 class="profile-page-title">Personal Details</h2>
+
+        <!-- User Information -->
+        <div class="info-card">
+            <div class="info-card-title">
+                <span class="card-icon">🪪</span> Account Information
+            </div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Full Name</span>
+                    <span class="info-value">{{ user_info.name }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Email Address</span>
+                    <span class="info-value">{{ user_info.email }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Role</span>
+                    <span class="info-value role-badge">{{ user_info.role|capitalize }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Phone</span>
+                    <span class="info-value">{{ user_info.phone if user_info.phone else '—  Not set' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Member Since</span>
+                    <span class="info-value">
+                        {% if user_info.created_at %}
+                            {{ user_info.created_at[:10] }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </span>
+                </div>
+                {% if patient %}
+                <div class="info-item">
+                    <span class="info-label">Condition</span>
+                    <span class="info-value">{{ patient.condition }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Care Team -->
+        <div class="info-card">
+            <div class="info-card-title">
+                <span class="card-icon">🩺</span> Your Care Team
+            </div>
+            <div class="care-team-grid">
+                <!-- Doctor -->
+                <div class="care-person-card doctor">
+                    <div class="cp-role">Assigned Doctor</div>
+                    {% if doctor %}
+                        <div class="cp-name">{{ doctor.name }}</div>
+                        <div class="cp-detail">
+                            <span class="cp-icon">✉️</span> {{ doctor.email }}
+                        </div>
+                        {% if doctor.phone %}
+                        <div class="cp-detail">
+                            <span class="cp-icon">📞</span> {{ doctor.phone }}
+                        </div>
+                        {% endif %}
+                        <div class="cp-detail">
+                            <span class="cp-icon">📅</span> Since {{ doctor.assigned_date }}
+                        </div>
+                    {% else %}
+                        <p class="no-assignment">No doctor assigned yet</p>
+                    {% endif %}
+                </div>
+
+                <!-- Caregiver -->
+                <div class="care-person-card caregiver">
+                    <div class="cp-role">Assigned Caregiver</div>
+                    {% if caregiver %}
+                        <div class="cp-name">{{ caregiver.name }}</div>
+                        <div class="cp-detail">
+                            <span class="cp-icon">✉️</span> {{ caregiver.email }}
+                        </div>
+                        {% if caregiver.phone %}
+                        <div class="cp-detail">
+                            <span class="cp-icon">📞</span> {{ caregiver.phone }}
+                        </div>
+                        {% endif %}
+                        {% if caregiver.relationship %}
+                        <div class="cp-detail">
+                            <span class="cp-icon">🤝</span> {{ caregiver.relationship }}
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <p class="no-assignment">No caregiver assigned yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

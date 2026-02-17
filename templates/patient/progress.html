@@ -4,15 +4,107 @@
 
 {% block header %}
 <header class="header">
-    <h1>📈 Progress & History</h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}">🏠 Home Rehab Coach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('landing') }}">Logout</a>
+        <a href="{{ url_for('patient_appointments') }}">Consultations</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account">👤</button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>{{ user.name if user else 'Patient' }}</strong></div>
+                    <a href="{{ url_for('patient_profile') }}" class="active"><span class="dropdown-icon">�</span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                </div>
+            </div>
+        </div>
     </nav>
 </header>
 {% endblock %}
 
 {% block content %}
+<style>
+    .profile-layout {
+        display: flex;
+        gap: 28px;
+        margin-top: 10px;
+        min-height: 70vh;
+    }
+    .profile-sidebar {
+        width: 220px;
+        flex-shrink: 0;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.07);
+        padding: 20px 0;
+        align-self: flex-start;
+        position: sticky;
+        top: 90px;
+    }
+    .profile-sidebar h3 {
+        font-size: .85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #999;
+        padding: 0 20px;
+        margin: 0 0 12px;
+    }
+    .profile-sidebar a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 24px;
+        color: #333;
+        text-decoration: none;
+        font-weight: 500;
+        font-size: .95rem;
+        transition: background .15s, color .15s;
+        border-left: 3px solid transparent;
+    }
+    .profile-sidebar a:hover {
+        background: #f4f6fa;
+        color: #1a73e8;
+    }
+    .profile-sidebar a.active {
+        background: #eef3ff;
+        color: #1a73e8;
+        border-left-color: #1a73e8;
+        font-weight: 600;
+    }
+    .profile-sidebar .sidebar-icon { font-size: 1.15rem; }
+    .profile-content { flex: 1; min-width: 0; }
+    @media (max-width: 768px) {
+        .profile-layout { flex-direction: column; gap: 16px; }
+        .profile-sidebar {
+            width: 100%; position: static;
+            display: flex; flex-direction: row; padding: 0;
+            border-radius: 12px; overflow-x: auto;
+        }
+        .profile-sidebar h3 { display: none; }
+        .profile-sidebar a {
+            border-left: none; border-bottom: 3px solid transparent;
+            padding: 14px 20px; white-space: nowrap; font-size: .9rem;
+        }
+        .profile-sidebar a.active { border-bottom-color: #1a73e8; border-left-color: transparent; }
+    }
+</style>
+
+<div class="profile-layout">
+    <!-- Left Sidebar Navigation -->
+    <nav class="profile-sidebar">
+        <h3>Profile</h3>
+        <a href="{{ url_for('patient_profile') }}">
+            <span class="sidebar-icon">👤</span> Personal Details
+        </a>
+        <a href="{{ url_for('progress_history') }}" class="active">
+            <span class="sidebar-icon">📊</span> Your Progress
+        </a>
+    </nav>
+
+    <!-- Right Content -->
+    <div class="profile-content">
+
 <div class="dashboard-header">
     <h2>Your Progress Overview</h2>
     <div>
@@ -180,4 +272,7 @@
 <div style="text-align: center; margin-top: 30px;">
     <button class="btn btn-primary btn-large">📄 Download Session Report (PDF)</button>
 </div>
+
+    </div><!-- /.profile-content -->
+</div><!-- /.profile-layout -->
 {% endblock %}

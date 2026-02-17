@@ -4,12 +4,21 @@
 
 {% block header %}
 <header class="header">
-    <h1>🏠 Home Rehab Coach</h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}"></a>🏠 Home Rehab Coach</a></h1>
     <nav class="nav-links">
-        <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('patient_appointments') }}">📅 Consultations</a>
-        <a href="{{ url_for('progress_history') }}">Progress</a>
-        <a href="{{ url_for('logout') }}">Logout</a>
+        <a href="{{ url_for('patient_dashboard') }}" class="active">Dashboard</a>
+        <a href="{{ url_for('patient_appointments') }}">Consultations</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account">👤</button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>{{ user.name }}</strong></div>
+                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon">�</span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                </div>
+            </div>
+        </div>
     </nav>
 </header>
 {% endblock %}
@@ -30,7 +39,7 @@
 
 <div class="dashboard-header">
     <h2>Welcome back, {{ user.name }}!</h2>
-    <span>{{ patient.condition }} - Week {{ patient.current_week }}</span>
+    <span>{{ patient.condition }} - Week {{ patient.current_week }} | {{ total_sessions }} sessions completed</span>
 </div>
 
 <!-- Stats Row -->
@@ -79,15 +88,48 @@
 </div>
 {% endif %}
 
-<!-- Today's Session -->
-<div class="card" style="text-align: center; padding: 40px;">
-    <h3 style="margin-bottom: 20px;">Today's Session</h3>
-    <p style="color: #666; margin-bottom: 20px;">
-        {{ patient.condition }} Exercises
-        {% if workouts %}({{ workouts|length }} exercises assigned){% endif %}
-    </p>
-    <a href="{{ url_for('rehab_session') }}" class="btn btn-primary btn-large">▶ Start Today's Session</a>
+<!-- Today's Session Status Banner -->
+{% if today_completed %}
+<div class="today-banner today-done">
+    <div class="today-banner-content">
+        <div class="today-icon">🎉</div>
+        <div>
+            <h3>Well done! Keep up with the progress!</h3>
+            <p>You completed today's session at {{ today_perc|round|int }}%. Great job staying consistent.</p>
+        </div>
+    </div>
+    <div class="today-actions">
+        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-outline">🔄 Restart</a>
+    </div>
 </div>
+{% elif today_session_id %}
+<div class="today-banner today-pending">
+    <div class="today-banner-content">
+        <div class="today-icon">⚡</div>
+        <div>
+            <h3>Complete your session today!</h3>
+            <p>You're at {{ today_perc|round|int }}% — pick up where you left off or start fresh.</p>
+        </div>
+    </div>
+    <div class="today-actions">
+        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-solid">▶ Start From Where You Left</a>
+        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-outline-dark">🔄 Restart</a>
+    </div>
+</div>
+{% else %}
+<div class="today-banner today-pending">
+    <div class="today-banner-content">
+        <div class="today-icon">⚡</div>
+        <div>
+            <h3>Complete your session today!</h3>
+            <p>{{ patient.condition }} Exercises{% if workouts %} — {{ workouts|length }} exercises assigned{% endif %}</p>
+        </div>
+    </div>
+    <div class="today-actions">
+        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-solid">▶ Start Today's Session</a>
+    </div>
+</div>
+{% endif %}
 
 <div class="grid grid-2">
     <!-- My Exercises -->
@@ -117,17 +159,33 @@
         <div class="card-header">📊 Recent Sessions</div>
         {% if recent_sessions %}
             {% for sess in recent_sessions %}
-            <div style="padding: 10px; border-bottom: 1px solid #eee;">
-                <div style="display: flex; justify-content: space-between;">
-                    <strong>{{ sess.exercise_name }}</strong>
-                    <span style="color: #666; font-size: 0.85rem;">{{ sess.completed_at }}</span>
+            <a href="{{ url_for('session_summary', session_id=sess.id) }}" class="recent-session-block">
+                <div class="rs-header">
+                    <span class="rs-date">
+                        {% set parts = sess.formatted_date.split(' ') %}
+                        {% set d = parts[0].split('-') %}
+                        {{ d[2]|int }}
+                        {% set month_num = d[1]|int %}
+                        {% if month_num == 1 %}Jan{% elif month_num == 2 %}Feb{% elif month_num == 3 %}Mar{% elif month_num == 4 %}Apr{% elif month_num == 5 %}May{% elif month_num == 6 %}Jun{% elif month_num == 7 %}Jul{% elif month_num == 8 %}Aug{% elif month_num == 9 %}Sep{% elif month_num == 10 %}Oct{% elif month_num == 11 %}Nov{% elif month_num == 12 %}Dec{% endif %}
+                        {% if parts|length > 1 %}| {{ parts[1] }}{% endif %}
+                    </span>
+                    <span class="rs-perc {% if sess.completed_perc and sess.completed_perc >= 100 %}perc-full{% elif sess.completed_perc and sess.completed_perc >= 50 %}perc-half{% else %}perc-low{% endif %}">
+                        {{ sess.completed_perc|default(0)|round|int }}%
+                    </span>
                 </div>
-                <div style="font-size: 0.9rem; color: #666; margin-top: 5px;">
-                    Quality: {{ sess.quality_score }}/100 | 
-                    Pain: {{ sess.pain_after }}/10 |
-                    Sets: {{ sess.sets_completed }}
+                <div class="rs-exercises">
+                    {% for ex in sess.exercises %}
+                    <span class="rs-exercise-pill">{{ ex.name }} ({{ ex.target_sets }}×{{ ex.target_reps }})</span>
+                    {% endfor %}
+                    {% if not sess.exercises %}
+                    <span class="rs-exercise-pill">Session data</span>
+                    {% endif %}
                 </div>
-            </div>
+                <div class="rs-footer">
+                    <span>⏱️ {% if sess.duration_seconds %}{{ (sess.duration_seconds // 60) }}m {{ sess.duration_seconds % 60 }}s{% else %}--{% endif %}</span>
+                    <span>Completion: {{ sess.completed_perc|default(0)|round|int }}%</span>
+                </div>
+            </a>
             {% endfor %}
         {% else %}
             <p style="color: #666; text-align: center; padding: 20px;">
@@ -255,6 +313,89 @@
 }
 .btn-success:hover {
     background: #218838;
+}
+
+/* ===== Today's Session Banner ===== */
+.today-banner {
+    border-radius: 14px; padding: 24px 28px; margin-bottom: 22px;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 16px;
+    box-shadow: 0 3px 14px rgba(0,0,0,.08);
+}
+.today-banner-content {
+    display: flex; align-items: center; gap: 16px;
+}
+.today-icon { font-size: 2.2rem; }
+.today-banner h3 { margin: 0; font-size: 1.15rem; }
+.today-banner p { margin: 4px 0 0; font-size: .9rem; opacity: .85; }
+.today-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.today-done {
+    background: linear-gradient(135deg, #d4edda 0%, #b7e4c7 100%);
+    border: 1.5px solid #81c784;
+}
+.today-done h3, .today-done p { color: #1b5e20; }
+
+.today-pending {
+    background: linear-gradient(135deg, #ffeaea 0%, #ffd4d4 100%);
+    border: 1.5px solid #ef9a9a;
+}
+.today-pending h3, .today-pending p { color: #b71c1c; }
+
+/* Banner buttons */
+.btn-today {
+    padding: 10px 22px; border-radius: 10px; font-size: .95rem;
+    font-weight: 600; text-decoration: none; cursor: pointer;
+    border: none; transition: .2s; display: inline-block;
+}
+.btn-today:hover { transform: translateY(-1px); }
+.btn-today-solid {
+    background: linear-gradient(135deg,#c62828,#e53935); color: #fff;
+    box-shadow: 0 3px 10px rgba(198,40,40,.3);
+}
+.btn-today-outline {
+    background: rgba(255,255,255,.7); color: #2e7d32; border: 1.5px solid #66bb6a;
+}
+.btn-today-outline:hover { background: #fff; }
+.btn-today-outline-dark {
+    background: rgba(255,255,255,.6); color: #b71c1c; border: 1.5px solid #ef9a9a;
+}
+.btn-today-outline-dark:hover { background: #fff; }
+
+/* ===== Recent Session Blocks ===== */
+.recent-session-block {
+    display: block; padding: 14px 16px; border-radius: 10px;
+    margin-bottom: 10px; background: #f8f9fc; text-decoration: none;
+    color: inherit; transition: .2s; border: 1px solid #e8eaf0;
+    cursor: pointer;
+}
+.recent-session-block:hover {
+    background: #eef1f8; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    transform: translateY(-1px);
+}
+.rs-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px;
+}
+.rs-date { font-weight: 700; font-size: 1rem; color: #333; }
+.rs-perc {
+    font-size: .85rem; font-weight: 700; padding: 3px 10px;
+    border-radius: 12px;
+}
+.perc-full { background: #d4edda; color: #1b5e20; }
+.perc-half { background: #fff3cd; color: #856404; }
+.perc-low  { background: #f8d7da; color: #721c24; }
+
+.rs-exercises {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;
+}
+.rs-exercise-pill {
+    font-size: .78rem; background: #e3e8f0; color: #555;
+    padding: 3px 10px; border-radius: 10px;
+}
+.rs-footer {
+    display: flex; justify-content: space-between;
+    font-size: .8rem; color: #888;
 }
 </style>
 
