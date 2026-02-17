@@ -1,0 +1,61 @@
+<!-- MeriLion AI Chatbot Widget -->
+<link rel="stylesheet" href="{{ url_for('static', filename='chatbot.css') }}">
+
+<div id="chat-fab" onclick="toggleChat()" title="Chat with AI Health Assistant">
+    <span id="chat-fab-icon">💬</span>
+</div>
+
+<div id="chat-window" style="display: none;">
+    <div id="chat-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.2rem;">🤖</span>
+            <div>
+                <strong>Health Assistant</strong>
+                <div style="font-size: 0.7rem; opacity: 0.85;">Powered by MeriLion AI</div>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="chat-lang-badge" style="font-size: 0.7rem; background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px;">EN</span>
+            <button onclick="toggleChat()" style="background: none; border: none; color: white; font-size: 1.3rem; cursor: pointer; padding: 0 4px;">✕</button>
+        </div>
+    </div>
+
+    <div id="chat-messages">
+        <div class="chat-msg bot">
+            <div class="chat-bubble bot-bubble">
+                Hello! I'm your AI health assistant. I can help you with:
+                <ul style="margin: 8px 0 0 0; padding-left: 18px; font-size: 0.85rem;">
+                    <li>Understanding your rehab exercises</li>
+                    <li>Exercise modifications for pain</li>
+                    <li>General health guidance</li>
+                </ul>
+                <div style="font-size: 0.8rem; color: #888; margin-top: 8px;">
+                    I support English, 中文, Bahasa Melayu, and தமிழ்
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="chat-risk-alert" style="display: none;">
+        <span>⚠️ High risk detected — please consult your doctor</span>
+    </div>
+
+    <div id="chat-chips">
+        <button class="chat-chip" onclick="sendQuickMessage('How are my exercises going?')">My Progress</button>
+        <button class="chat-chip" onclick="sendQuickMessage('I have pain during exercise')">Report Pain</button>
+        <button class="chat-chip" onclick="sendQuickMessage('Can you modify my exercises?')">Modify Plan</button>
+    </div>
+
+    <div id="chat-input-area">
+        <input type="text" id="chat-input" placeholder="Type your message..." onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off">
+        <button id="chat-send-btn" onclick="sendMessage()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 2L11 13"></path>
+                <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+            </svg>
+        </button>
+    </div>
+</div>
+
+<script>window.CHAT_PATIENT_ID = {{ chat_patient_id | tojson }};</script>
+<script src="{{ url_for('static', filename='chatbot.js') }}"></script>
