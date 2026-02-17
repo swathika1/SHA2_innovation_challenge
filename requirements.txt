@@ -13,3 +13,9 @@ joblib
 requests
 pyttsx3
 google-generativeai
+fastapi
+uvicorn[standard]
+httpx
+langdetect
+sqlalchemy
+pydantic

@@ -14,6 +14,18 @@ from database import get_db, close_db, query_db, execute_db
 from functools import wraps
 from datetime import datetime, date
 import uuid
+import traceback
+
+# Import MeriLion chatbot modules
+try:
+    from merilion_client import query_merilion_sync
+    from risk_engine import calculate_risk_score, REFERRAL_MESSAGES
+    from exercise_advisor import get_exercise_modification
+    from langdetect import detect as detect_language
+    CHATBOT_AVAILABLE = True
+except ImportError as e:
+    CHATBOT_AVAILABLE = False
+    print(f"[WARNING] Chatbot modules not fully available: {e}")
 
 # Import optimization module (from computer_vision branch)
 try:
@@ -350,7 +362,18 @@ def patient_dashboard():
             'exercises': ex_list,
             'duration_seconds': duration_seconds
         })
-    
+
+    # Get session history for charts (last 15 sessions, oldest first)
+    chart_sessions = query_db('''
+        SELECT s.quality_score, s.pain_before, s.pain_after, s.effort_level,
+               s.completed_at
+        FROM sessions s
+        WHERE s.patient_id = ?
+        AND s.completed_at IS NOT NULL
+        ORDER BY s.completed_at ASC
+        LIMIT 15
+    ''', (session['user_id'],))
+
     # Get upcoming appointments (simpler query - just get all scheduled)
     upcoming_appointments = query_db('''
         SELECT a.*, u.name as doctor_name
@@ -391,17 +414,38 @@ def patient_dashboard():
         today_perc = today_session['completed_perc'] or 0
         today_completed = (today_perc >= 100)
 
+    # Get current caregivers for this patient
+    caregivers = query_db('''
+        SELECT u.name, u.email, cp.relationship
+        FROM caregiver_patient cp
+        JOIN users u ON cp.caregiver_id = u.id
+        WHERE cp.patient_id = ?
+    ''', (session['user_id'],))
+
+    # Get pending caregiver requests for this patient
+    pending_requests = query_db('''
+        SELECT cr.id, u.name as caregiver_name, u.email as caregiver_email, cr.requested_at
+        FROM caregiver_requests cr
+        JOIN users u ON cr.caregiver_id = u.id
+        WHERE cr.patient_id = ? AND cr.status = 'pending'
+        ORDER BY cr.requested_at DESC
+    ''', (session['user_id'],))
+
     return render_template('patient/dashboard.html',
                          user=user,
                          patient=patient_info,
                          workouts=workouts if workouts else [],
                          recent_sessions=recent_sessions,
+                         chart_sessions=chart_sessions if chart_sessions else [],
                          upcoming_appointments=upcoming_appointments if upcoming_appointments else [],
+                         caregivers=caregivers if caregivers else [],
+                         pending_caregiver_requests=pending_requests if pending_requests else [],
                          total_sessions=total_sessions['count'] if total_sessions else 0,
                          sessions_this_week=sessions_this_week['count'] if sessions_this_week else 0,
                          today_completed=today_completed,
                          today_session_id=today_session_id,
-                         today_perc=today_perc)
+                         today_perc=today_perc,
+                         chat_patient_id=None)
 
 
 @app.route('/patient/session')
@@ -723,10 +767,60 @@ def patient_detail(patient_id):
         LIMIT 10
     ''', (patient_id,))
     
+    # Get clinician notes for this patient
+    notes = query_db('''
+        SELECT cn.*, u.name as doctor_name
+        FROM clinician_notes cn
+        JOIN users u ON cn.doctor_id = u.id
+        WHERE cn.patient_id = ?
+        ORDER BY cn.created_at DESC
+        LIMIT 20
+    ''', (patient_id,))
+
+    # Get current caregivers for this patient
+    caregivers = query_db('''
+        SELECT u.name, u.email, cp.relationship
+        FROM caregiver_patient cp
+        JOIN users u ON cp.caregiver_id = u.id
+        WHERE cp.patient_id = ?
+    ''', (patient_id,))
+
+    # Get pending caregiver requests for this patient
+    pending_requests = query_db('''
+        SELECT cr.id, u.name as caregiver_name, u.email as caregiver_email, cr.requested_at
+        FROM caregiver_requests cr
+        JOIN users u ON cr.caregiver_id = u.id
+        WHERE cr.patient_id = ? AND cr.status = 'pending'
+        ORDER BY cr.requested_at DESC
+    ''', (patient_id,))
+
     return render_template('clinician/patient_detail.html',
                          patient=patient,
+                         patient_id=patient_id,
                          workouts=workouts if workouts else [],
-                         sessions=sessions if sessions else [])
+                         sessions=sessions if sessions else [],
+                         notes=notes if notes else [],
+                         caregivers=caregivers if caregivers else [],
+                         pending_caregiver_requests=pending_requests if pending_requests else [])
+
+
+@app.route('/clinician/patient/<int:patient_id>/add-note', methods=['POST'])
+@login_required
+@role_required('doctor')
+def add_clinician_note(patient_id):
+    """Add a clinician note for a patient."""
+    note_text = request.form.get('note_text', '').strip()
+    if not note_text:
+        flash('Note cannot be empty.', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+
+    execute_db('''
+        INSERT INTO clinician_notes (doctor_id, patient_id, note_text)
+        VALUES (?, ?, ?)
+    ''', (session['user_id'], patient_id, note_text))
+
+    flash('Note added successfully.', 'success')
+    return redirect(url_for('patient_detail', patient_id=patient_id))
 
 
 @app.route('/clinician/plan-editor', methods=['GET', 'POST'])
@@ -837,10 +931,22 @@ def consultation():
         WHERE a.doctor_id = ? AND a.status = 'scheduled'
         ORDER BY a.appointment_date, a.appointment_time
     ''', (session['user_id'],))
-    
+
+    # Past completed/cancelled appointments
+    past_appointments = query_db('''
+        SELECT a.*, u.name as patient_name, p.condition
+        FROM appointments a
+        JOIN users u ON a.patient_id = u.id
+        LEFT JOIN patients p ON u.id = p.user_id
+        WHERE a.doctor_id = ? AND a.status IN ('completed', 'cancelled')
+        ORDER BY a.appointment_date DESC, a.appointment_time DESC
+        LIMIT 15
+    ''', (session['user_id'],))
+
     return render_template('clinician/consultation.html',
                          patients=patients if patients else [],
-                         appointments=appointments if appointments else [])
+                         appointments=appointments if appointments else [],
+                         past_appointments=past_appointments if past_appointments else [])
 
 
 # ==================== VIDEO CALL ROUTES ====================
@@ -947,9 +1053,275 @@ def caregiver_dashboard():
             LIMIT 10
         ''', patient_ids)
     
+    # Build alerts from real session data
+    alerts = []
+    if recent_sessions:
+        for s in recent_sessions:
+            if s['pain_after'] and s['pain_after'] >= 7:
+                alerts.append({
+                    'type': 'danger',
+                    'title': 'Pain Spike Reported',
+                    'message': f"{s['patient_name']} reported pain level {s['pain_after']}/10 after {s['exercise_name']}",
+                    'time': s['completed_at']
+                })
+            if s['quality_score'] is not None and s['quality_score'] < 50:
+                alerts.append({
+                    'type': 'warning',
+                    'title': 'Low Quality Session',
+                    'message': f"{s['patient_name']}'s form quality dropped to {int(s['quality_score'])} during {s['exercise_name']}",
+                    'time': s['completed_at']
+                })
+
+    # Check for low adherence across monitored patients
+    if monitored_patients:
+        for p in monitored_patients:
+            if p['adherence_rate'] is not None and p['adherence_rate'] < 40:
+                alerts.append({
+                    'type': 'danger',
+                    'title': 'Low Adherence Alert',
+                    'message': f"{p['name']}'s adherence rate is {int(p['adherence_rate'])}% — needs encouragement",
+                    'time': None
+                })
+            elif p['adherence_rate'] is not None and p['adherence_rate'] < 60:
+                alerts.append({
+                    'type': 'warning',
+                    'title': 'Adherence Declining',
+                    'message': f"{p['name']}'s adherence rate is {int(p['adherence_rate'])}%",
+                    'time': None
+                })
+
+    # Get caregiver's pending requests
+    my_pending_requests = query_db('''
+        SELECT cr.id, cr.status, cr.requested_at, u.name as patient_name
+        FROM caregiver_requests cr
+        JOIN users u ON cr.patient_id = u.id
+        WHERE cr.caregiver_id = ?
+        ORDER BY cr.requested_at DESC
+        LIMIT 10
+    ''', (session['user_id'],))
+
+    # Build data for chatbot
+    patients_list = monitored_patients if monitored_patients else []
+    first_patient_id = patients_list[0]['id'] if patients_list else None
+    caregiver_patient_list = [{'id': p['id'], 'name': p['name']} for p in patients_list]
+
     return render_template('caregiver/dashboard.html',
-                         patients=monitored_patients if monitored_patients else [],
-                         recent_sessions=recent_sessions if recent_sessions else [])
+                         patients=patients_list,
+                         recent_sessions=recent_sessions if recent_sessions else [],
+                         alerts=alerts,
+                         my_requests=my_pending_requests if my_pending_requests else [],
+                         chat_patient_id=first_patient_id,
+                         caregiver_patient_list=caregiver_patient_list)
+
+
+# ==================== CAREGIVER ACCESS MANAGEMENT ====================
+
+@app.route('/patient/add-caregiver', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_caregiver():
+    """Patient directly grants caregiver access by email."""
+    caregiver_email = request.form.get('caregiver_email', '').strip()
+    if not caregiver_email:
+        flash('Please enter a caregiver email.', 'error')
+        return redirect(url_for('patient_dashboard'))
+
+    caregiver = query_db(
+        "SELECT id, name FROM users WHERE email = ? AND role = 'caregiver'",
+        (caregiver_email,), one=True
+    )
+    if not caregiver:
+        flash('No caregiver account found with that email. They need to sign up as a caregiver first.', 'error')
+        return redirect(url_for('patient_dashboard'))
+
+    # Check if already linked
+    existing = query_db(
+        'SELECT id FROM caregiver_patient WHERE caregiver_id = ? AND patient_id = ?',
+        (caregiver['id'], session['user_id']), one=True
+    )
+    if existing:
+        flash(f'{caregiver["name"]} is already your caregiver.', 'error')
+        return redirect(url_for('patient_dashboard'))
+
+    execute_db(
+        'INSERT OR IGNORE INTO caregiver_patient (caregiver_id, patient_id, relationship) VALUES (?, ?, ?)',
+        (caregiver['id'], session['user_id'], 'Authorized by Patient')
+    )
+
+    # Also clear any pending request from this caregiver for this patient
+    execute_db(
+        "UPDATE caregiver_requests SET status = 'approved', resolved_at = CURRENT_TIMESTAMP, resolved_by = ? WHERE caregiver_id = ? AND patient_id = ? AND status = 'pending'",
+        (session['user_id'], caregiver['id'], session['user_id'])
+    )
+
+    flash(f'{caregiver["name"]} has been added as your caregiver.', 'success')
+    return redirect(url_for('patient_dashboard'))
+
+
+@app.route('/clinician/patient/<int:patient_id>/add-caregiver', methods=['POST'])
+@login_required
+@role_required('doctor')
+def doctor_add_caregiver(patient_id):
+    """Doctor grants caregiver access for a patient by email."""
+    caregiver_email = request.form.get('caregiver_email', '').strip()
+    if not caregiver_email:
+        flash('Please enter a caregiver email.', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+
+    caregiver = query_db(
+        "SELECT id, name FROM users WHERE email = ? AND role = 'caregiver'",
+        (caregiver_email,), one=True
+    )
+    if not caregiver:
+        flash('No caregiver account found with that email. They need to sign up as a caregiver first.', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+
+    existing = query_db(
+        'SELECT id FROM caregiver_patient WHERE caregiver_id = ? AND patient_id = ?',
+        (caregiver['id'], patient_id), one=True
+    )
+    if existing:
+        flash(f'{caregiver["name"]} is already a caregiver for this patient.', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+
+    execute_db(
+        'INSERT OR IGNORE INTO caregiver_patient (caregiver_id, patient_id, relationship) VALUES (?, ?, ?)',
+        (caregiver['id'], patient_id, 'Authorized by Doctor')
+    )
+
+    # Clear any pending request
+    execute_db(
+        "UPDATE caregiver_requests SET status = 'approved', resolved_at = CURRENT_TIMESTAMP, resolved_by = ? WHERE caregiver_id = ? AND patient_id = ? AND status = 'pending'",
+        (session['user_id'], caregiver['id'], patient_id)
+    )
+
+    flash(f'{caregiver["name"]} has been added as caregiver for this patient.', 'success')
+    return redirect(url_for('patient_detail', patient_id=patient_id))
+
+
+@app.route('/caregiver/request-monitor', methods=['POST'])
+@login_required
+@role_required('caregiver')
+def caregiver_request_monitor():
+    """Caregiver requests to monitor a patient by email."""
+    patient_email = request.form.get('patient_email', '').strip()
+    if not patient_email:
+        flash('Please enter a patient email.', 'error')
+        return redirect(url_for('caregiver_dashboard'))
+
+    patient = query_db(
+        "SELECT id, name FROM users WHERE email = ? AND role = 'patient'",
+        (patient_email,), one=True
+    )
+    if not patient:
+        flash('No patient account found with that email.', 'error')
+        return redirect(url_for('caregiver_dashboard'))
+
+    # Check if already monitoring
+    existing = query_db(
+        'SELECT id FROM caregiver_patient WHERE caregiver_id = ? AND patient_id = ?',
+        (session['user_id'], patient['id']), one=True
+    )
+    if existing:
+        flash(f'You are already monitoring {patient["name"]}.', 'error')
+        return redirect(url_for('caregiver_dashboard'))
+
+    # Check if request already pending
+    pending = query_db(
+        "SELECT id FROM caregiver_requests WHERE caregiver_id = ? AND patient_id = ? AND status = 'pending'",
+        (session['user_id'], patient['id']), one=True
+    )
+    if pending:
+        flash(f'You already have a pending request for {patient["name"]}.', 'error')
+        return redirect(url_for('caregiver_dashboard'))
+
+    execute_db(
+        'INSERT INTO caregiver_requests (caregiver_id, patient_id) VALUES (?, ?)',
+        (session['user_id'], patient['id'])
+    )
+
+    flash(f'Request sent to monitor {patient["name"]}. Waiting for approval from patient or their doctor.', 'success')
+    return redirect(url_for('caregiver_dashboard'))
+
+
+@app.route('/api/caregiver-request/<int:request_id>/approve', methods=['POST'])
+@login_required
+def approve_caregiver_request(request_id):
+    """Approve a caregiver monitoring request. Can be done by patient or their doctor."""
+    req = query_db('SELECT * FROM caregiver_requests WHERE id = ? AND status = ?', (request_id, 'pending'), one=True)
+    if not req:
+        flash('Request not found or already resolved.', 'error')
+        return redirect(request.referrer or url_for('landing'))
+
+    # Verify the approver is either the patient or the patient's doctor
+    user_id = session['user_id']
+    role = session.get('role')
+    patient_id = req['patient_id']
+
+    authorized = False
+    if role == 'patient' and user_id == patient_id:
+        authorized = True
+    elif role == 'doctor':
+        assignment = query_db(
+            'SELECT id FROM doctor_patient WHERE doctor_id = ? AND patient_id = ?',
+            (user_id, patient_id), one=True
+        )
+        if assignment:
+            authorized = True
+
+    if not authorized:
+        flash('You are not authorized to approve this request.', 'error')
+        return redirect(request.referrer or url_for('landing'))
+
+    # Approve: update request and create caregiver_patient link
+    execute_db(
+        "UPDATE caregiver_requests SET status = 'approved', resolved_at = CURRENT_TIMESTAMP, resolved_by = ? WHERE id = ?",
+        (user_id, request_id)
+    )
+    execute_db(
+        'INSERT OR IGNORE INTO caregiver_patient (caregiver_id, patient_id, relationship) VALUES (?, ?, ?)',
+        (req['caregiver_id'], patient_id, 'Approved Request')
+    )
+
+    flash('Caregiver request approved.', 'success')
+    return redirect(request.referrer or url_for('landing'))
+
+
+@app.route('/api/caregiver-request/<int:request_id>/reject', methods=['POST'])
+@login_required
+def reject_caregiver_request(request_id):
+    """Reject a caregiver monitoring request."""
+    req = query_db('SELECT * FROM caregiver_requests WHERE id = ? AND status = ?', (request_id, 'pending'), one=True)
+    if not req:
+        flash('Request not found or already resolved.', 'error')
+        return redirect(request.referrer or url_for('landing'))
+
+    user_id = session['user_id']
+    role = session.get('role')
+    patient_id = req['patient_id']
+
+    authorized = False
+    if role == 'patient' and user_id == patient_id:
+        authorized = True
+    elif role == 'doctor':
+        assignment = query_db(
+            'SELECT id FROM doctor_patient WHERE doctor_id = ? AND patient_id = ?',
+            (user_id, patient_id), one=True
+        )
+        if assignment:
+            authorized = True
+
+    if not authorized:
+        flash('You are not authorized to reject this request.', 'error')
+        return redirect(request.referrer or url_for('landing'))
+
+    execute_db(
+        "UPDATE caregiver_requests SET status = 'rejected', resolved_at = CURRENT_TIMESTAMP, resolved_by = ? WHERE id = ?",
+        (user_id, request_id)
+    )
+
+    flash('Caregiver request rejected.', 'success')
+    return redirect(request.referrer or url_for('landing'))
 
 
 # ==================== ROLE SELECTION ====================
@@ -1205,49 +1577,44 @@ def api_patient_recommendations():
     if not OPTIM_AVAILABLE:
         return jsonify({"error": "Optimization module not available"}), 503
 
-    # Get the logged-in patient's information
-    patient_id = session['user_id']
+    try:
+        patient_id = session['user_id']
 
-    # Get patient rehab data to determine their optimization patient_id
-    patient_data = query_db(
-        'SELECT * FROM patients WHERE user_id = ?',
-        (patient_id,),
-        one=True
-    )
+        patient_data = query_db(
+            'SELECT * FROM patients WHERE user_id = ?',
+            (patient_id,),
+            one=True
+        )
 
-    if not patient_data:
-        return jsonify({"error": "Patient profile not found"}), 404
+        if not patient_data:
+            return jsonify({"error": "Patient profile not found"}), 404
 
-    # Use demo data for now (map based on patient condition or use a default)
-    # In production, this would map to the actual patient_id in the optimization system
-    patients, doctors, timeslots = build_demo_data()
+        patients, doctors, timeslots = build_demo_data()
 
-    # For demo: use patient_1 as default (could be enhanced to map based on condition)
-    optim_patient_id = "patient_1"  # Default to patient_1 for demo
+        # Map to demo patient based on rehab score (handle None)
+        rehab_score = patient_data['avg_quality_score'] or 0
+        if rehab_score < 4.0:
+            optim_patient_id = "patient_1"
+        elif rehab_score >= 7.0:
+            optim_patient_id = "patient_2"
+        else:
+            optim_patient_id = "patient_3"
 
-    # Try to find matching patient in demo data based on rehab score
-    rehab_score = patient_data['avg_quality_score']
-    if rehab_score < 4.0:
-        optim_patient_id = "patient_1"  # Low score patient
-    elif rehab_score >= 7.0:
-        optim_patient_id = "patient_2"  # High score patient
-    else:
-        optim_patient_id = "patient_3"  # Medium score patient
+        recs, notification = get_top3_recommendations(
+            patient_id=optim_patient_id,
+            patients=patients,
+            doctors=doctors,
+            timeslots=timeslots,
+            weights=None
+        )
 
-    # Get recommendations
-    recs, notification = get_top3_recommendations(
-        patient_id=optim_patient_id,
-        patients=patients,
-        doctors=doctors,
-        timeslots=timeslots,
-        weights=None
-    )
-
-    return jsonify({
-        "patient_name": patient_data['condition'],
-        "recommendations": recs,
-        "notification": notification
-    })
+        return jsonify({
+            "recommendations": recs,
+            "notification": notification
+        })
+    except Exception as e:
+        print(f'[ERROR] Patient recommendations failed: {e}')
+        return jsonify({"error": str(e)}), 500
 
 
 # ==================== CV/ML LIVE FEEDBACK API (from computer_vision branch) ====================
@@ -1628,6 +1995,146 @@ def api_live_feedback():
         return jsonify({"error": str(e)}), 500
 
 
+# ==================== MERILION CHATBOT API ====================
+
+@app.route('/api/chat', methods=['POST'])
+@login_required
+def api_chat():
+    """MeriLion AI chatbot endpoint for patient/caregiver use."""
+    if not CHATBOT_AVAILABLE:
+        return jsonify({"error": "Chatbot modules not available"}), 503
+
+    data = request.get_json()
+    if not data or 'message' not in data:
+        return jsonify({"error": "Missing 'message' field"}), 400
+
+    message = data['message']
+    conversation_history = data.get('conversation_history', [])
+    role = session.get('role')
+    user_id = session['user_id']
+
+    # Determine which patient we're chatting about
+    if role == 'patient':
+        patient_id = user_id
+    elif role == 'caregiver':
+        # Caregiver must specify which patient they're asking about
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({"error": "Caregiver must specify patient_id"}), 400
+        # Verify caregiver has access to this patient
+        access = query_db(
+            'SELECT id FROM caregiver_patient WHERE caregiver_id = ? AND patient_id = ?',
+            (user_id, patient_id), one=True
+        )
+        if not access:
+            return jsonify({"error": "You do not have access to this patient"}), 403
+    else:
+        return jsonify({"error": "Chat is available for patients and caregivers only"}), 403
+
+    try:
+        # 1. Detect language
+        try:
+            lang = detect_language(message)
+            lang = lang if lang in ["en", "zh-cn", "ms", "ta"] else "en"
+            lang_key = "zh" if "zh" in lang else lang
+        except Exception:
+            lang_key = "en"
+
+        # 2. Build patient context from rehab_coach.db
+        patient_user = query_db('SELECT * FROM users WHERE id = ?', (patient_id,), one=True)
+        patient_info = query_db('SELECT * FROM patients WHERE user_id = ?', (patient_id,), one=True)
+        recent_sessions_db = query_db('''
+            SELECT s.*, e.name as exercise_name
+            FROM sessions s
+            JOIN workouts w ON s.workout_id = w.id
+            JOIN exercises e ON w.exercise_id = e.id
+            WHERE s.patient_id = ?
+            ORDER BY s.completed_at DESC
+            LIMIT 5
+        ''', (patient_id,))
+
+        # Build context string for MeriLion
+        patient_context = "New patient - no history available."
+        if patient_user and patient_info:
+            patient_context = f"""
+Name: {patient_user['name']}
+Condition: {patient_info['condition']}
+Week: {patient_info['current_week']}
+Adherence Rate: {patient_info['adherence_rate']}%
+Avg Pain Level: {patient_info['avg_pain_level']}/10
+Avg Quality Score: {patient_info['avg_quality_score']}/100
+"""
+            if recent_sessions_db:
+                patient_context += "\nRecent Sessions:\n"
+                for s in recent_sessions_db:
+                    patient_context += f"- {s['exercise_name']}: Quality {s['quality_score']}, Pain {s['pain_after']}/10 ({s['completed_at']})\n"
+
+        # Get workouts for exercise plan context
+        workouts = query_db('''
+            SELECT e.name FROM workouts w
+            JOIN exercises e ON w.exercise_id = e.id
+            WHERE w.patient_id = ? AND w.is_active = 1
+        ''', (patient_id,))
+        current_plan = ", ".join([w['name'] for w in workouts]) if workouts else "general fitness plan"
+
+        # 3. Risk scoring - build simple session objects for the risk engine
+        class SimpleSession:
+            def __init__(self, pain):
+                self.pain_reported = pain
+
+        risk_sessions = []
+        if recent_sessions_db:
+            for s in recent_sessions_db[:3]:
+                pain_val = s['pain_after']
+                risk_sessions.append(SimpleSession(str(pain_val) if pain_val and pain_val > 3 else "none"))
+
+        risk = calculate_risk_score(message, lang_key, risk_sessions)
+
+        # 4. If high risk — return referral immediately
+        if risk["should_refer"]:
+            referral_msg = REFERRAL_MESSAGES.get(lang_key, REFERRAL_MESSAGES["en"])
+            return jsonify({
+                "response": referral_msg,
+                "risk_score": risk["score"],
+                "referred": True,
+                "language": lang_key
+            })
+
+        # 5. Check for pain + exercise context
+        pain_keywords = ["pain", "hurts", "sore", "ache", "sakit", "疼", "வலி"]
+        exercise_keywords = ["exercise", "workout", "training", "latihan", "运动", "உடற்பயிற்சி"]
+        message_lower = message.lower()
+
+        if any(p in message_lower for p in pain_keywords) and any(e in message_lower for e in exercise_keywords):
+            body_parts = ["knee", "back", "shoulder", "ankle", "hip", "neck", "wrist", "elbow"]
+            pain_area = "general"
+            for part in body_parts:
+                if part in message_lower:
+                    pain_area = part
+                    break
+            modification = get_exercise_modification(pain_area, current_plan)
+            conversation_history.append({"role": "system", "content": f"Exercise context: {modification}"})
+
+        # 6. Add caregiver context if applicable
+        if role == 'caregiver':
+            patient_context += f"\n[Note: This conversation is with a caregiver, not the patient directly. Provide information appropriate for a family caregiver.]"
+
+        # 7. Query MeriLion
+        full_history = conversation_history + [{"role": "user", "content": message}]
+        response_text = query_merilion_sync(full_history, patient_context)
+
+        return jsonify({
+            "response": response_text,
+            "risk_score": risk["score"],
+            "referred": False,
+            "language": lang_key
+        })
+
+    except Exception as e:
+        print(f"[ERROR] Chat API failed: {traceback.format_exc()}")
+        return jsonify({"error": f"Chat service error: {str(e)}"}), 500
+
+
 # ==================== DATABASE INITIALIZATION ====================
 
 @app.cli.command('init-db')
@@ -1757,7 +2264,6 @@ def ensure_tables_exist():
             FOREIGN KEY (doctor_id) REFERENCES users(id),
             FOREIGN KEY (patient_id) REFERENCES users(id)
         );
-        
         CREATE TABLE IF NOT EXISTS login_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -1766,6 +2272,29 @@ def ensure_tables_exist():
             role TEXT NOT NULL,
             login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS clinician_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doctor_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            note_text TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (doctor_id) REFERENCES users(id),
+            FOREIGN KEY (patient_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS caregiver_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            caregiver_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+            requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TIMESTAMP,
+            resolved_by INTEGER,
+            FOREIGN KEY (caregiver_id) REFERENCES users(id),
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            FOREIGN KEY (resolved_by) REFERENCES users(id)
         );
     ''')
     conn.commit()

@@ -29,32 +29,28 @@
 <div class="consultation-layout">
     <!-- Left Column: Scheduling & Appointments -->
     <div>
-        <!-- Smart Scheduling (Optimization) -->
-        <div class="card">
-            <div class="card-header">Smart Scheduling</div>
-            <div class="form-group">
-                <label for="optim-patient-select">Select Patient</label>
-                <select id="optim-patient-select" class="form-control">
-                    <option value="">-- Loading patients... --</option>
-                </select>
+        <!-- Smart Scheduling: Patients Who Need Appointments -->
+        <div class="card" style="border: 2px solid #007bff;">
+            <div class="card-header" style="background: linear-gradient(135deg, #e3f2fd, #bbdefb); color: #1565c0;">
+                Smart Scheduling - Patients Who Need Appointments
             </div>
-            <button id="btn-get-recommendations" class="btn btn-primary" style="width: 100%;" disabled>
-                Get Optimal Recommendations
+            <p style="color: #666; font-size: 0.95rem; margin-bottom: 15px;">
+                Your patients ranked by urgency and rehab progress. Click "Book" to auto-fill the form below.
+            </p>
+            <button id="btn-load-patients" class="btn btn-primary" style="width: 100%; margin-bottom: 10px;">
+                Load Patient Recommendations
             </button>
             <p id="optim-loading" style="display: none; text-align: center; margin-top: 10px; color: #666;">
                 Running optimization...
             </p>
         </div>
 
-        <!-- Notification Banner (hidden by default) -->
-        <div id="optim-notification" style="display: none;">
-            <strong id="notif-level"></strong>
-            <span id="notif-message"></span>
-        </div>
-
-        <!-- Recommendations (hidden by default) -->
-        <div id="optim-results" class="card" style="display: none;">
-            <div class="card-header">Top 3 Recommended Appointments</div>
+        <!-- Patient Recommendations (hidden by default) -->
+        <div id="optim-results" class="card" style="display: none; margin-top: 15px;">
+            <div class="card-header">Recommended Patient Appointments</div>
+            <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">
+                Each patient's best available timeslot based on optimization
+            </p>
             <div id="recommendations-list"></div>
         </div>
 
@@ -157,6 +153,41 @@
             </div>
             {% endif %}
         </div>
+        <!-- Past Appointment History -->
+        <div class="appointment-list" style="margin-top: 20px;">
+            <div class="card-header">Past Consultations ({{ past_appointments|length if past_appointments else 0 }})</div>
+
+            {% if past_appointments %}
+                {% for apt in past_appointments %}
+                <div style="background: white; padding: 12px 15px; border-radius: 8px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 4px solid {% if apt.status == 'completed' %}#28a745{% else %}#dc3545{% endif %};">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <div>
+                            <strong>{{ apt.patient_name }}</strong>
+                            {% if apt.condition %}
+                            <span style="background: #f0f0f0; color: #666; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; margin-left: 6px;">
+                                {{ apt.condition }}
+                            </span>
+                            {% endif %}
+                            <p style="font-size: 0.85rem; color: #666; margin: 3px 0 0 0;">
+                                {{ apt.appointment_date }} at {{ apt.appointment_time }} ({{ apt.duration }} min)
+                            </p>
+                            {% if apt.notes %}
+                            <p style="font-size: 0.8rem; color: #888; margin: 2px 0 0 0; font-style: italic;">{{ apt.notes }}</p>
+                            {% endif %}
+                        </div>
+                        <span style="padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;
+                            {% if apt.status == 'completed' %}background: #d4edda; color: #155724;{% else %}background: #f8d7da; color: #721c24;{% endif %}">
+                            {{ apt.status|capitalize }}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+            <div style="background: white; padding: 20px; border-radius: 8px; text-align: center; color: #666;">
+                <p style="font-size: 0.95rem;">No past consultations yet.</p>
+            </div>
+            {% endif %}
+        </div>
     </div>
 
     <!-- Right Column: Quick Actions & Info -->
@@ -204,20 +235,6 @@
     </div>
 </div>
 
-<!-- Patient selection dropdown (ensure correct ID) -->
-<label for="optim-patient-select"><strong>Select Patient:</strong></label>
-<select id="optim-patient-select" class="form-control mb-3">
-  <option value="">-- Select --</option>
-  {% for patient in patients %}
-    <option value="{{ patient.id }}">{{ patient.name }}</option>
-  {% endfor %}
-</select>
-
-<!-- Recommendations panel (ensure correct ID) -->
-<div id="optim-recommendations" class="alert alert-secondary" style="min-height: 60px;">
-  <em>Select a patient to view suggestions.</em>
-</div>
-
 <style>
     .consultation-layout {
         display: grid;
@@ -257,152 +274,178 @@
     .btn-success:hover {
         background: #218838;
     }
+    .patient-rec-card {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        border: 1px solid #ddd;
+        transition: all 0.2s;
+    }
+    .patient-rec-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transform: translateY(-1px);
+    }
+    .priority-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .priority-critical { background: #f8d7da; color: #721c24; }
+    .priority-concerning { background: #fff3cd; color: #856404; }
+    .priority-normal { background: #d4edda; color: #155724; }
+    .score-badge {
+        background: #e3f2fd;
+        color: #1565c0;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
 </style>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // === OPTIMIZATION STATE ===
     var optimData = null;
-
-    // === OPTIMIZATION DOM REFERENCES ===
-    var patientSelect = document.getElementById('optim-patient-select');
-    var btnRecommend = document.getElementById('btn-get-recommendations');
+    var btnLoad = document.getElementById('btn-load-patients');
     var loadingText = document.getElementById('optim-loading');
-    var notifBanner = document.getElementById('optim-notification');
-    var notifLevel = document.getElementById('notif-level');
-    var notifMessage = document.getElementById('notif-message');
     var resultsPanel = document.getElementById('optim-results');
     var recsList = document.getElementById('recommendations-list');
 
-    // === FETCH OPTIMIZATION DATA ON PAGE LOAD ===
-    function loadOptimizationData() {
+    // === LOAD ALL PATIENT RECOMMENDATIONS ===
+    btnLoad.addEventListener('click', function() {
+        loadingText.style.display = 'block';
+        btnLoad.disabled = true;
+
         fetch('/api/optimize/consultation')
             .then(function(response) {
                 if (!response.ok) throw new Error('Network error');
                 return response.json();
             })
             .then(function(data) {
+                loadingText.style.display = 'none';
+                btnLoad.disabled = false;
                 optimData = data;
-                populatePatientDropdown(data.patients);
+                renderPatientRecommendations(data);
             })
             .catch(function(err) {
-                patientSelect.innerHTML = '<option value="">Optimization unavailable</option>';
-                console.error('Failed to load optimization data:', err);
+                loadingText.style.display = 'none';
+                btnLoad.disabled = false;
+                alert('Failed to load recommendations. Please try again.');
+                console.error('Optimization error:', err);
             });
-    }
-
-    // === POPULATE OPTIMIZATION DROPDOWN ===
-    function populatePatientDropdown(patients) {
-        patientSelect.innerHTML = '<option value="">-- Select a patient --</option>';
-        patients.forEach(function(p) {
-            var opt = document.createElement('option');
-            opt.value = p.id;
-            opt.textContent = p.label + ' (Score: ' + p.score + ')';
-            patientSelect.appendChild(opt);
-        });
-        btnRecommend.disabled = true;
-    }
-
-    // === ENABLE BUTTON WHEN PATIENT SELECTED ===
-    patientSelect.addEventListener('change', function() {
-        btnRecommend.disabled = (this.value === '');
-        notifBanner.style.display = 'none';
-        resultsPanel.style.display = 'none';
     });
 
-    // === SHOW RECOMMENDATIONS ===
-    btnRecommend.addEventListener('click', function() {
-        var patientId = patientSelect.value;
-        if (!patientId || !optimData) return;
+    // === RENDER PATIENT-CENTRIC RECOMMENDATIONS ===
+    function renderPatientRecommendations(data) {
+        var patients = data.patients || [];
+        var results = data.results || {};
+        var html = '';
 
-        var patientResult = optimData.results[patientId];
-        if (!patientResult) {
-            recsList.innerHTML = '<p style="color: #666; padding: 10px;">No data available for this patient.</p>';
+        if (patients.length === 0) {
+            recsList.innerHTML = '<p style="color: #666; padding: 15px; text-align: center;">No patient data available.</p>';
             resultsPanel.style.display = 'block';
-            notifBanner.style.display = 'none';
             return;
         }
 
-        // Show notification if present
-        if (patientResult.notification) {
-            var notif = patientResult.notification;
-            notifLevel.textContent = notif.level === 'critical' ? 'CRITICAL: ' : 'NOTICE: ';
-            notifMessage.textContent = notif.message;
-            notifBanner.className = notif.level === 'critical'
-                ? 'optim-notification-critical'
-                : 'optim-notification-concerning';
-            notifBanner.style.display = 'block';
-        } else {
-            notifBanner.style.display = 'none';
-        }
+        // Sort patients by score (lowest first = most urgent)
+        patients.sort(function(a, b) { return a.score - b.score; });
 
-        // Render recommendations
-        var recs = patientResult.recommendations;
-        if (recs.length === 0) {
-            recsList.innerHTML = '<p style="color: #666; padding: 10px;">No feasible appointments found for this patient.</p>';
-        } else {
-            var html = '';
-            recs.forEach(function(rec) {
-                html += '<div class="appointment-item" style="margin-bottom: 10px;">';
-                html += '  <div>';
-                html += '    <strong>#' + rec.rank + ' - ' + rec.doctor_label + '</strong>';
-                html += '    <p style="font-size: 0.85rem; color: #666;">';
-                html += rec.timeslot_label + ' | ' + rec.dist_km + ' km away';
-                html += '    </p>';
-                html += '  </div>';
-                html += '  <div style="display: flex; align-items: center; gap: 10px;">';
-                html += '    <span style="font-weight: 600; font-size: 0.9rem;">Score: ' + rec.score.toFixed(2) + '</span>';
-                html += '    <button class="btn btn-success" style="padding: 5px 15px;"';
-                html += '      data-doctor-label="' + rec.doctor_label + '"';
-                html += '      data-timeslot-label="' + rec.timeslot_label + '"';
-                html += '      onclick="bookRecommendation(this)">Book</button>';
-                html += '  </div>';
-                html += '</div>';
-            });
-            recsList.innerHTML = html;
-        }
+        patients.forEach(function(patient, index) {
+            var patientResult = results[patient.id];
+            var recs = patientResult ? patientResult.recommendations : [];
+            var notif = patientResult ? patientResult.notification : null;
 
-        resultsPanel.style.display = 'block';
-    });
+            // Determine priority level
+            var priorityClass = 'priority-normal';
+            var priorityLabel = 'Normal';
+            if (patient.score < 3.0) {
+                priorityClass = 'priority-critical';
+                priorityLabel = 'Critical';
+            } else if (patient.score < 5.0) {
+                priorityClass = 'priority-concerning';
+                priorityLabel = 'Needs Attention';
+            }
 
-    // === BOOK A RECOMMENDATION (auto-fill the booking form) ===
-    function bookRecommendation(btn) {
-        var selectedPatientId = patientSelect.value;
-        var timeslotLabel = btn.getAttribute('data-timeslot-label');
-        var doctorLabel = btn.getAttribute('data-doctor-label');
+            html += '<div class="patient-rec-card" id="patient-card-' + patient.id + '">';
+            html += '  <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">';
+            html += '    <div style="flex: 1;">';
+            html += '      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">';
+            html += '        <strong style="font-size: 1.1rem;">#' + (index + 1) + ' - ' + patient.label + '</strong>';
+            html += '        <span class="priority-badge ' + priorityClass + '">' + priorityLabel + '</span>';
+            html += '      </div>';
+            html += '      <p style="font-size: 0.85rem; color: #666; margin: 0;">Rehab Score: <strong>' + patient.score + '/10</strong></p>';
 
-        // Visual feedback: highlight the clicked recommendation
-        var items = recsList.querySelectorAll('.appointment-item');
-        items.forEach(function(item) {
-            item.style.border = '';
+            if (notif) {
+                var notifColor = notif.level === 'critical' ? '#d32f2f' : '#f57c00';
+                html += '      <p style="font-size: 0.85rem; color: ' + notifColor + '; margin: 5px 0 0 0;">';
+                html += '        ' + notif.message + '</p>';
+            }
+
+            // Show the best timeslot options for this patient
+            if (recs.length > 0) {
+                html += '      <div style="margin-top: 10px;">';
+                recs.forEach(function(rec) {
+                    html += '        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid #eee;">';
+                    html += '          <div>';
+                    html += '            <span style="font-size: 0.9rem; color: #333;">' + rec.timeslot_label + '</span>';
+                    html += '            <span style="font-size: 0.8rem; color: #999; margin-left: 8px;">' + rec.dist_km + ' km</span>';
+                    html += '          </div>';
+                    html += '          <div style="display: flex; align-items: center; gap: 10px;">';
+                    html += '            <span class="score-badge">Score: ' + rec.score.toFixed(2) + '</span>';
+                    html += '            <button class="btn btn-success" style="padding: 5px 15px;"';
+                    html += '              data-patient-id="' + patient.id + '"';
+                    html += '              data-patient-label="' + patient.label + '"';
+                    html += '              data-timeslot-label="' + rec.timeslot_label + '"';
+                    html += '              onclick="bookPatient(this)">Book</button>';
+                    html += '          </div>';
+                    html += '        </div>';
+                });
+                html += '      </div>';
+            } else {
+                html += '      <p style="font-size: 0.85rem; color: #999; margin-top: 8px;">No available timeslots found.</p>';
+            }
+
+            html += '    </div>';
+            html += '  </div>';
+            html += '</div>';
         });
-        btn.closest('.appointment-item').style.border = '2px solid #28a745';
 
-        // Parse timeslot label (e.g., "Mon 9:00 AM", "Tue 2:00 PM")
-        var dateStr = '';
-        var timeStr = '';
+        recsList.innerHTML = html;
+        resultsPanel.style.display = 'block';
+    }
 
-        // Extract day and time from format like "Mon 9:00 AM"
+    // === BOOK A PATIENT (auto-fill the booking form) ===
+    function bookPatient(btn) {
+        var patientId = btn.getAttribute('data-patient-id');
+        var patientLabel = btn.getAttribute('data-patient-label');
+        var timeslotLabel = btn.getAttribute('data-timeslot-label');
+
+        // Highlight the selected row
+        document.querySelectorAll('.patient-rec-card').forEach(function(card) {
+            card.style.border = '1px solid #ddd';
+        });
+        btn.closest('.patient-rec-card').style.border = '2px solid #28a745';
+
+        // Parse timeslot (e.g., "Mon 9:00 AM")
         var match = timeslotLabel.match(/^(\w+)\s+(\d+:\d+)\s*(AM|PM)/i);
         if (match) {
-            var dayAbbrev = match[1];  // Mon, Tue, Wed, etc.
-            var time12hr = match[2];   // 9:00, 2:00, etc.
-            var ampm = match[3].toUpperCase();  // AM or PM
+            var dayAbbrev = match[1];
+            var time12hr = match[2];
+            var ampm = match[3].toUpperCase();
 
-            // Convert time to 24-hour format
+            // Convert to 24-hour
             var timeParts = time12hr.split(':');
             var hour = parseInt(timeParts[0]);
             var minute = timeParts[1];
-
-            if (ampm === 'PM' && hour !== 12) {
-                hour += 12;
-            } else if (ampm === 'AM' && hour === 12) {
-                hour = 0;
-            }
+            if (ampm === 'PM' && hour !== 12) hour += 12;
+            else if (ampm === 'AM' && hour === 12) hour = 0;
             var timeStr = hour.toString().padStart(2, '0') + ':' + minute;
 
-            // Calculate the next occurrence of this day of week
+            // Calculate date from day of week
             var dayMap = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0 };
             var targetDay = dayMap[dayAbbrev];
             if (targetDay !== undefined) {
@@ -422,12 +465,21 @@
                     String(targetDate.getMonth() + 1).padStart(2, '0') + '-' +
                     String(targetDate.getDate()).padStart(2, '0');
 
-                // Auto-populate the booking form fields
-                var bookPatient = document.getElementById('book-patient-select');
+                // Auto-populate the booking form
+                var bookPatientSelect = document.getElementById('book-patient-select');
                 var dateInput = document.querySelector('input[name="appointment_date"]');
                 var timeSelect = document.querySelector('select[name="appointment_time"]');
 
-                if (bookPatient && selectedPatientId) bookPatient.value = selectedPatientId;
+                // Match patient by name in the booking dropdown
+                if (bookPatientSelect) {
+                    var options = bookPatientSelect.options;
+                    for (var i = 0; i < options.length; i++) {
+                        if (options[i].text.indexOf(patientLabel) !== -1 || options[i].text === patientLabel) {
+                            bookPatientSelect.selectedIndex = i;
+                            break;
+                        }
+                    }
+                }
                 if (dateInput) dateInput.value = dateStr;
                 if (timeSelect) timeSelect.value = timeStr;
             }
@@ -462,75 +514,5 @@
             }
         }
     });
-
-    // === CAMERA PERMISSION TEST ===
-    function requestCameraPermission() {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(function(stream) {
-                    alert('Camera permission granted!');
-                    // Stop all tracks immediately after permission
-                    stream.getTracks().forEach(track => track.stop());
-                })
-                .catch(function(err) {
-                    alert('Camera permission denied or error: ' + err.message);
-                });
-        } else {
-            alert('Camera access is not supported in this browser.');
-        }
-    }
-
-    // Only declare patientSelect once and wrap in DOMContentLoaded to avoid redeclaration
-    window.addEventListener('DOMContentLoaded', function() {
-        // Fetch and display top 3 optimization suggestions for selected patient
-        function fetchAndDisplayTop3Suggestions(patientId) {
-            if (!patientId) {
-                document.getElementById('optim-recommendations').innerHTML = '<em>Select a patient to view suggestions.</em>';
-                return;
-            }
-            fetch(`/api/optimize/patient/${patientId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        document.getElementById('optim-recommendations').innerHTML = `<span class='text-danger'>${data.error}</span>`;
-                        return;
-                    }
-                    const recs = data.recommendations || [];
-                    if (recs.length === 0) {
-                        document.getElementById('optim-recommendations').innerHTML = '<em>No suggestions available.</em>';
-                        return;
-                    }
-                    let html = '<ol>';
-                    recs.forEach(rec => {
-                        html += `<li><strong>${rec.title || rec.label || 'Suggestion'}</strong><br><span>${rec.description || rec.reason || ''}</span></li>`;
-                    });
-                    html += '</ol>';
-                    if (data.notification) {
-                        html += `<div class='alert alert-info mt-2'>${data.notification}</div>`;
-                    }
-                    document.getElementById('optim-recommendations').innerHTML = html;
-                })
-                .catch(err => {
-                    document.getElementById('optim-recommendations').innerHTML = `<span class='text-danger'>Error loading suggestions.</span>`;
-                });
-        }
-
-        // Attach event listener to patient select dropdown
-        const patientSelect = document.getElementById('optim-patient-select');
-        if (patientSelect) {
-            patientSelect.addEventListener('change', function() {
-                const patientId = this.value;
-                fetchAndDisplayTop3Suggestions(patientId);
-            });
-            // Optionally, trigger on page load if a patient is pre-selected
-            if (patientSelect.value) {
-                fetchAndDisplayTop3Suggestions(patientSelect.value);
-            }
-        }
-    });
-
-    // === INIT ===
-    loadOptimizationData();
 </script>
-<button onclick="requestCameraPermission()" class="btn btn-primary" style="margin: 20px 0;">Test Camera Permission</button>
 {% endblock %}
