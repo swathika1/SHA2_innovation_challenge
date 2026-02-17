@@ -364,7 +364,7 @@ def patient_dashboard():
         })
 
     # Get session history for charts (last 15 sessions, oldest first)
-    chart_sessions = query_db('''
+    chart_sessions_raw = query_db('''
         SELECT s.quality_score, s.pain_before, s.pain_after, s.effort_level,
                s.completed_at
         FROM sessions s
@@ -373,6 +373,7 @@ def patient_dashboard():
         ORDER BY s.completed_at ASC
         LIMIT 15
     ''', (session['user_id'],))
+    chart_sessions = [dict(cs) for cs in chart_sessions_raw] if chart_sessions_raw else []
 
     # Get upcoming appointments (simpler query - just get all scheduled)
     upcoming_appointments = query_db('''
@@ -1704,20 +1705,29 @@ def api_session_complete():
 
         import json
 
-        # Compute aggregates from session_exercises
+        # Get all active workouts for this patient — these define the FULL session requirement
+        all_workouts = query_db('''
+            SELECT w.id, w.sets, w.reps
+            FROM workouts w
+            WHERE w.patient_id = ? AND w.is_active = 1
+        ''', (session['user_id'],))
+
+        # Total reps required = sum across ALL active workouts (not just saved ones)
+        total_reps_required = 0
+        for w in (all_workouts or []):
+            total_reps_required += w['sets'] * w['reps']
+
+        # Compute completed reps and quality from saved session_exercises only
         exercises = query_db('''
             SELECT quality_score, sets_required, sets_completed
             FROM session_exercises WHERE session_id = ?
         ''', (session_id,))
 
-        total_reps_required = 0
         total_reps_completed = 0
         quality_scores = []
 
         for ex in (exercises or []):
-            req = json.loads(ex['sets_required']) if ex['sets_required'] else {}
             comp = json.loads(ex['sets_completed']) if ex['sets_completed'] else {}
-            total_reps_required += sum(int(v) for v in req.values())
             total_reps_completed += sum(int(v) for v in comp.values())
             if ex['quality_score']:
                 quality_scores.append(ex['quality_score'])

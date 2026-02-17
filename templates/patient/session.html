@@ -366,15 +366,16 @@
             const exReq = w.sets * w.reps;
             totalReq += exReq;
             if (i < currentExIndex) {
+                // Past exercise — use saved data if available, else 0
                 const saved = exerciseData[i];
                 if (saved) {
                     totalDone += Object.values(saved.sets_completed).reduce((a, b) => a + b, 0);
-                } else {
-                    totalDone += exReq;
                 }
+                // If no saved data, count 0 reps done (not started / skipped)
             } else if (i === currentExIndex) {
                 totalDone += getTotalRepsCompleted();
             }
+            // Future exercises (i > currentExIndex) contribute 0 to totalDone
         });
         return totalReq > 0 ? Math.round(totalDone / totalReq * 100) : 0;
     }
