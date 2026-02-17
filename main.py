@@ -14,6 +14,18 @@ from database import get_db, close_db, query_db, execute_db
 from functools import wraps
 from datetime import datetime, date
 import uuid
+import traceback
+
+# Import MeriLion chatbot modules
+try:
+    from merilion_client import query_merilion_sync
+    from risk_engine import calculate_risk_score, REFERRAL_MESSAGES
+    from exercise_advisor import get_exercise_modification
+    from langdetect import detect as detect_language
+    CHATBOT_AVAILABLE = True
+except ImportError as e:
+    CHATBOT_AVAILABLE = False
+    print(f"[WARNING] Chatbot modules not fully available: {e}")
 
 # Import optimization module (from computer_vision branch)
 try:
@@ -317,7 +329,8 @@ def patient_dashboard():
                          chart_sessions=chart_sessions if chart_sessions else [],
                          upcoming_appointments=upcoming_appointments if upcoming_appointments else [],
                          caregivers=caregivers if caregivers else [],
-                         pending_caregiver_requests=pending_requests if pending_requests else [])
+                         pending_caregiver_requests=pending_requests if pending_requests else [],
+                         chat_patient_id=None)
 
 
 @app.route('/patient/session')
@@ -897,11 +910,18 @@ def caregiver_dashboard():
         LIMIT 10
     ''', (session['user_id'],))
 
+    # Build data for chatbot
+    patients_list = monitored_patients if monitored_patients else []
+    first_patient_id = patients_list[0]['id'] if patients_list else None
+    caregiver_patient_list = [{'id': p['id'], 'name': p['name']} for p in patients_list]
+
     return render_template('caregiver/dashboard.html',
-                         patients=monitored_patients if monitored_patients else [],
+                         patients=patients_list,
                          recent_sessions=recent_sessions if recent_sessions else [],
                          alerts=alerts,
-                         my_requests=my_pending_requests if my_pending_requests else [])
+                         my_requests=my_pending_requests if my_pending_requests else [],
+                         chat_patient_id=first_patient_id,
+                         caregiver_patient_list=caregiver_patient_list)
 
 
 # ==================== CAREGIVER ACCESS MANAGEMENT ====================
@@ -1478,6 +1498,146 @@ def api_live_feedback():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ==================== MERILION CHATBOT API ====================
+
+@app.route('/api/chat', methods=['POST'])
+@login_required
+def api_chat():
+    """MeriLion AI chatbot endpoint for patient/caregiver use."""
+    if not CHATBOT_AVAILABLE:
+        return jsonify({"error": "Chatbot modules not available"}), 503
+
+    data = request.get_json()
+    if not data or 'message' not in data:
+        return jsonify({"error": "Missing 'message' field"}), 400
+
+    message = data['message']
+    conversation_history = data.get('conversation_history', [])
+    role = session.get('role')
+    user_id = session['user_id']
+
+    # Determine which patient we're chatting about
+    if role == 'patient':
+        patient_id = user_id
+    elif role == 'caregiver':
+        # Caregiver must specify which patient they're asking about
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({"error": "Caregiver must specify patient_id"}), 400
+        # Verify caregiver has access to this patient
+        access = query_db(
+            'SELECT id FROM caregiver_patient WHERE caregiver_id = ? AND patient_id = ?',
+            (user_id, patient_id), one=True
+        )
+        if not access:
+            return jsonify({"error": "You do not have access to this patient"}), 403
+    else:
+        return jsonify({"error": "Chat is available for patients and caregivers only"}), 403
+
+    try:
+        # 1. Detect language
+        try:
+            lang = detect_language(message)
+            lang = lang if lang in ["en", "zh-cn", "ms", "ta"] else "en"
+            lang_key = "zh" if "zh" in lang else lang
+        except Exception:
+            lang_key = "en"
+
+        # 2. Build patient context from rehab_coach.db
+        patient_user = query_db('SELECT * FROM users WHERE id = ?', (patient_id,), one=True)
+        patient_info = query_db('SELECT * FROM patients WHERE user_id = ?', (patient_id,), one=True)
+        recent_sessions_db = query_db('''
+            SELECT s.*, e.name as exercise_name
+            FROM sessions s
+            JOIN workouts w ON s.workout_id = w.id
+            JOIN exercises e ON w.exercise_id = e.id
+            WHERE s.patient_id = ?
+            ORDER BY s.completed_at DESC
+            LIMIT 5
+        ''', (patient_id,))
+
+        # Build context string for MeriLion
+        patient_context = "New patient - no history available."
+        if patient_user and patient_info:
+            patient_context = f"""
+Name: {patient_user['name']}
+Condition: {patient_info['condition']}
+Week: {patient_info['current_week']}
+Adherence Rate: {patient_info['adherence_rate']}%
+Avg Pain Level: {patient_info['avg_pain_level']}/10
+Avg Quality Score: {patient_info['avg_quality_score']}/100
+"""
+            if recent_sessions_db:
+                patient_context += "\nRecent Sessions:\n"
+                for s in recent_sessions_db:
+                    patient_context += f"- {s['exercise_name']}: Quality {s['quality_score']}, Pain {s['pain_after']}/10 ({s['completed_at']})\n"
+
+        # Get workouts for exercise plan context
+        workouts = query_db('''
+            SELECT e.name FROM workouts w
+            JOIN exercises e ON w.exercise_id = e.id
+            WHERE w.patient_id = ? AND w.is_active = 1
+        ''', (patient_id,))
+        current_plan = ", ".join([w['name'] for w in workouts]) if workouts else "general fitness plan"
+
+        # 3. Risk scoring - build simple session objects for the risk engine
+        class SimpleSession:
+            def __init__(self, pain):
+                self.pain_reported = pain
+
+        risk_sessions = []
+        if recent_sessions_db:
+            for s in recent_sessions_db[:3]:
+                pain_val = s['pain_after']
+                risk_sessions.append(SimpleSession(str(pain_val) if pain_val and pain_val > 3 else "none"))
+
+        risk = calculate_risk_score(message, lang_key, risk_sessions)
+
+        # 4. If high risk — return referral immediately
+        if risk["should_refer"]:
+            referral_msg = REFERRAL_MESSAGES.get(lang_key, REFERRAL_MESSAGES["en"])
+            return jsonify({
+                "response": referral_msg,
+                "risk_score": risk["score"],
+                "referred": True,
+                "language": lang_key
+            })
+
+        # 5. Check for pain + exercise context
+        pain_keywords = ["pain", "hurts", "sore", "ache", "sakit", "疼", "வலி"]
+        exercise_keywords = ["exercise", "workout", "training", "latihan", "运动", "உடற்பயிற்சி"]
+        message_lower = message.lower()
+
+        if any(p in message_lower for p in pain_keywords) and any(e in message_lower for e in exercise_keywords):
+            body_parts = ["knee", "back", "shoulder", "ankle", "hip", "neck", "wrist", "elbow"]
+            pain_area = "general"
+            for part in body_parts:
+                if part in message_lower:
+                    pain_area = part
+                    break
+            modification = get_exercise_modification(pain_area, current_plan)
+            conversation_history.append({"role": "system", "content": f"Exercise context: {modification}"})
+
+        # 6. Add caregiver context if applicable
+        if role == 'caregiver':
+            patient_context += f"\n[Note: This conversation is with a caregiver, not the patient directly. Provide information appropriate for a family caregiver.]"
+
+        # 7. Query MeriLion
+        full_history = conversation_history + [{"role": "user", "content": message}]
+        response_text = query_merilion_sync(full_history, patient_context)
+
+        return jsonify({
+            "response": response_text,
+            "risk_score": risk["score"],
+            "referred": False,
+            "language": lang_key
+        })
+
+    except Exception as e:
+        print(f"[ERROR] Chat API failed: {traceback.format_exc()}")
+        return jsonify({"error": f"Chat service error: {str(e)}"}), 500
 
 
 # ==================== DATABASE INITIALIZATION ====================
