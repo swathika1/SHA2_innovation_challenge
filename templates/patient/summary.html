@@ -4,116 +4,191 @@
 
 {% block header %}
 <header class="header">
-    <h1>📊 Session Summary</h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}">🏠 Home Rehab Coach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('progress_history') }}">View Progress</a>
+        <a href="{{ url_for('patient_appointments') }}">Consultations</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account">��</button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>{{ user.name if user else 'Patient' }}</strong></div>
+                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon">�</span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                </div>
+            </div>
+        </div>
     </nav>
 </header>
 {% endblock %}
 
 {% block content %}
-<h2 style="margin-bottom: 20px;">Great job completing your session! 🎉</h2>
+<style>
+    .summary-container { max-width: 820px; margin: 30px auto; padding: 0 16px; }
+    .summary-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #fff; border-radius: 14px; padding: 30px 34px; margin-bottom: 24px;
+        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;
+    }
+    .summary-header h2 { margin: 0; font-size: 1.5rem; }
+    .summary-header .meta { font-size: .9rem; opacity: .85; margin-top: 4px; }
+    .overall-badge {
+        font-size: 2.2rem; font-weight: 800; background: rgba(255,255,255,.2);
+        padding: 14px 22px; border-radius: 12px; text-align: center; line-height: 1;
+    }
+    .overall-badge small { display: block; font-size: .7rem; font-weight: 400; margin-top: 4px; }
 
-<!-- Summary Stats Grid -->
-<div class="summary-grid">
-    <div class="summary-stat highlight">
-        <div class="value">28 / 30</div>
-        <div class="label">Reps Completed</div>
-    </div>
-    <div class="summary-stat highlight">
-        <div class="value">82</div>
-        <div class="label">Form Quality Score</div>
-    </div>
-    <div class="summary-stat">
-        <div class="value">+5°</div>
-        <div class="label">ROM Improvement</div>
-    </div>
-    <div class="summary-stat">
-        <div class="value">3</div>
-        <div class="label">Sets Completed</div>
-    </div>
-</div>
+    /* Stat cards row */
+    .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .stat-card {
+        background: #fff; border-radius: 12px; padding: 18px; text-align: center;
+        box-shadow: 0 2px 12px rgba(0,0,0,.06);
+    }
+    .stat-card .stat-icon { font-size: 1.6rem; margin-bottom: 6px; }
+    .stat-card .stat-value { font-size: 1.4rem; font-weight: 700; color: #333; }
+    .stat-card .stat-label { font-size: .8rem; color: #888; margin-top: 2px; }
 
-<div class="grid grid-2" style="margin-top: 20px;">
-    <!-- Mistakes Detected -->
-    <div class="mistakes-list">
-        <div class="card-header">Common Mistakes Detected</div>
-        <div class="mistake-item">
-            <span>Knees tracking inward</span>
-            <span>4 times</span>
+    /* Exercise breakdown */
+    .exercise-table {
+        width: 100%; border-collapse: collapse; background: #fff;
+        border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.06);
+        margin-bottom: 24px;
+    }
+    .exercise-table th {
+        background: #f0f2f5; text-align: left; padding: 12px 16px; font-size: .85rem;
+        color: #555; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .exercise-table td { padding: 14px 16px; border-top: 1px solid #eee; font-size: .92rem; }
+    .exercise-table tr:hover td { background: #f9faff; }
+    .perc-bar { display: inline-block; height: 8px; border-radius: 4px; vertical-align: middle; margin-right: 6px; }
+    .perc-bar.full  { background: #28a745; }
+    .perc-bar.half  { background: #ffc107; }
+    .perc-bar.low   { background: #dc3545; }
+
+    /* Actions */
+    .action-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+    .action-btn {
+        padding: 14px 28px; font-size: 1rem; font-weight: 600; border: none; border-radius: 10px;
+        cursor: pointer; transition: .2s; text-decoration: none; text-align: center;
+    }
+    .action-btn:hover { transform: translateY(-1px); }
+    .action-primary { background: linear-gradient(135deg,#007bff,#0056d2); color: #fff; }
+    .action-secondary { background: #e9ecef; color: #333; }
+    .action-success { background: linear-gradient(135deg,#28a745,#20c997); color: #fff; }
+</style>
+
+<div class="summary-container">
+
+    {% if session_data %}
+    <!-- Header -->
+    <div class="summary-header">
+        <div>
+            <h2>Session Summary 🎯</h2>
+            <div class="meta">
+                {% if session_data.started_at %}
+                {{ session_data.started_at[:16] | replace('T', ' ') }}
+                {% endif %}
+                {% if overall_duration %}
+                  · {{ (overall_duration // 60) }}m {{ overall_duration % 60 }}s total
+                {% endif %}
+            </div>
         </div>
-        <div class="mistake-item">
-            <span>Movement too fast</span>
-            <span>3 times</span>
-        </div>
-        <div class="mistake-item">
-            <span>Incomplete range of motion</span>
-            <span>2 times</span>
-        </div>
-        <div class="mistake-item">
-            <span>Back not straight</span>
-            <span>1 time</span>
+        <div class="overall-badge">
+            {{ session_data.completed_perc | default(0) | round(0) | int }}%
+            <small>completed</small>
         </div>
     </div>
-    
-    <!-- Session Details -->
-    <div class="card">
-        <div class="card-header">Session Details</div>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-            <div style="display: flex; justify-content: space-between;">
-                <span>Exercise:</span>
-                <strong>Knee Extension</strong>
+
+    <!-- Stat cards -->
+    <div class="stat-row">
+        <div class="stat-card">
+            <div class="stat-icon">🎯</div>
+            <div class="stat-value">{{ session_data.quality_score | default(0) | round(1) }}</div>
+            <div class="stat-label">Quality Score</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">😣</div>
+            <div class="stat-value">{{ session_data.pain_before | default(0) }} → {{ session_data.pain_after | default(0) }}</div>
+            <div class="stat-label">Pain (Before → After)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">💪</div>
+            <div class="stat-value">{{ session_data.effort_level | default(5) }} / 10</div>
+            <div class="stat-label">Effort Level</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">⏱️</div>
+            <div class="stat-value">
+                {% if overall_duration %}{{ (overall_duration // 60) }}:{{ '%02d' | format(overall_duration % 60) }}{% else %}--{% endif %}
             </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span>Duration:</span>
-                <strong>18 minutes</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span>Pain Level Reported:</span>
-                <strong>3 / 10</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span>Perceived Exertion:</span>
-                <strong>5 / 10</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span>Date:</span>
-                <strong>Feb 7, 2026</strong>
-            </div>
+            <div class="stat-label">Duration</div>
         </div>
     </div>
-</div>
 
-<!-- Motivational Feedback -->
-<div class="motivational-box" style="margin-top: 20px;">
-    <div style="font-size: 2rem; margin-bottom: 10px;">🌟</div>
-    <p><strong>Excellent work!</strong> Your form quality improved by 5% compared to your last session. Keep up the great consistency!</p>
-</div>
+    <!-- Exercise breakdown table -->
+    {% if exercises %}
+    <table class="exercise-table">
+        <thead>
+            <tr>
+                <th>Exercise</th>
+                <th>Quality</th>
+                <th>Completion</th>
+                <th>Sets (Done / Target)</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ex in exercises %}
+            <tr>
+                <td><strong>{{ ex.exercise_name }}</strong></td>
+                <td>{{ ex.quality_score | default(0) }}</td>
+                <td>
+                    {% set perc = ex.completion_perc | default(0) %}
+                    <span class="perc-bar {% if perc >= 100 %}full{% elif perc >= 50 %}half{% else %}low{% endif %}"
+                          style="width: {{ [perc, 100] | min }}px;"></span>
+                    {{ perc }}%
+                </td>
+                <td>
+                    {% set done = ex.sets_completed.values() | list | length %}
+                    {% set total = ex.sets_required.values() | list | length %}
+                    {{ done }} / {{ total }}
+                </td>
+                <td>
+                    {% if ex.duration_seconds %}
+                    {{ (ex.duration_seconds // 60) }}:{{ '%02d' | format(ex.duration_seconds % 60) }}
+                    {% else %}
+                    --
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
 
-<!-- Comparison Chart -->
-<div class="card" style="margin-top: 20px;">
-    <div class="card-header">Performance vs Previous Session</div>
-    <div style="display: flex; gap: 40px; justify-content: center; padding: 20px;">
-        <div style="text-align: center;">
-            <div style="font-size: 1.5rem; font-weight: 700;">Today</div>
-            <div style="font-size: 3rem; font-weight: 700; color: #28a745;">82</div>
-            <div style="color: #666;">Quality Score</div>
-        </div>
-        <div style="display: flex; align-items: center; font-size: 2rem; color: #28a745;">
-            ↑ +5
-        </div>
-        <div style="text-align: center;">
-            <div style="font-size: 1.5rem; font-weight: 700;">Last Session</div>
-            <div style="font-size: 3rem; font-weight: 700; color: #666;">77</div>
-            <div style="color: #666;">Quality Score</div>
-        </div>
+    <!-- Action buttons — conditional on completion -->
+    <div class="action-row">
+        {% set completion = session_data.completed_perc | default(0) %}
+        {% if completion < 100 %}
+            <a href="{{ url_for('rehab_session') }}" class="action-btn action-primary">🔄 Restart Session</a>
+            <a href="{{ url_for('rehab_session') }}" class="action-btn action-success">▶️ Start From Where You Left</a>
+            <a href="{{ url_for('patient_dashboard') }}" class="action-btn action-secondary">🏠 Go to Dashboard</a>
+        {% else %}
+            <a href="{{ url_for('rehab_session') }}" class="action-btn action-primary">🔄 Restart Session</a>
+            <a href="{{ url_for('patient_dashboard') }}" class="action-btn action-secondary">🏠 Go to Dashboard</a>
+        {% endif %}
     </div>
-</div>
 
-<!-- Actions -->
-<div style="display: flex; gap: 15px; margin-top: 30px; justify-content: center;">
-    <a href="{{ url_for('patient_dashboard') }}" class="btn btn-primary btn-large">Return to Dashboard</a>
-    <a href="{{ url_for('progress_history') }}" class="btn btn-large">View Full Progress</a>
+    {% else %}
+    <!-- No session data -->
+    <div style="text-align:center; padding:60px 20px;">
+        <div style="font-size:3rem;margin-bottom:16px;">📋</div>
+        <h2>No Session Data</h2>
+        <p style="color:#666;">Complete a session to see your summary here.</p>
+        <a href="{{ url_for('rehab_session') }}" class="action-btn action-primary" style="display:inline-block;margin-top:16px;">Start a Session</a>
+    </div>
+    {% endif %}
+
 </div>
 {% endblock %}

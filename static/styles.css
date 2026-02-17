@@ -27,34 +27,185 @@ body {
 
 /* ==================== HEADER / NAV ==================== */
 .header {
-    background: #fff;
-    border-bottom: 2px solid #ddd;
-    padding: 15px 20px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    padding: 0 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    height: 64px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    position: sticky;
+    top: 0;
+    z-index: 100;
 }
 
 .header h1 {
-    font-size: 1.5rem;
-    font-weight: 600;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.header h1 a {
+    text-decoration: none;
+    color: inherit;
 }
 
 .nav-links {
     display: flex;
-    gap: 20px;
+    gap: 4px;
+    align-items: center;
 }
 
 .nav-links a {
     text-decoration: none;
-    color: #333;
-    padding: 8px 16px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.75);
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    position: relative;
 }
 
 .nav-links a:hover {
-    background: #eee;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.nav-links a.active {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-weight: 600;
+}
+
+.nav-links a.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 3px;
+    background: #4fc3f7;
+    border-radius: 3px 3px 0 0;
+}
+
+/* User dropdown */
+.nav-user {
+    position: relative;
+    margin-left: 8px;
+}
+
+.nav-user-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: #fff;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.nav-user-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: scale(1.05);
+}
+
+.nav-user-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    padding-top: 8px;
+    min-width: 200px;
+    z-index: 200;
+}
+
+.nav-user-dropdown-inner {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    animation: dropdownFadeIn 0.2s ease;
+}
+
+@keyframes dropdownFadeIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.nav-user:hover .nav-user-dropdown {
+    display: block;
+}
+
+.nav-user-dropdown .dropdown-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.85rem;
+    color: #888;
+}
+
+.nav-user-dropdown .dropdown-header strong {
+    display: block;
+    font-size: 0.95rem;
+    color: #333;
+    margin-top: 2px;
+}
+
+.nav-user-dropdown a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    text-decoration: none;
+    color: #333;
+    font-size: 0.9rem;
+    transition: background 0.15s;
+    background: transparent;
+}
+
+.nav-user-dropdown a:hover {
+    background: #f5f7ff;
+    color: #1a73e8;
+}
+
+.nav-user-dropdown a.active {
+    background: #eef3ff;
+    color: #1a73e8;
+    font-weight: 600;
+}
+
+.nav-user-dropdown a.active::after {
+    display: none;
+}
+
+.nav-user-dropdown a .dropdown-icon {
+    font-size: 1.1rem;
+    width: 20px;
+    text-align: center;
+}
+
+.nav-user-dropdown .dropdown-divider {
+    height: 1px;
+    background: #f0f0f0;
+    margin: 0;
+}
+
+.nav-user-dropdown a.dropdown-logout {
+    color: #e53935;
+}
+
+.nav-user-dropdown a.dropdown-logout:hover {
+    background: #fff5f5;
 }
 
 /* ==================== BUTTONS ==================== */
