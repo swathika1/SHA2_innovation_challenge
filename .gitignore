@@ -1,4 +1,5 @@
 venv/
+<<<<<<< HEAD
 
 # Python cache
 __pycache__/
@@ -24,4 +25,9 @@ instance/
 # OS
 .DS_Store
 Thumbs.db
+=======
+.venv/
+>>>>>>> Hrithik_mass
 .DS_Store
+chroma_db/
+vector_store/

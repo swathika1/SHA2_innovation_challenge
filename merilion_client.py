@@ -17,7 +17,7 @@ def _build_headers() -> dict:
     }
 
 
-def _build_chat_payload(messages: list, patient_context: str) -> dict:
+def _build_chat_payload(messages: list, patient_context: str, rag_context: str = "") -> dict:
     """Build payload for MERaLiON /chat endpoint.
 
     MERaLiON responds best when the full prompt is in the 'instruction' field.
@@ -44,6 +44,9 @@ def _build_chat_payload(messages: list, patient_context: str) -> dict:
     if patient_context and patient_context != "New patient - no history available.":
         instruction_parts.append(f"\nPatient Info:\n{patient_context}")
 
+    if rag_context:
+        instruction_parts.append(f"\n{rag_context}")
+
     if history_lines:
         instruction_parts.append("\nPrevious conversation:\n" + "\n".join(history_lines[-6:]))
 
@@ -68,10 +71,10 @@ def _extract_response(data: dict) -> str:
         return str(data)
 
 
-def query_merilion_sync(messages: list, patient_context: str) -> str:
+def query_merilion_sync(messages: list, patient_context: str, rag_context: str = "") -> str:
     """Synchronous version for Flask routes."""
     headers = _build_headers()
-    payload = _build_chat_payload(messages, patient_context)
+    payload = _build_chat_payload(messages, patient_context, rag_context)
 
     response = requests.post(
         f"{MERILION_BASE_URL}/chat",
@@ -83,10 +86,10 @@ def query_merilion_sync(messages: list, patient_context: str) -> str:
     return _extract_response(response.json())
 
 
-async def query_merilion(messages: list, patient_context: str) -> str:
+async def query_merilion(messages: list, patient_context: str, rag_context: str = "") -> str:
     """Async version for FastAPI routes."""
     headers = _build_headers()
-    payload = _build_chat_payload(messages, patient_context)
+    payload = _build_chat_payload(messages, patient_context, rag_context)
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
