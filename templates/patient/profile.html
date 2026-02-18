@@ -332,6 +332,65 @@
             </div>
         </div>
 
+        <!-- Appointment Preferences -->
+        <div class="info-card">
+            <div class="info-card-title">
+                <span class="card-icon">⚙️</span> Appointment Preferences
+            </div>
+            {% if patient %}
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Appointment Urgency</span>
+                    <span class="info-value">
+                        {{ patient.urgency if patient.urgency else 'Medium' }}
+                        {% if patient.urgency == 'High' %}🔴{% elif patient.urgency == 'Medium' %}🟡{% else %}🟢{% endif %}
+                    </span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Maximum Travel Distance</span>
+                    <span class="info-value">
+                        {{ patient.max_distance if patient.max_distance else '20' }} km
+                    </span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Pincode / Postal Code</span>
+                    <span class="info-value">{{ patient.address if patient.address else '—  Not set' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Specialty Needed</span>
+                    <span class="info-value">{{ patient.specialty_needed if patient.specialty_needed else 'General' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Preferred Doctor</span>
+                    <span class="info-value">
+                        {% if doctor %}
+                            {{ doctor.name }}
+                        {% else %}
+                            —  Auto-assigned
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Current Rehab Score</span>
+                    <span class="info-value">
+                        {{ patient.avg_quality_score if patient.avg_quality_score else '—' }}/10
+                        {% if patient.avg_quality_score %}
+                            {% if patient.avg_quality_score < 3 %}❗{% elif patient.avg_quality_score < 5 %}⚠️{% else %}✅{% endif %}
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e8ebf0;">
+                <a href="{{ url_for('patient_appointments') }}" class="btn btn-primary" style="text-decoration: none; display: inline-block; padding: 10px 20px; background: #1a73e8; color: white; border-radius: 6px; font-weight: 600;">
+                    📝 Edit Preferences
+                </a>
+                <small style="color: #666; margin-left: 15px;">Update your scheduling preferences on the Appointments page</small>
+            </div>
+            {% else %}
+            <p class="no-assignment">Patient profile not found</p>
+            {% endif %}
+        </div>
+
     </div>
 </div>
 {% endblock %}

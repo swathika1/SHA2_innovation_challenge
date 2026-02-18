@@ -5,13 +5,6 @@
 {% block header %}
 <header class="header">
     <h1>📹 Video Consultation</h1>
-    <nav class="nav-links">
-        {% if is_doctor %}
-            <a href="{{ url_for('clinician_dashboard') }}">← Back to Dashboard</a>
-        {% else %}
-            <a href="{{ url_for('patient_dashboard') }}">← Back to Dashboard</a>
-        {% endif %}
-    </nav>
 </header>
 {% endblock %}
 
@@ -35,114 +28,106 @@
                     {% endif %}
                 </p>
             </div>
-            <div style="text-align: right;">
-                <span class="status-badge" style="background: #28a745; color: white; padding: 5px 10px; border-radius: 4px;">
-                    🟢 Ready to Connect
-                </span>
-            </div>
         </div>
     </div>
     
-    <!-- Video Call Section -->
-    <div class="card" style="padding: 20px;">
-        <h3>Join Video Call</h3>
-        
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin-bottom: 15px;">
-                <strong>Room ID:</strong> <code style="background: #e9ecef; padding: 2px 8px; border-radius: 4px;">{{ room_id }}</code>
-            </p>
-            
-            {% if is_doctor %}
-                <!-- Doctor View -->
-                <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                    <p style="margin: 0; color: #155724;">
-                        <strong>👨‍⚕️ You are the HOST</strong><br>
-                        <small>Click the button below to start the meeting. The patient will be able to join once you're in.</small>
-                    </p>
-                </div>
-                <button onclick="openJitsiAsHost()" class="btn btn-primary btn-large" style="width: 100%;">
-                    🎬 Start Meeting as Host
-                </button>
-            {% else %}
-                <!-- Patient View -->
-                <div style="background: #cce5ff; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                    <p style="margin: 0; color: #004085;">
-                        <strong>🧑‍🦽 You are joining as PARTICIPANT</strong><br>
-                        <small>Click the button below to join. Make sure your doctor has started the meeting first.</small>
-                    </p>
-                </div>
-                <button onclick="openJitsiAsPatient()" class="btn btn-primary btn-large" style="width: 100%;">
-                    📞 Join Meeting
-                </button>
-            {% endif %}
-        </div>
-        
-        <!-- Patient Info for Doctor -->
-        {% if is_doctor and appointment.condition %}
-        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
-            <h4>Patient Quick Stats</h4>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 10px;">
-                <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center;">
-                    <div style="font-size: 1.5rem; font-weight: bold;">{{ appointment.adherence_rate or 0 }}%</div>
-                    <div style="font-size: 0.8rem; color: #666;">Adherence</div>
-                </div>
-                <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center;">
-                    <div style="font-size: 1.5rem; font-weight: bold;">{{ appointment.avg_pain_level or 0 }}/10</div>
-                    <div style="font-size: 0.8rem; color: #666;">Avg Pain</div>
-                </div>
-                <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center;">
-                    <div style="font-size: 1.5rem; font-weight: bold;">{{ appointment.avg_quality_score or 0 }}%</div>
-                    <div style="font-size: 0.8rem; color: #666;">Form Quality</div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-        
-        <!-- Instructions -->
-        <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 8px;">
-            <h4 style="margin-top: 0;">📋 Instructions</h4>
-            <ul style="margin: 0; padding-left: 20px;">
-                <li>Make sure your camera and microphone are working</li>
-                <li>Use a well-lit room for better visibility</li>
-                <li>Have a stable internet connection</li>
-                <li>The call will open in a new window</li>
-            </ul>
-        </div>
+    <!-- Video Call Section - Embedded Iframe -->
+    <div id="jitsi-container" style="width: 100%; height: 600px; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+        <!-- Jitsi will load here -->
     </div>
     
-    <!-- Notes Section -->
-    {% if appointment.notes %}
-    <div class="card" style="margin-top: 20px; padding: 15px;">
-        <h4>📝 Appointment Notes</h4>
-        <p style="margin: 0; color: #666;">{{ appointment.notes }}</p>
+    <!-- Call Instructions -->
+    <div style="margin-top: 20px; padding: 15px; background: #cce5ff; border-radius: 8px; text-align: center;">
+        <p style="margin: 0; color: #004085;">
+            <strong>📞 Call is starting...</strong><br>
+            <small>When you're done, click the red hang-up button in the call. You'll be automatically returned to your dashboard.</small>
+        </p>
     </div>
-    {% endif %}
 </div>
 
 <script>
-    // Jitsi configuration - Using meet.ffmuc.net (free, no auth required)
+    // Jitsi configuration
     const jitsiDomain = "meet.ffmuc.net";
     const roomId = "{{ room_id }}";
     const userName = "{{ user_name }}";
     const isDoctor = {{ 'true' if is_doctor else 'false' }};
     
-    function openJitsiAsHost() {
-        // Doctor opens as host/moderator
-        const url = `https://${jitsiDomain}/${roomId}#userInfo.displayName="${userName}"&config.startWithAudioMuted=false&config.startWithVideoMuted=false`;
-        window.open(url, '_blank', 'width=1200,height=800');
+    // Configure Jitsi options
+    const options = {
+        roomName: roomId,
+        width: '100%',
+        height: '100%',
+        parentNode: document.getElementById('jitsi-container'),
+        configOverwrite: {
+            startWithAudioMuted: false,
+            startWithVideoMuted: false,
+            prejoinPageEnabled: false
+        },
+        interfaceConfigOverwrite: {
+            SHOW_BRAND_WATERMARK: false,
+            SHOW_JITSI_WATERMARK: false,
+            DEFAULT_BACKGROUND: '#ffffff'
+        },
+        userInfo: {
+            displayName: userName
+        },
+        onload: function() {
+            console.log('Jitsi iframe loaded');
+        }
+    };
+    
+    // Load Jitsi API script
+    const jitsiScript = document.createElement('script');
+    jitsiScript.src = `https://${jitsiDomain}/external_api.js`;
+    jitsiScript.async = true;
+    document.head.appendChild(jitsiScript);
+    
+    // Initialize Jitsi when API is loaded
+    jitsiScript.onload = function() {
+        console.log('Jitsi API loaded');
+        
+        const api = new JitsiMeetExternalAPI(jitsiDomain, options);
+        
+        // Listen for conference events
+        api.addEventListener('videoConferenceLeft', function() {
+            console.log('Call ended - redirecting to dashboard');
+            setTimeout(redirectToDashboard, 1000);
+        });
+        
+        api.addEventListener('readyToClose', function() {
+            console.log('Call ready to close - redirecting to dashboard');
+            setTimeout(redirectToDashboard, 500);
+        });
+    };
+    
+    function redirectToDashboard() {
+        if (isDoctor) {
+            window.location.href = "{{ url_for('clinician_dashboard') }}";
+        } else {
+            window.location.href = "{{ url_for('patient_dashboard') }}";
+        }
     }
     
-    function openJitsiAsPatient() {
-        // Patient joins the existing room
-        const url = `https://${jitsiDomain}/${roomId}#userInfo.displayName="${userName}"&config.startWithAudioMuted=false&config.startWithVideoMuted=false`;
-        window.open(url, '_blank', 'width=1200,height=800');
-    }
+    // Fallback: redirect if user doesn't come back after 2 hours (meeting duration limit)
+    setTimeout(function() {
+        console.log('Meeting timeout - redirecting');
+        redirectToDashboard();
+    }, 2 * 60 * 60 * 1000); // 2 hours
 </script>
 
 <style>
 .video-call-container {
-    max-width: 800px;
+    width: 100%;
+    max-width: 1200px;
     margin: 0 auto;
+}
+
+#jitsi-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f0f0f0;
+    min-height: 600px;
 }
 </style>
 {% endblock %}

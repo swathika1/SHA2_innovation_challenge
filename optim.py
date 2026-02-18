@@ -1,8 +1,82 @@
 import json
 import sys
 
-import gurobipy as gp
-from gurobipy import GRB
+try:
+    import gurobipy as gp
+    from gurobipy import GRB
+    GUROBI_AVAILABLE = True
+except ImportError:
+    GUROBI_AVAILABLE = False
+    print("[WARNING] Gurobi not installed - optimization will use mock solver")
+    
+    # Create mock GRB class for development
+    class MockGRB:
+        MAXIMIZE = 1
+        MINIMIZE = -1
+        OPTIMAL = 2
+        INFEASIBLE = 3
+        INF_OR_UNBD = 4
+        BINARY = 'B'
+        CONTINUOUS = 'C'
+    
+    class MockGP:
+        @staticmethod
+        def Model(name):
+            return MockModel(name)
+        
+        @staticmethod
+        def LinExpr():
+            return MockLinExpr()
+        
+        @staticmethod
+        def quicksum(iterable):
+            result = MockLinExpr()
+            for item in iterable:
+                result.add(item)
+            return result
+    
+    class MockLinExpr:
+        def __init__(self):
+            self.terms = []
+        
+        def add(self, term):
+            self.terms.append(term)
+    
+    class MockModel:
+        def __init__(self, name):
+            self.name = name
+            self.vars = {}
+            self.Status = MockGRB.OPTIMAL
+            self.ObjVal = 0
+        
+        def setParam(self, name, value):
+            pass
+        
+        def addVar(self, vtype=None, name=None):
+            var = MockVar(name)
+            if name:
+                self.vars[name] = var
+            return var
+        
+        def update(self):
+            pass
+        
+        def setObjective(self, expr, sense):
+            pass
+        
+        def addConstr(self, constraint, name=None):
+            pass
+        
+        def optimize(self):
+            pass
+    
+    class MockVar:
+        def __init__(self, name):
+            self.name = name
+            self.X = 0
+    
+    gp = MockGP()
+    GRB = MockGRB()
 
 
 # ========================= SCORE THRESHOLD CONSTANTS =========================
@@ -174,8 +248,7 @@ def optimize_single(patients, doctors, timeslots, weights=None, blocked=None):
     """
     Solve the appointment assignment LP for a single clinic (MVP).
 
-    Supports per-doctor distances (distances dict on each patient) as well
-    as the legacy single dist_to_clinic field.
+    If Gurobi is not available, uses a greedy heuristic instead.
 
     Parameters
     ----------
@@ -215,6 +288,170 @@ def optimize_single(patients, doctors, timeslots, weights=None, blocked=None):
         }
         None if infeasible.
     """
+    
+    # Use Gurobi if available, otherwise use greedy heuristic
+    if GUROBI_AVAILABLE:
+        return _optimize_single_gurobi(patients, doctors, timeslots, weights, blocked)
+    else:
+        print("[OPTIM] Using greedy heuristic (Gurobi not available)")
+        return _optimize_single_greedy(patients, doctors, timeslots, weights, blocked)
+
+
+def _optimize_single_greedy(patients, doctors, timeslots, weights=None, blocked=None):
+    """
+    Greedy heuristic optimizer when Gurobi is not available.
+    Finds feasible assignments by scoring and selecting greedily.
+    """
+    if weights is None:
+        weights = dict(DEFAULT_WEIGHTS)
+    if blocked is None:
+        blocked = []
+
+    w_dist = weights["w_dist"]
+    w_urg = weights["w_urgency"]
+    w_cont = weights["w_cont"]
+    w_time = weights["w_time"]
+
+    total_slots = max(ts["time_index"] for ts in timeslots) + 1
+    
+    # Build lookups
+    p_ids = [p["id"] for p in patients]
+    d_ids = [d["id"] for d in doctors]
+    t_ids = [ts["id"] for ts in timeslots]
+    
+    p_map = {p["id"]: p for p in patients}
+    d_map = {d["id"]: d for d in doctors}
+    t_map = {ts["id"]: ts for ts in timeslots}
+    
+    blocked_set = set((b[0], b[1], b[2]) for b in blocked)
+    
+    def get_dist(p, doc_id):
+        if "distances" in p and p["distances"]:
+            return p["distances"].get(doc_id, p.get("dist_to_clinic", 999.0))
+        return p.get("dist_to_clinic", 0.0)
+    
+    print(f"\n[OPTIM-GREEDY] ===== Starting greedy optimization =====")
+    print(f"[OPTIM-GREEDY] Patients: {len(patients)}, Doctors: {len(doctors)}, Timeslots: {len(timeslots)}")
+    
+    # Generate all feasible assignments with scores
+    feasible = []
+    
+    for i in p_ids:
+        p = p_map[i]
+        max_d = p["max_dist"]
+        urgency_val = p["urgency"]
+        
+        for j in d_ids:
+            d = d_map[j]
+            dist = get_dist(p, j)
+            
+            # Check distance constraint
+            if dist > max_d:
+                continue
+            
+            # Check specialty constraint
+            need = p.get("specialty_need", "General")
+            has_match = (
+                not need or 
+                need == "General" or 
+                "General" in d.get("specialties", []) or 
+                need in d.get("specialties", [])
+            )
+            if not has_match:
+                continue
+            
+            # Try each timeslot
+            for t in t_ids:
+                # Check availability
+                p_avail = p.get("availability", {}).get(t, 1)
+                d_avail = d.get("availability", {}).get(t, 1)
+                
+                if p_avail == 0 or d_avail == 0:
+                    continue
+                
+                # Check blocked
+                if (i, j, t) in blocked_set:
+                    continue
+                
+                # Calculate score
+                ts = t_map[t]
+                proximity_score = max(0.0, 1.0 - dist / max_d) if max_d > 0 else 0.0
+                cont = p.get("continuity", {}).get(j, 0)
+                time_idx = ts["time_index"]
+                urgency_bonus = urgency_val * (1.0 - time_idx / total_slots)
+                time_pref = p.get("time_preference", {}).get(t, 0.5)
+                
+                score = (
+                    w_dist * proximity_score
+                    + w_urg * urgency_bonus
+                    + w_cont * cont
+                    + w_time * time_pref
+                )
+                
+                feasible.append({
+                    "patient_id": i,
+                    "doctor_id": j,
+                    "timeslot_id": t,
+                    "score": score,
+                    "dist_km": dist,
+                })
+    
+    print(f"[OPTIM-GREEDY] Found {len(feasible)} feasible assignments")
+    
+    if not feasible:
+        print("[OPTIM-GREEDY] No feasible assignments!")
+        return None
+    
+    # Sort by score (descending) and greedily select
+    feasible.sort(key=lambda x: x["score"], reverse=True)
+    
+    assignments = {}
+    used_doctors = {}  # doctor_id -> set of timeslots
+    used_patients = set()
+    
+    for assignment in feasible:
+        p_id = assignment["patient_id"]
+        d_id = assignment["doctor_id"]
+        t_id = assignment["timeslot_id"]
+        
+        # Skip if patient already assigned
+        if p_id in used_patients:
+            continue
+        
+        # Skip if doctor already has this timeslot
+        if d_id not in used_doctors:
+            used_doctors[d_id] = set()
+        if t_id in used_doctors[d_id]:
+            continue
+        
+        # Accept assignment
+        assignments[p_id] = {
+            "doctor_id": d_id,
+            "doctor_label": d_map[d_id].get("label", d_id),
+            "timeslot_id": t_id,
+            "timeslot_label": t_map[t_id]["label"],
+            "score": round(assignment["score"], 4),
+            "dist_km": assignment["dist_km"],
+        }
+        
+        used_patients.add(p_id)
+        used_doctors[d_id].add(t_id)
+    
+    if not assignments:
+        print("[OPTIM-GREEDY] No assignments found after greedy selection!")
+        return None
+    
+    print(f"[OPTIM-GREEDY] Final assignments: {len(assignments)}")
+    
+    return {
+        "assignments": assignments,
+        "objective": sum(a["score"] for a in assignments.values()),
+        "status": "greedy",
+    }
+
+
+def _optimize_single_gurobi(patients, doctors, timeslots, weights=None, blocked=None):
+    """Gurobi-based optimization (only called if Gurobi is available)"""
     if weights is None:
         weights = dict(DEFAULT_WEIGHTS)
     if blocked is None:
@@ -265,7 +502,7 @@ def optimize_single(patients, doctors, timeslots, weights=None, blocked=None):
     for i in p_ids:
         p = p_map[i]
         max_d = p["max_dist"]
-        urgency_val = p["urgency"]  # 1, 2, or 3
+        urgency_val = p["urgency"]
 
         for j in d_ids:
             dist = get_dist(p, j)
@@ -284,7 +521,7 @@ def optimize_single(patients, doctors, timeslots, weights=None, blocked=None):
                     + w_cont * cont
                     + w_time * time_pref
                 )
-                obj += coeff * X[i, j, t]
+                obj.addTerms(coeff, X[i, j, t])
 
     model.setObjective(obj, GRB.MAXIMIZE)
 
@@ -333,13 +570,19 @@ def optimize_single(patients, doctors, timeslots, weights=None, blocked=None):
                     model.addConstr(X[i, j, t] == 0,
                                     name=f"dist_{i}_{j}_{t}")
 
-    # C6: Specialty matching
+    # C6: Specialty matching (flexible - General doctors match anyone)
     for i in p_ids:
         p = p_map[i]
         need = p["specialty_need"]
         for j in d_ids:
             d = d_map[j]
-            if need and need not in d["specialties"]:
+            has_match = (
+                not need or 
+                need == "General" or 
+                "General" in d["specialties"] or 
+                need in d["specialties"]
+            )
+            if not has_match:
                 for t in t_ids:
                     model.addConstr(X[i, j, t] == 0,
                                     name=f"spec_{i}_{j}_{t}")
@@ -351,9 +594,12 @@ def optimize_single(patients, doctors, timeslots, weights=None, blocked=None):
                             name=f"blocked_{bi}_{bj}_{bt}")
 
     # ---- Solve ----
+    print(f"\n[OPTIM] Running Gurobi solver...")
     model.optimize()
 
+    print(f"[OPTIM] Solver status: {model.Status}")
     if model.Status == GRB.OPTIMAL:
+        print(f"[OPTIM] Found optimal solution!")
         assignments = {}
         for i in p_ids:
             for j in d_ids:
@@ -383,12 +629,18 @@ def optimize_single(patients, doctors, timeslots, weights=None, blocked=None):
                             "score": round(score, 4),
                             "dist_km": dist,
                         }
+        print(f"[OPTIM] Total assignments found: {len(assignments)}")
         return {
             "assignments": assignments,
             "objective": model.ObjVal,
             "status": "optimal",
         }
     else:
+        print(f"[OPTIM] No optimal solution found. Status code: {model.Status}")
+        if model.Status == GRB.INFEASIBLE:
+            print("[OPTIM] Model is INFEASIBLE - constraints cannot be satisfied simultaneously")
+        elif model.Status == GRB.INF_OR_UNBD:
+            print("[OPTIM] Model is UNBOUNDED or INFEASIBLE")
         return None
 
 
@@ -430,7 +682,28 @@ def get_top3_recommendations(patient_id, patients, doctors, timeslots,
             break
 
     if target is None:
+        print(f"[OPTIM] ERROR: Patient {patient_id} not found in patients list")
         return [], None
+
+    print(f"\n[OPTIM] ===== GET_TOP3_RECOMMENDATIONS for Patient {patient_id} =====")
+    print(f"[OPTIM] Target patient: {target['label']}")
+    print(f"[OPTIM] Available doctors: {len(doctors)}")
+    print(f"[OPTIM] Available timeslots: {len(timeslots)}")
+    print(f"[OPTIM] Patient data: specialty={target.get('specialty_need')}, max_dist={target.get('max_dist')}, "
+          f"urgency={target.get('urgency')}")
+    
+    # Count availability
+    avail_slots = sum(1 for v in target.get('availability', {}).values() if v == 1)
+    print(f"[OPTIM] Patient availability: {avail_slots}/{len(timeslots)} slots")
+    
+    # Check each doctor
+    for d in doctors:
+        doc_avail = sum(1 for v in d.get('availability', {}).values() if v == 1)
+        dist_to_doc = target.get('distances', {}).get(d['id'], 999)
+        within_max = dist_to_doc <= target.get('max_dist', 20)
+        print(f"[OPTIM]   Doctor {d['label']}: specialties={d.get('specialties')}, "
+              f"distance={dist_to_doc}km (max={target.get('max_dist')}km), "
+              f"within_range={within_max}, available_slots={doc_avail}/{len(timeslots)}")
 
     # Apply score threshold adjustments
     patient_weights = dict(weights)
@@ -443,6 +716,7 @@ def get_top3_recommendations(patient_id, patients, doctors, timeslots,
     blocked = []
 
     for rank in range(1, 4):
+        print(f"\n[OPTIM] --- Attempting recommendation rank {rank} ---")
         result = optimize_single(
             patients=single_patient,
             doctors=doctors,
@@ -451,10 +725,18 @@ def get_top3_recommendations(patient_id, patients, doctors, timeslots,
             blocked=blocked,
         )
 
-        if result is None or patient_id not in result["assignments"]:
+        if result is None:
+            print(f"[OPTIM] Rank {rank}: No feasible solution found (optimizer returned None)")
+            break
+        
+        if patient_id not in result["assignments"]:
+            print(f"[OPTIM] Rank {rank}: Patient not in assignments")
             break
 
         assignment = result["assignments"][patient_id]
+        print(f"[OPTIM] Rank {rank}: FOUND - {assignment['doctor_label']} at {assignment['timeslot_label']}, "
+              f"distance={assignment['dist_km']}km, score={assignment['score']}")
+        
         recommendations.append({
             "rank": rank,
             "doctor_id": assignment["doctor_id"],
@@ -472,6 +754,7 @@ def get_top3_recommendations(patient_id, patients, doctors, timeslots,
             assignment["timeslot_id"],
         ))
 
+    print(f"\n[OPTIM] Final result: {len(recommendations)} recommendations found")
     return recommendations, notification
 
 

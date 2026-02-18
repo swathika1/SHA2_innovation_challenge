@@ -72,6 +72,36 @@
                 </div>
                 
                 <div class="form-group">
+                    <label for="urgency">Appointment Urgency</label>
+                    <select id="urgency" name="urgency" class="form-control">
+                        <option value="Low">Low - Routine Follow-up</option>
+                        <option value="Medium" selected>Medium - Regular Check-in</option>
+                        <option value="High">High - Need Consultation Soon</option>
+                    </select>
+                    <small style="color: #666;">How urgently do you need to see a doctor?</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="max_distance">Maximum Travel Distance</label>
+                    <select id="max_distance" name="max_distance" class="form-control">
+                        <option value="5">Within 5 km</option>
+                        <option value="10">Within 10 km</option>
+                        <option value="20" selected>Within 20 km</option>
+                        <option value="30">Within 30 km</option>
+                        <option value="50">Within 50 km</option>
+                        <option value="100">Any distance</option>
+                    </select>
+                    <small style="color: #666;">How far are you willing to travel for appointments?</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="pincode">Pincode / Postal Code</label>
+                    <input type="text" id="pincode" name="pincode" class="form-control" 
+                           placeholder="Enter your pincode" maxlength="10">
+                    <small style="color: #666;">Used to find nearby doctors</small>
+                </div>
+                
+                <div class="form-group">
                     <label for="doctor_id">Select Your Doctor (Optional)</label>
                     <select id="doctor_id" name="doctor_id" class="form-control">
                         <option value="">-- Auto-assign a doctor --</option>
@@ -81,6 +111,46 @@
                             {% endfor %}
                         {% endif %}
                     </select>
+                </div>
+            </div>
+            
+            <!-- Doctor-specific fields (hidden by default) -->
+            <div id="doctorFields" style="display: none;">
+                <div class="form-group">
+                    <label for="specialties">Specialties (select all that apply)</label>
+                    <div style="border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #f8f9fa;">
+                        <label style="display: block; margin: 5px 0;">
+                            <input type="checkbox" name="specialties" value="General"> General Rehabilitation
+                        </label>
+                        <label style="display: block; margin: 5px 0;">
+                            <input type="checkbox" name="specialties" value="MSK"> Musculoskeletal (MSK)
+                        </label>
+                        <label style="display: block; margin: 5px 0;">
+                            <input type="checkbox" name="specialties" value="Post-op"> Post-operative Care
+                        </label>
+                        <label style="display: block; margin: 5px 0;">
+                            <input type="checkbox" name="specialties" value="Neuro"> Neurological
+                        </label>
+                        <label style="display: block; margin: 5px 0;">
+                            <input type="checkbox" name="specialties" value="Sports"> Sports Medicine
+                        </label>
+                        <label style="display: block; margin: 5px 0;">
+                            <input type="checkbox" name="specialties" value="Orthopedic"> Orthopedic
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="clinic_name">Clinic Name</label>
+                    <input type="text" id="clinic_name" name="clinic_name" class="form-control" 
+                           placeholder="Enter clinic name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="clinic_pincode">Clinic Pincode / Postal Code</label>
+                    <input type="text" id="clinic_pincode" name="clinic_pincode" class="form-control" 
+                           placeholder="Clinic pincode" maxlength="10">
+                    <small style="color: #666;">For patient distance calculations</small>
                 </div>
             </div>
             
@@ -106,11 +176,17 @@
 function togglePatientFields() {
     const role = document.getElementById('role').value;
     const patientFields = document.getElementById('patientFields');
+    const doctorFields = document.getElementById('doctorFields');
     
     if (role === 'patient') {
         patientFields.style.display = 'block';
+        doctorFields.style.display = 'none';
+    } else if (role === 'doctor') {
+        patientFields.style.display = 'none';
+        doctorFields.style.display = 'block';
     } else {
         patientFields.style.display = 'none';
+        doctorFields.style.display = 'none';
     }
 }
 </script>

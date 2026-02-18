@@ -1,0 +1,45 @@
+========================================
+  QUICK MIGRATION STEPS
+========================================
+
+Step 1: STOP FLASK SERVER
+--------------------------
+Press Ctrl+C in the terminal running Flask
+
+Step 2: RUN MIGRATION
+--------------------------
+python3 apply_migration.py
+
+Step 3: UPDATE EXISTING DATA (if you have users)
+--------------------------
+python3 update_existing_data.py
+
+Step 4: RESTART FLASK
+--------------------------
+python3 main.py
+
+Step 5: TEST
+--------------------------
+Go to: http://localhost:5000/signup
+Select "Patient" role
+You'll see:
+  - Appointment Urgency
+  - Maximum Travel Distance  
+  - Pincode/Postal Code
+
+CREATE A NEW PATIENT ACCOUNT to test!
+
+========================================
+TROUBLESHOOTING
+========================================
+
+If "database is locked":
+  - Make sure Flask is stopped (Ctrl+C)
+  - Check no other Python processes: ps aux | grep python
+  - Kill if needed: killall python3
+
+If "table already exists":
+  - Migration already applied, skip to Step 3
+
+If "no column named urgency":
+  - Migration not applied, go back to Step 2

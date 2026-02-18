@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-from database import get_db, close_db, query_db, execute_db
+from database import get_db, close_db, query_db, execute_db, load_optimization_data, load_patient_optimization_data
 from functools import wraps
 from datetime import datetime, date
 import uuid
@@ -29,11 +29,12 @@ except ImportError as e:
 
 # Import optimization module (from computer_vision branch)
 try:
-    from optim import get_top3_recommendations, optimize_all_patients, build_demo_data, load_dataset
+    from optim import get_top3_recommendations, optimize_all_patients, GUROBI_AVAILABLE
     OPTIM_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     OPTIM_AVAILABLE = False
-    print("[WARNING] optim module not found - optimization features disabled")
+    GUROBI_AVAILABLE = False
+    print(f"[WARNING] optim module not found - optimization features disabled: {e}")
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'  # Required for sessions
@@ -226,18 +227,59 @@ def signup():
             (email, hashed_password, name, role)
         )
         
-        # If patient, create patients record and assign to selected doctor
+        # If patient, create patients record with optimization data
         if role == 'patient':
             condition = request.form.get('condition', 'General Rehab')
-            execute_db(
-                'INSERT INTO patients (user_id, condition) VALUES (?, ?)',
-                (user_id, condition)
-            )
+            urgency = request.form.get('urgency', 'Medium')
+            max_distance = float(request.form.get('max_distance', 20))
+            pincode = request.form.get('pincode', '')
+            
+            # Map condition to specialty needed
+            condition_to_specialty = {
+                'Knee Replacement': 'Post-op',
+                'Hip Replacement': 'Post-op',
+                'ACL Reconstruction': 'Sports',
+                'Shoulder Surgery': 'Post-op',
+                'Back Pain': 'MSK',
+                'Stroke Recovery': 'Neuro',
+                'General Rehab': 'General'
+            }
+            specialty_needed = condition_to_specialty.get(condition, 'General')
+            
+            execute_db('''
+                INSERT INTO patients (user_id, condition, urgency, max_distance, 
+                                     specialty_needed, address) 
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (user_id, condition, urgency, max_distance, specialty_needed, pincode))
+            
+            # Set default availability (all timeslots available)
+            timeslots = query_db('SELECT id FROM timeslots')
+            for ts in timeslots:
+                execute_db(
+                    'INSERT INTO patient_availability (patient_id, timeslot_id, available) VALUES (?, ?, ?)',
+                    (user_id, ts['id'], 1)
+                )
+            
+            # Set default time preferences (morning preferred)
+            for ts in timeslots:
+                # Morning slots get higher preference
+                is_morning = '_9am' in ts['id'] or '_10am' in ts['id'] or '_11am' in ts['id']
+                pref_score = 0.8 if is_morning else 0.5
+                execute_db(
+                    'INSERT INTO patient_time_preferences (patient_id, timeslot_id, preference_score) VALUES (?, ?, ?)',
+                    (user_id, ts['id'], pref_score)
+                )
+            
             # Assign to selected doctor, or first available if none selected
             selected_doctor_id = request.form.get('doctor_id')
             if selected_doctor_id:
                 execute_db(
                     'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
+                    (int(selected_doctor_id), user_id)
+                )
+                # Set as preferred doctor
+                execute_db(
+                    'UPDATE patients SET preferred_doctor_id = ? WHERE user_id = ?',
                     (int(selected_doctor_id), user_id)
                 )
             else:
@@ -248,6 +290,41 @@ def signup():
                         'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
                         (doctor['id'], user_id)
                     )
+        
+        # If doctor, create doctor records with optimization data
+        elif role == 'doctor':
+            # Get specialties from form (multiple checkboxes)
+            specialties = request.form.getlist('specialties')
+            clinic_name = request.form.get('clinic_name', '')
+            clinic_pincode = request.form.get('clinic_pincode', '')
+            
+            # Save doctor specialties
+            if specialties:
+                for specialty in specialties:
+                    execute_db(
+                        'INSERT INTO doctor_specialties (doctor_id, specialty) VALUES (?, ?)',
+                        (user_id, specialty)
+                    )
+            else:
+                # Default to General if no specialties selected
+                execute_db(
+                    'INSERT INTO doctor_specialties (doctor_id, specialty) VALUES (?, ?)',
+                    (user_id, 'General')
+                )
+            
+            # Save clinic location
+            execute_db(
+                'INSERT INTO doctor_locations (doctor_id, clinic_name, address) VALUES (?, ?, ?)',
+                (user_id, clinic_name, clinic_pincode)
+            )
+            
+            # Set default availability (all weekday timeslots available)
+            timeslots = query_db('SELECT id FROM timeslots')
+            for ts in timeslots:
+                execute_db(
+                    'INSERT INTO doctor_availability (doctor_id, timeslot_id, available) VALUES (?, ?, ?)',
+                    (user_id, ts['id'], 1)
+                )
         
         flash('Account created! Please log in.', 'success')
         return redirect(url_for('login'))
@@ -627,9 +704,17 @@ def patient_appointments():
         LIMIT 10
     ''', (session['user_id'],))
     
+    # Get patient scheduling preferences
+    patient_prefs = query_db(
+        'SELECT * FROM patients WHERE user_id = ?',
+        (session['user_id'],),
+        one=True
+    )
+    
     return render_template('patient/appointments.html',
                          appointments=appointments if appointments else [],
-                         past_appointments=past_appointments if past_appointments else [])
+                         past_appointments=past_appointments if past_appointments else [],
+                         patient_prefs=patient_prefs)
 
 
 @app.route('/patient/book-appointment', methods=['POST'])
@@ -1610,13 +1695,38 @@ def api_optimize_all():
 
 @app.route('/api/optimize/demo', methods=['GET'])
 def api_optimize_demo():
-    """Run optimization with built-in demo data. No input needed."""
+    """Run optimization with real database data."""
     if not OPTIM_AVAILABLE:
         return jsonify({"error": "Optimization module not available"}), 503
     
-    patients, doctors, timeslots = build_demo_data()
+    patients, doctors, timeslots = load_optimization_data()
     results = optimize_all_patients(patients, doctors, timeslots)
     return jsonify({"results": results})
+
+
+@app.route('/api/optim/status', methods=['GET'])
+def api_optim_status():
+    """Health check endpoint to see optimization data status."""
+    try:
+        from database import load_optimization_data
+        patients, doctors, timeslots = load_optimization_data()
+        
+        return jsonify({
+            "status": "ok",
+            "patients_count": len(patients),
+            "doctors_count": len(doctors),
+            "timeslots_count": len(timeslots),
+            "sample_patient": patients[0] if patients else None,
+            "sample_doctor": doctors[0] if doctors else None,
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
 
 
 @app.route('/api/optimize/consultation', methods=['GET'])
@@ -1625,27 +1735,98 @@ def api_optimize_consultation():
     """Return patient list + per-patient optimization results for the
     consultation scheduling page.
 
-    Uses demo data for now. To switch to a custom dataset, swap the
-    data source lines below.
+    Uses real database data from registered users.
     """
     if not OPTIM_AVAILABLE:
         return jsonify({"error": "Optimization module not available"}), 503
 
-    # === DATA SOURCE (swap when custom dataset is ready) ===
-    patients, doctors, timeslots = build_demo_data()
-    # patients, doctors, timeslots = load_dataset('Optim_dataset/your_dataset.json')
+    try:
+        # Get current doctor info
+        doctor_user = get_current_user()
+        if doctor_user['role'] != 'doctor':
+            return jsonify({"error": "Only doctors can access this endpoint"}), 403
+        
+        doctor_id = session['user_id']
+        
+        # Load real data from database
+        patients, doctors, timeslots = load_optimization_data()
+        
+        print(f"[CONSULTATION API] Doctor {doctor_id} loading recommendations")
+        print(f"[CONSULTATION API] Loaded {len(patients)} patients, {len(doctors)} doctors, {len(timeslots)} timeslots")
+        
+        # Get current doctor's info
+        current_doctor = None
+        for d in doctors:
+            if int(d['id']) == doctor_id:
+                current_doctor = d
+                break
+        
+        if not current_doctor:
+            print(f"[CONSULTATION API] ERROR: Doctor {doctor_id} not found in doctors list")
+            return jsonify({
+                "error": "Doctor not found",
+                "debug": f"Doctor {doctor_id} has not completed their profile (missing specialties or location)"
+            }), 400
+        
+        print(f"[CONSULTATION API] Current doctor: {current_doctor['label']} with specialties {current_doctor.get('specialties')}")
+        
+        # Check if we have minimal required data
+        if not patients or not doctors or not timeslots:
+            error_msg = "Not enough data to generate recommendations"
+            print(f"[CONSULTATION API] ERROR: {error_msg} - patients:{len(patients)}, doctors:{len(doctors)}, timeslots:{len(timeslots)}")
+            return jsonify({
+                "error": error_msg,
+                "debug": {
+                    "patients_count": len(patients),
+                    "doctors_count": len(doctors),
+                    "timeslots_count": len(timeslots),
+                    "message": "Please ensure doctors and patients are registered with their locations set"
+                }
+            }), 400
 
-    results = optimize_all_patients(patients, doctors, timeslots)
+        print(f"[CONSULTATION API] Running optimize_all_patients for {len(patients)} patients...")
+        results = optimize_all_patients(patients, doctors, timeslots)
+        
+        # Count how many patients got recommendations
+        recs_count = sum(1 for r in results.values() if r.get("recommendations") and len(r["recommendations"]) > 0)
+        print(f"[CONSULTATION API] Complete: {recs_count}/{len(patients)} patients got recommendations")
+        
+        # Filter results to only show recommendations where current doctor is assigned
+        filtered_results = {}
+        for patient_id, result in results.items():
+            recs = result.get("recommendations", [])
+            # Filter recommendations to only those assigned to current doctor
+            filtered_recs = [r for r in recs if int(r.get("doctor_id")) == doctor_id]
+            if filtered_recs:
+                filtered_results[patient_id] = {
+                    "recommendations": filtered_recs,
+                    "notification": result.get("notification")
+                }
+        
+        print(f"[CONSULTATION API] After filtering: {len(filtered_results)} patients have recommendations for doctor {doctor_id}")
 
-    patient_list = [
-        {"id": p["id"], "label": p["label"], "score": p["score"]}
-        for p in patients
-    ]
+        patient_list = [
+            {"id": p["id"], "label": p["label"], "score": p["score"]}
+            for p in patients
+        ]
 
-    return jsonify({
-        "patients": patient_list,
-        "results": results,
-    })
+        return jsonify({
+            "patients": patient_list,
+            "results": filtered_results,  # Only show this doctor's assignments
+            "doctor_info": {
+                "id": current_doctor["id"],
+                "label": current_doctor["label"],
+                "specialties": current_doctor.get("specialties", [])
+            }
+        })
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] /api/optimize/consultation failed: {e}")
+        print(traceback.format_exc())
+        return jsonify({
+            "error": "Failed to generate recommendations",
+            "debug": str(e)
+        }), 500
 
 
 @app.route('/api/optimize/patient/<int:patient_id>', methods=['GET'])
@@ -1656,15 +1837,15 @@ def api_optimize_patient(patient_id):
     if not OPTIM_AVAILABLE:
         return jsonify({"error": "Optimization module not available"}), 503
 
-    # Use demo data for now; replace with real data as needed
-    patients, doctors, timeslots = build_demo_data()
-    # Find the patient in the demo data
-    patient = next((p for p in patients if p['id'] == patient_id), None)
+    # Load real data from database
+    patients, doctors, timeslots = load_optimization_data()
+    # Find the patient
+    patient = next((p for p in patients if p['id'] == str(patient_id)), None)
     if not patient:
         return jsonify({"error": "Patient not found in optimization data"}), 404
 
     recs, notification = get_top3_recommendations(
-        patient_id=patient_id,
+        patient_id=str(patient_id),
         patients=patients,
         doctors=doctors,
         timeslots=timeslots,
@@ -1697,32 +1878,107 @@ def api_patient_recommendations():
         if not patient_data:
             return jsonify({"error": "Patient profile not found"}), 404
 
-        patients, doctors, timeslots = build_demo_data()
+        # Load real data from database
+        patients, doctors, timeslots = load_optimization_data()
+        
+        # Debug logging
+        print(f"\n[DEBUG] Loaded {len(patients)} patients, {len(doctors)} doctors, {len(timeslots)} timeslots")
+        print(f"[DEBUG] Looking for patient ID: {patient_id}")
+        print(f"[DEBUG] Available patient IDs: {[p['id'] for p in patients]}")
+        print(f"[DEBUG] Available doctors: {[(d['id'], d['label'], d['specialties']) for d in doctors]}")
 
-        # Map to demo patient based on rehab score (handle None)
-        rehab_score = patient_data['avg_quality_score'] or 0
-        if rehab_score < 4.0:
-            optim_patient_id = "patient_1"
-        elif rehab_score >= 7.0:
-            optim_patient_id = "patient_2"
-        else:
-            optim_patient_id = "patient_3"
+        # Find the actual patient in the optimization data
+        patient = next((p for p in patients if p['id'] == str(patient_id)), None)
+        if not patient:
+            return jsonify({
+                "error": "Patient not found in system",
+                "debug": {
+                    "patient_id": str(patient_id),
+                    "available_patients": [p['id'] for p in patients]
+                }
+            }), 404
+        
+        print(f"[DEBUG] Patient data: specialty_need={patient.get('specialty_need')}, max_dist={patient.get('max_dist')}")
 
         recs, notification = get_top3_recommendations(
-            patient_id=optim_patient_id,
+            patient_id=str(patient_id),
             patients=patients,
             doctors=doctors,
             timeslots=timeslots,
             weights=None
         )
+        
+        print(f"[DEBUG] Got {len(recs)} recommendations")
+        if recs:
+            print(f"[DEBUG] First rec: {recs[0]}")
 
         return jsonify({
             "recommendations": recs,
             "notification": notification
         })
     except Exception as e:
+        import traceback
         print(f'[ERROR] Patient recommendations failed: {e}')
+        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/patient/update-preferences', methods=['POST'])
+@login_required
+@role_required('patient')
+def api_patient_update_preferences():
+    """Update patient scheduling preferences."""
+    try:
+        data = request.get_json()
+        patient_id = session['user_id']
+        
+        urgency = data.get('urgency', 'Medium')
+        max_distance = float(data.get('max_distance', 20))
+        pincode = data.get('pincode', '')
+        time_prefs = data.get('time_preferences', [])
+        
+        # Update patient record
+        execute_db('''
+            UPDATE patients 
+            SET urgency = ?, max_distance = ?, address = ?
+            WHERE user_id = ?
+        ''', (urgency, max_distance, pincode, patient_id))
+        
+        # Update time preferences based on selection
+        # Get all timeslots
+        timeslots = query_db('SELECT id FROM timeslots')
+        
+        for ts in timeslots:
+            ts_id = ts['id']
+            # Determine preference score based on time of day
+            pref_score = 0.5  # Default
+            
+            if 'morning' in time_prefs:
+                if '_9am' in ts_id or '_10am' in ts_id or '_11am' in ts_id:
+                    pref_score = 0.9
+            
+            if 'afternoon' in time_prefs:
+                if '_1pm' in ts_id or '_2pm' in ts_id or '_3pm' in ts_id or '_4pm' in ts_id:
+                    pref_score = 0.9
+            
+            # Update or insert preference
+            execute_db('''
+                INSERT INTO patient_time_preferences (patient_id, timeslot_id, preference_score)
+                VALUES (?, ?, ?)
+                ON CONFLICT(patient_id, timeslot_id) 
+                DO UPDATE SET preference_score = ?
+            ''', (patient_id, ts_id, pref_score, pref_score))
+        
+        return jsonify({
+            "success": True,
+            "message": "Preferences updated successfully"
+        })
+    except Exception as e:
+        print(f'[ERROR] Update preferences failed: {e}')
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
 
 
 # ==================== CV/ML LIVE FEEDBACK API (from computer_vision branch) ====================
@@ -2447,8 +2703,142 @@ def ensure_tables_exist():
             FOREIGN KEY (workout_id) REFERENCES workouts(id)
         )
     ''')
-    conn.commit()
     
+    # Create optimization tables if they don't exist
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS timeslots (
+            id TEXT PRIMARY KEY,
+            day TEXT NOT NULL,
+            time TEXT NOT NULL,
+            time_index INTEGER NOT NULL,
+            label TEXT NOT NULL
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS doctor_specialties (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doctor_id INTEGER NOT NULL,
+            specialty TEXT NOT NULL,
+            FOREIGN KEY (doctor_id) REFERENCES users(id),
+            UNIQUE(doctor_id, specialty)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS doctor_availability (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doctor_id INTEGER NOT NULL,
+            timeslot_id TEXT NOT NULL,
+            available INTEGER DEFAULT 1,
+            FOREIGN KEY (doctor_id) REFERENCES users(id),
+            FOREIGN KEY (timeslot_id) REFERENCES timeslots(id),
+            UNIQUE(doctor_id, timeslot_id)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS doctor_locations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doctor_id INTEGER NOT NULL UNIQUE,
+            clinic_name TEXT,
+            address TEXT,
+            latitude REAL,
+            longitude REAL,
+            FOREIGN KEY (doctor_id) REFERENCES users(id)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS patient_availability (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            timeslot_id TEXT NOT NULL,
+            available INTEGER DEFAULT 1,
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            FOREIGN KEY (timeslot_id) REFERENCES timeslots(id),
+            UNIQUE(patient_id, timeslot_id)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS patient_time_preferences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            timeslot_id TEXT NOT NULL,
+            preference_score REAL DEFAULT 0.5,
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            FOREIGN KEY (timeslot_id) REFERENCES timeslots(id),
+            UNIQUE(patient_id, timeslot_id)
+        )
+    ''')
+    
+    # Add optimization columns to patients table if they don't exist
+    optimization_columns = [
+        ("patients", "urgency", "TEXT DEFAULT 'Medium' CHECK(urgency IN ('Low', 'Medium', 'High'))"),
+        ("patients", "max_distance", "REAL DEFAULT 20.0"),
+        ("patients", "specialty_needed", "TEXT"),
+        ("patients", "preferred_doctor_id", "INTEGER REFERENCES users(id)"),
+        ("patients", "address", "TEXT"),
+        ("patients", "latitude", "REAL"),
+        ("patients", "longitude", "REAL"),
+    ]
+    for table, col, col_type in optimization_columns:
+        try:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+    
+    # Initialize timeslots if empty
+    cursor.execute("SELECT COUNT(*) as cnt FROM timeslots")
+    count_result = cursor.fetchone()
+    timeslot_count = count_result[0] if count_result else 0
+    if timeslot_count == 0:
+        print("[INIT] Initializing timeslots...")
+        timeslot_data = [
+            ('mon_9am', 'Monday', '9:00 AM', 0, 'Mon 9:00 AM'),
+            ('mon_10am', 'Monday', '10:00 AM', 1, 'Mon 10:00 AM'),
+            ('mon_11am', 'Monday', '11:00 AM', 2, 'Mon 11:00 AM'),
+            ('mon_1pm', 'Monday', '1:00 PM', 3, 'Mon 1:00 PM'),
+            ('mon_2pm', 'Monday', '2:00 PM', 4, 'Mon 2:00 PM'),
+            ('mon_3pm', 'Monday', '3:00 PM', 5, 'Mon 3:00 PM'),
+            ('mon_4pm', 'Monday', '4:00 PM', 6, 'Mon 4:00 PM'),
+            ('tue_9am', 'Tuesday', '9:00 AM', 7, 'Tue 9:00 AM'),
+            ('tue_10am', 'Tuesday', '10:00 AM', 8, 'Tue 10:00 AM'),
+            ('tue_11am', 'Tuesday', '11:00 AM', 9, 'Tue 11:00 AM'),
+            ('tue_1pm', 'Tuesday', '1:00 PM', 10, 'Tue 1:00 PM'),
+            ('tue_2pm', 'Tuesday', '2:00 PM', 11, 'Tue 2:00 PM'),
+            ('tue_3pm', 'Tuesday', '3:00 PM', 12, 'Tue 3:00 PM'),
+            ('tue_4pm', 'Tuesday', '4:00 PM', 13, 'Tue 4:00 PM'),
+            ('wed_9am', 'Wednesday', '9:00 AM', 14, 'Wed 9:00 AM'),
+            ('wed_10am', 'Wednesday', '10:00 AM', 15, 'Wed 10:00 AM'),
+            ('wed_11am', 'Wednesday', '11:00 AM', 16, 'Wed 11:00 AM'),
+            ('wed_1pm', 'Wednesday', '1:00 PM', 17, 'Wed 1:00 PM'),
+            ('wed_2pm', 'Wednesday', '2:00 PM', 18, 'Wed 2:00 PM'),
+            ('wed_3pm', 'Wednesday', '3:00 PM', 19, 'Wed 3:00 PM'),
+            ('wed_4pm', 'Wednesday', '4:00 PM', 20, 'Wed 4:00 PM'),
+            ('thu_9am', 'Thursday', '9:00 AM', 21, 'Thu 9:00 AM'),
+            ('thu_10am', 'Thursday', '10:00 AM', 22, 'Thu 10:00 AM'),
+            ('thu_11am', 'Thursday', '11:00 AM', 23, 'Thu 11:00 AM'),
+            ('thu_1pm', 'Thursday', '1:00 PM', 24, 'Thu 1:00 PM'),
+            ('thu_2pm', 'Thursday', '2:00 PM', 25, 'Thu 2:00 PM'),
+            ('thu_3pm', 'Thursday', '3:00 PM', 26, 'Thu 3:00 PM'),
+            ('thu_4pm', 'Thursday', '4:00 PM', 27, 'Thu 4:00 PM'),
+            ('fri_9am', 'Friday', '9:00 AM', 28, 'Fri 9:00 AM'),
+            ('fri_10am', 'Friday', '10:00 AM', 29, 'Fri 10:00 AM'),
+            ('fri_11am', 'Friday', '11:00 AM', 30, 'Fri 11:00 AM'),
+            ('fri_1pm', 'Friday', '1:00 PM', 31, 'Fri 1:00 PM'),
+            ('fri_2pm', 'Friday', '2:00 PM', 32, 'Fri 2:00 PM'),
+            ('fri_3pm', 'Friday', '3:00 PM', 33, 'Fri 3:00 PM'),
+            ('fri_4pm', 'Friday', '4:00 PM', 34, 'Fri 4:00 PM'),
+        ]
+        cursor.executemany(
+            "INSERT OR IGNORE INTO timeslots (id, day, time, time_index, label) VALUES (?, ?, ?, ?, ?)",
+            timeslot_data
+        )
+        print(f"[INIT] Created {len(timeslot_data)} timeslots")
+    
+    conn.commit()
     conn.close()
 
 

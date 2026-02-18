@@ -36,16 +36,80 @@
 {% endwith %}
 
 <div class="appointments-container">
+    <!-- Scheduling Preferences Card -->
+    <div class="card" style="margin-bottom: 20px; border: 2px solid #28a745;">
+        <div class="card-header" style="background: linear-gradient(135deg, #e8f5e9, #c8e6c9); color: #2e7d32; cursor: pointer;" onclick="togglePreferences()">
+            ⚙️ My Scheduling Preferences
+            <span id="pref-toggle" style="float: right;">▼</span>
+        </div>
+        <div id="preferences-panel" style="display: none;">
+            <form id="preferences-form" style="padding: 10px 0;">
+                <div class="form-group">
+                    <label><strong>Appointment Urgency</strong></label>
+                    <select name="urgency" class="form-control" value="{{ patient_prefs.urgency if patient_prefs else 'Medium' }}">
+                        <option value="Low" {{ 'selected' if patient_prefs and patient_prefs.urgency == 'Low' else '' }}>Low - Routine Follow-up</option>
+                        <option value="Medium" {{ 'selected' if patient_prefs and patient_prefs.urgency == 'Medium' else 'selected' }}>Medium - Regular Check-in</option>
+                        <option value="High" {{ 'selected' if patient_prefs and patient_prefs.urgency == 'High' else '' }}>High - Need Consultation Soon</option>
+                    </select>
+                    <small style="color: #666;">Higher urgency gives you earlier appointment slots</small>
+                </div>
+
+                <div class="form-group">
+                    <label><strong>Maximum Travel Distance</strong></label>
+                    <select name="max_distance" class="form-control">
+                        <option value="5" {{ 'selected' if patient_prefs and patient_prefs.max_distance == 5 else '' }}>Within 5 km</option>
+                        <option value="10" {{ 'selected' if patient_prefs and patient_prefs.max_distance == 10 else '' }}>Within 10 km</option>
+                        <option value="20" {{ 'selected' if patient_prefs and patient_prefs.max_distance == 20 else 'selected' }}>Within 20 km</option>
+                        <option value="30" {{ 'selected' if patient_prefs and patient_prefs.max_distance == 30 else '' }}>Within 30 km</option>
+                        <option value="50" {{ 'selected' if patient_prefs and patient_prefs.max_distance == 50 else '' }}>Within 50 km</option>
+                        <option value="100" {{ 'selected' if patient_prefs and patient_prefs.max_distance == 100 else '' }}>Any distance</option>
+                    </select>
+                    <small style="color: #666;">We'll only show doctors within this range</small>
+                </div>
+
+                <div class="form-group">
+                    <label><strong>Preferred Appointment Times</strong></label>
+                    <div style="border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #f8f9fa;">
+                        <label style="display: block; margin: 5px 0;">
+                            <input type="checkbox" name="time_pref" value="morning" checked> Morning (9am-12pm) ⭐
+                        </label>
+                        <label style="display: block; margin: 5px 0;">
+                            <input type="checkbox" name="time_pref" value="afternoon"> Afternoon (1pm-5pm)
+                        </label>
+                        <small style="color: #666; display: block; margin-top: 5px;">Select times that work best for you</small>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label><strong>Pincode / Postal Code</strong></label>
+                    <input type="text" name="pincode" class="form-control" placeholder="Enter your pincode" 
+                           value="{{ patient_prefs.address if patient_prefs and patient_prefs.address else '' }}" maxlength="10">
+                    <small style="color: #666;">Used to find nearby doctors</small>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        💾 Save Preferences
+                    </button>
+                    <button type="button" class="btn" onclick="togglePreferences()" style="flex: 0.5;">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+            <div id="pref-save-message" style="display: none; padding: 10px; margin-top: 10px; border-radius: 4px;"></div>
+        </div>
+    </div>
+
     <!-- Smart Scheduling: Optimized Doctor Recommendations -->
     <div class="card" style="margin-bottom: 20px; border: 2px solid #007bff;">
         <div class="card-header" style="background: linear-gradient(135deg, #e3f2fd, #bbdefb); color: #1565c0;">
-            Smart Scheduling - Recommended Doctors
+            🎯 Smart Scheduling - Recommended Doctors
         </div>
         <p style="color: #666; font-size: 0.95rem; padding: 0 5px; margin-bottom: 15px;">
-            Based on your rehab progress and availability, here are the best appointment options for you:
+            Based on your rehab progress and preferences above, here are the best appointment options:
         </p>
         <button id="btn-get-recommendations" class="btn btn-primary" style="width: 100%; margin-bottom: 15px;">
-            Get My Best Appointment Options
+            🔍 Get My Best Appointment Options
         </button>
         <p id="loading-text" style="display: none; text-align: center; color: #666;">
             Finding the best appointments for you...
@@ -617,6 +681,63 @@
             var today = new Date().toISOString().split('T')[0];
             dateInput.setAttribute('min', today);
         }
+    });
+
+    // Toggle preferences panel
+    function togglePreferences() {
+        const panel = document.getElementById('preferences-panel');
+        const toggle = document.getElementById('pref-toggle');
+        if (panel.style.display === 'none') {
+            panel.style.display = 'block';
+            toggle.textContent = '▲';
+        } else {
+            panel.style.display = 'none';
+            toggle.textContent = '▼';
+        }
+    }
+
+    // Save preferences form
+    document.getElementById('preferences-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const data = {
+            urgency: formData.get('urgency'),
+            max_distance: parseFloat(formData.get('max_distance')),
+            address: formData.get('address'),
+            time_preferences: formData.getAll('time_pref')
+        };
+
+        fetch('/api/patient/update-preferences', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(result => {
+            const msgDiv = document.getElementById('pref-save-message');
+            if (result.success) {
+                msgDiv.style.display = 'block';
+                msgDiv.style.background = '#d4edda';
+                msgDiv.style.color = '#155724';
+                msgDiv.textContent = '✅ Preferences saved! Click "Get Recommendations" to see updated results.';
+                
+                // Hide after 3 seconds
+                setTimeout(() => {
+                    togglePreferences();
+                    msgDiv.style.display = 'none';
+                }, 3000);
+            } else {
+                msgDiv.style.display = 'block';
+                msgDiv.style.background = '#f8d7da';
+                msgDiv.style.color = '#721c24';
+                msgDiv.textContent = '❌ ' + (result.message || 'Failed to save preferences');
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Failed to save preferences. Please try again.');
+        });
     });
 </script>
 {% endblock %}
