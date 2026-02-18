@@ -3,178 +3,512 @@
 {% block title %}Sign Up - Home Rehab Coach{% endblock %}
 
 {% block content %}
-<div class="login-page">
-    <h1>📝 Create Account</h1>
-    <p class="subtitle">Join Home Rehab Coach</p>
-    
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div style="max-width: 400px; margin: 0 auto 20px;">
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }}" style="padding: 10px; margin-bottom: 10px; border-radius: 4px; 
-                    {% if category == 'error' %}background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
-                    {% else %}background: #d4edda; color: #155724; border: 1px solid #c3e6cb;{% endif %}">
-                    {{ message }}
-                </div>
-            {% endfor %}
-            </div>
-        {% endif %}
-    {% endwith %}
-    
-    <div class="login-box">
-        <h2>Sign Up</h2>
-        
-        <form method="POST" action="{{ url_for('signup') }}" id="signupForm">
-            <div class="form-group">
-                <label for="name">Full Name</label>
-                <input type="text" id="name" name="name" required 
-                       placeholder="Enter your full name" class="form-control">
-            </div>
-            
-            <div class="form-group">
-                <label for="email">Email Address</label>
-                <input type="email" id="email" name="email" required 
-                       placeholder="Enter your email" class="form-control">
-            </div>
-            
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required 
-                       placeholder="Create a password (min 6 characters)" 
-                       minlength="6" class="form-control">
-            </div>
-            
-            <div class="form-group">
-                <label for="role">I am a...</label>
-                <select id="role" name="role" required class="form-control" onchange="togglePatientFields()">
-                    <option value="">Select your role</option>
-                    <option value="patient">Patient</option>
-                    <option value="doctor">Doctor / Clinician</option>
-                    <option value="caregiver">Caregiver / Family Member</option>
-                </select>
-            </div>
-            
-            <!-- Patient-specific fields (hidden by default) -->
-            <div id="patientFields" style="display: none;">
-                <div class="form-group">
-                    <label for="condition">Medical Condition</label>
-                    <select id="condition" name="condition" class="form-control">
-                        <option value="General Rehab">General Rehabilitation</option>
-                        <option value="Knee Replacement">Knee Replacement Recovery</option>
-                        <option value="Hip Replacement">Hip Replacement Recovery</option>
-                        <option value="ACL Reconstruction">ACL Reconstruction</option>
-                        <option value="Shoulder Surgery">Shoulder Surgery Recovery</option>
-                        <option value="Back Pain">Back Pain / Spinal</option>
-                        <option value="Stroke Recovery">Stroke Recovery</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="urgency">Appointment Urgency</label>
-                    <select id="urgency" name="urgency" class="form-control">
-                        <option value="Low">Low - Routine Follow-up</option>
-                        <option value="Medium" selected>Medium - Regular Check-in</option>
-                        <option value="High">High - Need Consultation Soon</option>
-                    </select>
-                    <small style="color: #666;">How urgently do you need to see a doctor?</small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="max_distance">Maximum Travel Distance</label>
-                    <select id="max_distance" name="max_distance" class="form-control">
-                        <option value="5">Within 5 km</option>
-                        <option value="10">Within 10 km</option>
-                        <option value="20" selected>Within 20 km</option>
-                        <option value="30">Within 30 km</option>
-                        <option value="50">Within 50 km</option>
-                        <option value="100">Any distance</option>
-                    </select>
-                    <small style="color: #666;">How far are you willing to travel for appointments?</small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="pincode">Pincode / Postal Code</label>
-                    <input type="text" id="pincode" name="pincode" class="form-control" 
-                           placeholder="Enter your pincode" maxlength="10">
-                    <small style="color: #666;">Used to find nearby doctors</small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="doctor_id">Select Your Doctor (Optional)</label>
-                    <select id="doctor_id" name="doctor_id" class="form-control">
-                        <option value="">-- Auto-assign a doctor --</option>
-                        {% if doctors %}
-                            {% for doctor in doctors %}
-                                <option value="{{ doctor['id'] }}">Dr. {{ doctor['name'] }}</option>
-                            {% endfor %}
-                        {% endif %}
-                    </select>
-                </div>
-            </div>
-            
-            <!-- Doctor-specific fields (hidden by default) -->
-            <div id="doctorFields" style="display: none;">
-                <div class="form-group">
-                    <label for="specialties">Specialties (select all that apply)</label>
-                    <div style="border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #f8f9fa;">
-                        <label style="display: block; margin: 5px 0;">
-                            <input type="checkbox" name="specialties" value="General"> General Rehabilitation
-                        </label>
-                        <label style="display: block; margin: 5px 0;">
-                            <input type="checkbox" name="specialties" value="MSK"> Musculoskeletal (MSK)
-                        </label>
-                        <label style="display: block; margin: 5px 0;">
-                            <input type="checkbox" name="specialties" value="Post-op"> Post-operative Care
-                        </label>
-                        <label style="display: block; margin: 5px 0;">
-                            <input type="checkbox" name="specialties" value="Neuro"> Neurological
-                        </label>
-                        <label style="display: block; margin: 5px 0;">
-                            <input type="checkbox" name="specialties" value="Sports"> Sports Medicine
-                        </label>
-                        <label style="display: block; margin: 5px 0;">
-                            <input type="checkbox" name="specialties" value="Orthopedic"> Orthopedic
-                        </label>
+<style>
+    .auth-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        min-height: calc(100vh - 80px);
+        background: #fff;
+    }
+
+    .auth-left {
+        padding: 60px 50px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        max-height: calc(100vh - 80px);
+        overflow-y: auto;
+    }
+
+    .auth-right {
+        background: linear-gradient(135deg, var(--success) 0%, var(--info) 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 40px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .auth-right::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 600px;
+        height: 600px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        animation: float 6s ease-in-out infinite;
+    }
+
+    .auth-right::after {
+        content: '';
+        position: absolute;
+        bottom: -30%;
+        left: -30%;
+        width: 500px;
+        height: 500px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 50%;
+        animation: float 8s ease-in-out infinite reverse;
+    }
+
+    .auth-form {
+        position: relative;
+        z-index: 1;
+    }
+
+    .auth-form h2 {
+        font-size: 2.2rem;
+        margin-bottom: 15px;
+        color: var(--dark);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .auth-form .form-subtitle {
+        color: var(--gray);
+        font-size: 1.05rem;
+        margin-bottom: 25px;
+    }
+
+    .auth-form .form-group {
+        margin-bottom: 18px;
+    }
+
+    .auth-form .form-group label {
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .auth-form .form-group label i {
+        color: var(--primary);
+        font-size: 1rem;
+    }
+
+    .auth-form .form-control {
+        font-size: 1rem;
+        padding: 11px 14px;
+    }
+
+    .auth-form .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+    }
+
+    .auth-form .btn {
+        width: 100%;
+        margin-top: 10px;
+        font-size: 1.1rem;
+    }
+
+    .auth-form .form-links {
+        margin-top: 20px;
+        text-align: center;
+    }
+
+    .auth-form .form-links p {
+        color: var(--gray);
+        font-size: 1rem;
+        margin-bottom: 12px;
+    }
+
+    .auth-form .form-links a {
+        color: var(--primary);
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .auth-form .form-links a:hover {
+        color: var(--primary-dark);
+    }
+
+    .role-selector {
+        margin-bottom: 22px;
+        padding-bottom: 22px;
+        border-bottom: 2px solid var(--border);
+    }
+
+    .role-selector p {
+        font-weight: 600;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 1rem;
+    }
+
+    .role-selector p i {
+        color: var(--primary);
+        font-size: 1.1rem;
+    }
+
+    .role-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 10px;
+    }
+
+    .role-option {
+        padding: 12px 10px;
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        text-align: center;
+        transition: all 0.3s ease;
+        background: #fff;
+    }
+
+    .role-option:hover {
+        border-color: var(--primary);
+        background: rgba(var(--primary-rgb), 0.05);
+    }
+
+    .role-option input[type="radio"] {
+        display: none;
+    }
+
+    .role-option input[type="radio"]:checked ~ label {
+        color: var(--primary);
+    }
+
+    .role-option input[type="radio"]:checked ~ i {
+        color: var(--primary);
+    }
+
+    .role-option label {
+        display: block;
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: 4px;
+        font-size: 0.9rem;
+    }
+
+    .role-option i {
+        font-size: 1.6rem;
+        display: block;
+        color: var(--gray);
+        transition: color 0.3s ease;
+    }
+
+    .auth-right-content {
+        position: relative;
+        z-index: 2;
+        text-align: center;
+        color: #fff;
+    }
+
+    .auth-right-icon {
+        font-size: 6rem;
+        margin-bottom: 30px;
+        animation: bounce-3d 3s ease-in-out infinite;
+        filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
+    }
+
+    .auth-right h3 {
+        font-size: 2rem;
+        margin-bottom: 20px;
+        font-weight: 700;
+    }
+
+    .auth-right p {
+        font-size: 1.15rem;
+        opacity: 0.95;
+        line-height: 1.8;
+        max-width: 400px;
+        margin: 0 auto 30px;
+    }
+
+    .auth-right-features {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        padding: 25px;
+        border-radius: 15px;
+        text-align: left;
+        max-width: 400px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .auth-right-features ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .auth-right-features li {
+        padding: 12px;
+        padding-left: 30px;
+        position: relative;
+        font-size: 0.95rem;
+        opacity: 0.95;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+    }
+
+    .auth-right-features li:before {
+        content: '✓';
+        position: absolute;
+        left: 8px;
+        font-weight: bold;
+        font-size: 1.2rem;
+        color: #00ff88;
+    }
+
+    @keyframes bounce-3d {
+        0%, 100% { transform: translateY(0) rotateZ(0deg); }
+        25% { transform: translateY(-20px) rotateZ(-5deg); }
+        75% { transform: translateY(-20px) rotateZ(5deg); }
+    }
+
+    @media (max-width: 1024px) {
+        .auth-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .auth-right {
+            display: none;
+        }
+
+        .auth-left {
+            min-height: auto;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .auth-left {
+            padding: 40px 25px;
+        }
+
+        .auth-form h2 {
+            font-size: 1.8rem;
+        }
+
+        .auth-form .form-row {
+            grid-template-columns: 1fr;
+        }
+
+        .role-options {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="auth-layout">
+    <!-- Left: Signup Form -->
+    <div class="auth-left">
+        <div class="auth-form">
+            <h2>
+                <i class="fas fa-user-plus"></i> Get Started
+            </h2>
+            <p class="form-subtitle">Join us on your recovery journey</p>
+
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div style="margin-bottom: 20px;">
+                    {% for category, message in messages %}
+                        <div class="alert {% if category == 'error' %}alert-danger{% elif category == 'success' %}alert-success{% else %}alert-info{% endif %}" style="justify-content: flex-start;">
+                            <i class="fas fa-{% if category == 'error' %}exclamation-circle{% elif category == 'success' %}check-circle{% else %}info-circle{% endif %}"></i>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            <form method="POST" action="{{ url_for('signup') }}" id="signupForm">
+                <!-- Role Selection -->
+                <div class="role-selector">
+                    <p><i class="fas fa-shield-alt"></i> I am a...</p>
+                    <div class="role-options">
+                        <div class="role-option">
+                            <input type="radio" id="role_patient" name="role" value="patient" required onchange="togglePatientFields()">
+                            <label for="role_patient">Patient</label>
+                            <i class="fas fa-heart"></i>
+                        </div>
+                        <div class="role-option">
+                            <input type="radio" id="role_clinic" name="role" value="doctor" onchange="togglePatientFields()">
+                            <label for="role_clinic">Clinician</label>
+                            <i class="fas fa-stethoscope"></i>
+                        </div>
+                        <div class="role-option">
+                            <input type="radio" id="role_caregiver" name="role" value="caregiver" onchange="togglePatientFields()">
+                            <label for="role_caregiver">Caregiver</label>
+                            <i class="fas fa-handshake"></i>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="form-group">
-                    <label for="clinic_name">Clinic Name</label>
-                    <input type="text" id="clinic_name" name="clinic_name" class="form-control" 
-                           placeholder="Enter clinic name">
+
+                <!-- Name Fields -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="first_name">
+                            <i class="fas fa-user"></i> First Name
+                        </label>
+                        <input type="text" id="first_name" name="first_name" 
+                               placeholder="First name" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="last_name">
+                            <i class="fas fa-user"></i> Last Name
+                        </label>
+                        <input type="text" id="last_name" name="last_name" 
+                               placeholder="Last name" class="form-control">
+                    </div>
                 </div>
-                
+
+                <!-- Email -->
                 <div class="form-group">
-                    <label for="clinic_pincode">Clinic Pincode / Postal Code</label>
-                    <input type="text" id="clinic_pincode" name="clinic_pincode" class="form-control" 
-                           placeholder="Clinic pincode" maxlength="10">
-                    <small style="color: #666;">For patient distance calculations</small>
+                    <label for="email">
+                        <i class="fas fa-envelope"></i> Email Address
+                    </label>
+                    <input type="email" id="email" name="email" required 
+                           placeholder="your@email.com" class="form-control">
                 </div>
+
+                <!-- Password -->
+                <div class="form-group">
+                    <label for="password">
+                        <i class="fas fa-lock"></i> Password
+                    </label>
+                    <input type="password" id="password" name="password" required 
+                           placeholder="At least 6 characters" minlength="6" class="form-control">
+                </div>
+
+                <!-- Patient-specific fields (hidden by default) -->
+                <div id="patientFields" style="display: none; padding-top: 15px; border-top: 2px solid var(--border);">
+                    <div class="form-group">
+                        <label for="condition">
+                            <i class="fas fa-heartbeat"></i> Medical Condition
+                        </label>
+                        <select id="condition" name="condition" class="form-control">
+                            <option value="">Select a condition</option>
+                            <option value="General Rehab">General Rehabilitation</option>
+                            <option value="Knee Replacement">Knee Replacement Recovery</option>
+                            <option value="Hip Replacement">Hip Replacement Recovery</option>
+                            <option value="ACL Reconstruction">ACL Reconstruction</option>
+                            <option value="Shoulder Surgery">Shoulder Surgery Recovery</option>
+                            <option value="Back Pain">Back Pain / Spinal</option>
+                            <option value="Stroke Recovery">Stroke Recovery</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="pincode">
+                            <i class="fas fa-map-marker-alt"></i> Pincode / Postal Code
+                        </label>
+                        <input type="text" id="pincode" name="pincode" class="form-control" 
+                               placeholder="Enter your pincode" maxlength="10">
+                        <small style="color: var(--gray); margin-top: 5px; display: block;">Used to find nearby doctors</small>
+                    </div>
+                </div>
+
+                <!-- Doctor-specific fields (hidden by default) -->
+                <div id="doctorFields" style="display: none; padding-top: 15px; border-top: 2px solid var(--border);">
+                    <div class="form-group">
+                        <label for="clinic_name">
+                            <i class="fas fa-building"></i> Clinic Name
+                        </label>
+                        <input type="text" id="clinic_name" name="clinic_name" class="form-control" 
+                               placeholder="Enter clinic name">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="clinic_pincode">
+                            <i class="fas fa-map-marker-alt"></i> Clinic Pincode
+                        </label>
+                        <input type="text" id="clinic_pincode" name="clinic_pincode" class="form-control" 
+                               placeholder="Clinic pincode" maxlength="10">
+                        <small style="color: var(--gray); margin-top: 5px; display: block;">For patient distance calculations</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: block; margin-bottom: 10px;">
+                            <i class="fas fa-check-square"></i> <strong>Specialties</strong>
+                        </label>
+                        <div style="background: var(--light); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+                            <label style="display: block; margin: 8px 0; font-weight: 400;">
+                                <input type="checkbox" name="specialties" value="General"> General Rehabilitation
+                            </label>
+                            <label style="display: block; margin: 8px 0; font-weight: 400;">
+                                <input type="checkbox" name="specialties" value="MSK"> Musculoskeletal (MSK)
+                            </label>
+                            <label style="display: block; margin: 8px 0; font-weight: 400;">
+                                <input type="checkbox" name="specialties" value="Post-op"> Post-operative Care
+                            </label>
+                            <label style="display: block; margin: 8px 0; font-weight: 400;">
+                                <input type="checkbox" name="specialties" value="Neuro"> Neurological
+                            </label>
+                            <label style="display: block; margin: 8px 0; font-weight: 400;">
+                                <input type="checkbox" name="specialties" value="Sports"> Sports Medicine
+                            </label>
+                            <label style="display: block; margin: 8px 0; font-weight: 400;">
+                                <input type="checkbox" name="specialties" value="Orthopedic"> Orthopedic
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-success btn-large">
+                    <i class="fas fa-user-plus"></i> Create Account
+                </button>
+            </form>
+
+            <div class="form-links">
+                <p>Already have an account?</p>
+                <a href="{{ url_for('login') }}">
+                    <i class="fas fa-sign-in-alt"></i> Sign In Here
+                </a>
             </div>
-            
-            <button type="submit" class="btn btn-primary btn-large" style="width: 100%;">
-                Create Account
-            </button>
-        </form>
-        
-        <div style="text-align: center; margin-top: 20px;">
-            <p style="color: #666;">Already have an account?</p>
-            <a href="{{ url_for('login') }}" class="btn" style="margin-top: 10px;">
-                🔐 Login Instead
-            </a>
+
+            <div style="margin-top: 15px; text-align: center; padding-top: 15px; border-top: 2px solid var(--border);">
+                <a href="{{ url_for('landing') }}" style="color: var(--gray); font-size: 0.95rem;">
+                    <i class="fas fa-arrow-left"></i> Back to Home
+                </a>
+            </div>
         </div>
-        
-        <div style="text-align: center; margin-top: 20px;">
-            <a href="{{ url_for('landing') }}" style="color: #666;">← Back to Home</a>
+    </div>
+
+    <!-- Right: Visual Section -->
+    <div class="auth-right">
+        <div class="auth-right-content">
+            <div class="auth-right-icon">
+                <i class="fas fa-rocket"></i>
+            </div>
+            <h3>Start Your Journey</h3>
+            <p>Join thousands of patients getting personalized rehabilitation care from home with professional guidance.</p>
+            
+            <div class="auth-right-features">
+                <ul>
+                    <li>Smart form detection</li>
+                    <li>Expert feedback</li>
+                    <li>Personalized plans</li>
+                    <li>Progress tracking</li>
+                    <li>Video support</li>
+                    <li>24/7 access</li>
+                </ul>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
 function togglePatientFields() {
-    const role = document.getElementById('role').value;
+    const role = document.getElementById('role').value || 
+                 (document.querySelector('input[name="role"]:checked') ? document.querySelector('input[name="role"]:checked').value : '');
     const patientFields = document.getElementById('patientFields');
     const doctorFields = document.getElementById('doctorFields');
     

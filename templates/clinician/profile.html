@@ -4,19 +4,19 @@
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('clinician_dashboard') }}">👨‍⚕️ RehabCoach</a></h1>
+    <h1><a href="{{ url_for('clinician_dashboard') }}"><i class="fa-solid fa-user-doctor"></i> RehabCoach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('clinician_dashboard') }}">Dashboard</a>
         <a href="{{ url_for('plan_editor') }}">Plan Editor</a>
         <a href="{{ url_for('consultation') }}">Consultations</a>
         <div class="nav-user">
-            <button class="nav-user-btn" title="Account">👤</button>
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
             <div class="nav-user-dropdown">
                 <div class="nav-user-dropdown-inner">
                     <div class="dropdown-header">Signed in as<strong>Dr. {{ session.get('user_name', 'Doctor') }}</strong></div>
-                    <a href="{{ url_for('clinician_profile') }}" class="active"><span class="dropdown-icon">👤</span> My Profile</a>
+                    <a href="{{ url_for('clinician_profile') }}" class="active"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
                     <div class="dropdown-divider"></div>
-                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
                 </div>
             </div>
         </div>
@@ -297,10 +297,10 @@
     <nav class="profile-sidebar">
         <h3>Profile</h3>
         <a href="{{ url_for('clinician_profile') }}" class="active">
-            <span class="sidebar-icon">👤</span> My Details
+            <span class="sidebar-icon"><i class="fa-solid fa-user"></i></span> My Details
         </a>
         <a href="#patient-roster-section" onclick="document.getElementById('patient-roster-section').scrollIntoView({behavior:'smooth'});return false;">
-            <span class="sidebar-icon">🏥</span> My Patients
+            <span class="sidebar-icon"><i class="fa-solid fa-hospital"></i></span> My Patients
         </a>
     </nav>
 
@@ -311,7 +311,7 @@
         <!-- ── Account info card ── -->
         <div class="info-card">
             <div class="info-card-title">
-                <span class="card-icon">🪪</span> Account Information
+                <span class="card-icon"><i class="fa-solid fa-id-card"></i></span> Account Information
             </div>
             <div class="info-grid">
                 <div class="info-item">
@@ -362,7 +362,7 @@
         <!-- ── Patient roster with caregivers ── -->
         <div class="info-card" id="patient-roster-section">
             <div class="info-card-title">
-                <span class="card-icon">🏥</span> Patient & Caregiver Roster
+                <span class="card-icon"><i class="fa-solid fa-hospital"></i></span> Patient & Caregiver Roster
             </div>
 
             {% if patients|length > 0 %}
@@ -385,7 +385,7 @@
                                 <a href="{{ url_for('patient_detail', patient_id=p.id) }}">{{ p.name }}</a>
                                 <div class="patient-email">{{ p.email }}</div>
                                 {% if p.phone %}
-                                <div class="patient-email">📞 {{ p.phone }}</div>
+                                <div class="patient-email"><i class="fa-solid fa-phone"></i> {{ p.phone }}</div>
                                 {% endif %}
                             </td>
                             <td><span class="condition-pill">{{ p.condition }}</span></td>
@@ -409,12 +409,12 @@
                                 {% if p.caregiver_name %}
                                 <div class="caregiver-info">
                                     <div class="cg-name">{{ p.caregiver_name }}</div>
-                                    <div class="cg-detail">✉️ {{ p.caregiver_email }}</div>
+                                    <div class="cg-detail"><i class="fa-solid fa-envelope"></i> {{ p.caregiver_email }}</div>
                                     {% if p.caregiver_phone %}
-                                    <div class="cg-detail">📞 {{ p.caregiver_phone }}</div>
+                                    <div class="cg-detail"><i class="fa-solid fa-phone"></i> {{ p.caregiver_phone }}</div>
                                     {% endif %}
                                     {% if p.caregiver_relationship %}
-                                    <div class="cg-detail">🤝 {{ p.caregiver_relationship }}</div>
+                                    <div class="cg-detail"><i class="fa-solid fa-handshake"></i> {{ p.caregiver_relationship }}</div>
                                     {% endif %}
                                 </div>
                                 {% else %}

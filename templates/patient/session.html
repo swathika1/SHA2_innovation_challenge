@@ -4,18 +4,18 @@
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('patient_dashboard') }}">🏠 Home Rehab Coach</a></h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo"> Home Rehab Coach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
         <a href="{{ url_for('patient_appointments') }}">Consultations</a>
         <div class="nav-user">
-            <button class="nav-user-btn" title="Account">👤</button>
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
             <div class="nav-user-dropdown">
                 <div class="nav-user-dropdown-inner">
                     <div class="dropdown-header">Signed in as<strong>{{ user.name if user else 'Patient' }}</strong></div>
-                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon">�</span> My Profile</a>
+                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
                     <div class="dropdown-divider"></div>
-                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
                 </div>
             </div>
         </div>
@@ -186,7 +186,7 @@
 <!-- ===================== PHASE 1 — PRE-SESSION ===================== -->
 <div id="phasePreSession" class="phase-screen active">
     <div class="pre-session-card">
-        <h2>🏋️ Today's Session</h2>
+        <h2><i class="fa-solid fa-dumbbell"></i> Today's Session</h2>
         <p style="color:#666;">Review your exercises and let us know your current pain level before we start.</p>
 
         {% if workouts %}
@@ -205,9 +205,9 @@
                    oninput="document.getElementById('painBeforeVal').textContent=this.value">
         </div>
 
-        <button class="btn-start-session" onclick="startSession()">▶️ Start Today's Session</button>
+        <button class="btn-start-session" onclick="startSession()"><i class="fa-solid fa-play"></i> Start Today's Session</button>
         {% else %}
-        <p style="color:#c00; margin-top: 16px;">⚠️ No exercises assigned yet. Ask your clinician to create a plan.</p>
+        <p style="color:#c00; margin-top: 16px;"><i class="fa-solid fa-triangle-exclamation"></i> No exercises assigned yet. Ask your clinician to create a plan.</p>
         <a href="{{ url_for('patient_dashboard') }}" class="btn" style="margin-top:12px;display:inline-block;">← Back to Dashboard</a>
         {% endif %}
     </div>
@@ -241,28 +241,28 @@
                     <canvas id="poseCanvas"></canvas>
                 </div>
                 <div class="video-placeholder" id="videoPlaceholder">
-                    <div class="icon">📹</div>
+                    <div class="icon"><i class="fa-solid fa-video"></i></div>
                     <p>Camera will start when session begins</p>
                 </div>
             </div>
 
             <!-- Form status + score -->
             <div class="form-status" style="margin-top:14px;">
-                <div id="formStatusBadge" class="badge analyzing">⏳ ANALYZING...</div>
+                <div id="formStatusBadge" class="badge analyzing"><i class="fa-solid fa-hourglass-half"></i> ANALYZING...</div>
                 <div class="score">Score: <span id="frameScoreText">--</span> / 50</div>
             </div>
 
             <!-- Realtime feedback -->
             <div class="realtime-feedback" style="margin-top:14px;">
-                <h4>🤖 AI Form Feedback</h4>
+                <h4><i class="fa-solid fa-robot"></i> AI Form Feedback</h4>
                 <div id="feedbackList">
-                    <div class="feedback-item info">📷 Position yourself in frame to begin analysis</div>
+                    <div class="feedback-item info"><i class="fa-solid fa-camera"></i> Position yourself in frame to begin analysis</div>
                 </div>
             </div>
 
             <!-- Audio toggle -->
             <div class="audio-indicator" style="margin-top:14px;">
-                <div>🔊</div>
+                <div><i class="fa-solid fa-volume-high"></i></div>
                 <div><strong>Voice Feedback: <span id="audioStatus">OFF</span></strong><br><small>Click to toggle</small></div>
                 <button onclick="toggleAudio()" style="margin-left:auto;padding:5px 10px;border:1px solid #ccc;border-radius:6px;cursor:pointer;background:#fff;">Toggle</button>
             </div>
@@ -291,7 +291,13 @@
                 <ul class="exercise-step-list" id="exerciseStepList">
                     {% for w in workouts %}
                     <li id="exStep-{{ loop.index0 }}" class="{% if loop.first %}current{% else %}upcoming{% endif %}">
-                        <span class="step-icon">{% if loop.first %}🔵{% else %}⚪{% endif %}</span>
+                        <span class="step-icon">
+                            {% if loop.first %}
+                                <i class="fa-solid fa-circle-dot"></i>
+                            {% else %}
+                                <i class="fa-regular fa-circle"></i>
+                            {% endif %}
+                        </span>
                         <span>{{ w.exercise_name }}</span>
                     </li>
                     {% endfor %}
@@ -300,12 +306,12 @@
 
             <!-- Controls -->
             <div class="session-controls">
-                <button class="btn btn-pause" onclick="togglePause()" id="pauseBtn">⏸️ Pause</button>
-                <button class="btn btn-stop" onclick="stopSession()">⏹️ Stop</button>
+                <button class="btn btn-pause" onclick="togglePause()" id="pauseBtn"><i class="fa-solid fa-pause"></i> Pause</button>
+                <button class="btn btn-stop" onclick="stopSession()"><i class="fa-solid fa-stop"></i> Stop</button>
             </div>
             <button id="nextExerciseBtn" class="btn-next" onclick="nextExercise()"
                 {% if not workouts or workouts|length <= 1 %}style="display:none;"{% endif %}>
-                Next Exercise ➡️
+                <span class="next-label">Next Exercise</span> <i class="fa-solid fa-arrow-right"></i>
             </button>
         </div>
     </div>
@@ -442,10 +448,10 @@
             document.getElementById('videoContainer').style.display = 'block';
             isAnalyzing = true;
             analyzePose();
-            addFeedback('success', '✓ Camera connected — Begin your exercise');
+            addFeedback('success', 'Camera connected — Begin your exercise');
         } catch (err) {
             console.error('Webcam error:', err);
-            addFeedback('error', '✗ Could not access camera. Analysis will be limited.');
+            addFeedback('error', 'Could not access camera. Analysis will be limited.');
             isAnalyzing = true;
             analyzePose();
         }
@@ -466,15 +472,15 @@
         scoreText.textContent = score;
         allScores.push(score);
         if (score >= 40) {
-            badge.className = 'badge correct'; badge.textContent = '✓ CORRECT FORM';
+            badge.className = 'badge correct'; badge.innerHTML = '<i class="fa-solid fa-circle-check"></i> CORRECT FORM';
         } else if (score >= 25) {
-            badge.className = 'badge analyzing'; badge.textContent = '⚠️ ADJUST FORM';
+            badge.className = 'badge analyzing'; badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ADJUST FORM';
             if (Math.random() > .95) {
                 const tips = ['Keep your back straight','Slow down the movement','Extend fully at the top','Control the descent','Keep knees aligned with toes'];
-                addFeedback('warning', '⚠️ ' + tips[Math.floor(Math.random() * tips.length)]);
+                addFeedback('warning', 'Tip: ' + tips[Math.floor(Math.random() * tips.length)]);
             }
         } else {
-            badge.className = 'badge incorrect'; badge.textContent = '✗ FORM NEEDS WORK';
+            badge.className = 'badge incorrect'; badge.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> FORM NEEDS WORK';
             if (audioEnabled) speakFeedback('Adjust your form');
         }
     }
@@ -489,13 +495,13 @@
                 currentRep = targetReps;
                 setsCompletedDict[String(currentSet)] = targetReps;
                 isAnalyzing = false;
-                addFeedback('success', '🎉 Exercise complete!');
+                addFeedback('success', 'Exercise complete!');
                 const btn = document.getElementById('nextExerciseBtn');
                 if (currentExIndex >= WORKOUTS.length - 1) {
-                    btn.textContent = '✅ Finish Session';
-                    addFeedback('success', '🏆 All exercises complete! Great job!');
+                    btn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Finish Session';
+                    addFeedback('success', 'All exercises complete! Great job!');
                 } else {
-                    addFeedback('info', 'Click "Next Exercise ➡️" to continue.');
+                    addFeedback('info', 'Click "Next Exercise" to continue.');
                 }
                 btn.style.display = 'block';
                 btn.style.animation = 'pulse 1s infinite';
@@ -535,10 +541,12 @@
         updateRepCounter();
         updateExerciseSteps();
         updateSessionProgress();
-        addFeedback('info', '➡️ Now: ' + w.name);
+        addFeedback('info', 'Now: ' + w.name);
         const btn = document.getElementById('nextExerciseBtn');
         btn.style.animation = '';
-        btn.textContent = (currentExIndex >= WORKOUTS.length - 1) ? '✅ Finish Session' : 'Next Exercise ➡️';
+        btn.innerHTML = (currentExIndex >= WORKOUTS.length - 1)
+            ? '<i class="fa-solid fa-circle-check"></i> Finish Session'
+            : '<span class="next-label">Next Exercise</span> <i class="fa-solid fa-arrow-right"></i>';
         await fetch('/api/session/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -574,7 +582,7 @@
                 body: JSON.stringify(payload)
             });
             const result = await resp.json();
-            if (result.ok) addFeedback('success', '💾 Exercise saved!');
+            if (result.ok) addFeedback('success', 'Exercise saved!');
         } catch (err) {
             console.error('Error saving exercise:', err);
         }
@@ -584,10 +592,17 @@
         WORKOUTS.forEach((w, i) => {
             const li = document.getElementById('exStep-' + i);
             if (!li) return;
-            const icon = li.querySelector('.step-icon');
-            if (i < currentExIndex) { li.className = 'completed'; icon.textContent = '✅'; }
-            else if (i === currentExIndex) { li.className = 'current'; icon.textContent = '🔵'; }
-            else { li.className = 'upcoming'; icon.textContent = '⚪'; }
+            const icon = li.querySelector('.step-icon i');
+            if (i < currentExIndex) {
+                li.className = 'completed';
+                icon.className = 'fa-solid fa-circle-check';
+            } else if (i === currentExIndex) {
+                li.className = 'current';
+                icon.className = 'fa-solid fa-circle-dot';
+            } else {
+                li.className = 'upcoming';
+                icon.className = 'fa-regular fa-circle';
+            }
         });
     }
 
@@ -607,7 +622,7 @@
         const overlay = document.createElement('div');
         overlay.className = 'post-overlay';
         overlay.innerHTML = '<div class="post-card">' +
-            '<h2>Session Complete! 🎉</h2>' +
+            '<h2><i class="fa-solid fa-circle-check"></i> Session Complete!</h2>' +
             '<p style="color:#666;">Overall progress: <strong>' + calcSessionProgress() + '%</strong></p>' +
             '<div class="pain-slider-group">' +
                 '<label>Pain After (0-10): <span class="pain-value" id="painAfterVal">0</span></label>' +
@@ -672,7 +687,7 @@
     function toggleAudio() {
         audioEnabled = !audioEnabled;
         document.getElementById('audioStatus').textContent = audioEnabled ? 'ON' : 'OFF';
-        addFeedback('info', audioEnabled ? '🔊 Voice feedback enabled' : '🔇 Voice feedback disabled');
+        addFeedback('info', audioEnabled ? 'Voice feedback enabled' : 'Voice feedback disabled');
     }
 
     function speakFeedback(text) {
@@ -685,8 +700,10 @@
 
     function togglePause() {
         isPaused = !isPaused;
-        document.getElementById('pauseBtn').textContent = isPaused ? '▶️ Resume' : '⏸️ Pause';
-        addFeedback('info', isPaused ? '⏸️ Session paused' : '▶️ Session resumed');
+        document.getElementById('pauseBtn').innerHTML = isPaused
+            ? '<i class="fa-solid fa-play"></i> Resume'
+            : '<i class="fa-solid fa-pause"></i> Pause';
+        addFeedback('info', isPaused ? 'Session paused' : 'Session resumed');
     }
 
     window.addEventListener('beforeunload', () => {

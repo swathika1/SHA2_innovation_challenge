@@ -4,18 +4,18 @@
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('patient_dashboard') }}">🏠 Home Rehab Coach</a></h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo"> Home Rehab Coach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
         <a href="{{ url_for('patient_appointments') }}">Consultations</a>
         <div class="nav-user">
-            <button class="nav-user-btn" title="Account">��</button>
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
             <div class="nav-user-dropdown">
                 <div class="nav-user-dropdown-inner">
                     <div class="dropdown-header">Signed in as<strong>{{ user.name if user else 'Patient' }}</strong></div>
-                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon">�</span> My Profile</a>
+                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
                     <div class="dropdown-divider"></div>
-                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
                 </div>
             </div>
         </div>
@@ -84,7 +84,7 @@
     <!-- Header -->
     <div class="summary-header">
         <div>
-            <h2>Session Summary 🎯</h2>
+            <h2>Session Summary <i class="fa-solid fa-bullseye"></i></h2>
             <div class="meta">
                 {% if session_data.started_at %}
                 {{ session_data.started_at[:16] | replace('T', ' ') }}
@@ -103,22 +103,22 @@
     <!-- Stat cards -->
     <div class="stat-row">
         <div class="stat-card">
-            <div class="stat-icon">🎯</div>
+            <div class="stat-icon"><i class="fa-solid fa-bullseye"></i></div>
             <div class="stat-value">{{ session_data.quality_score | default(0) | round(1) }}</div>
             <div class="stat-label">Quality Score</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon">😣</div>
+            <div class="stat-icon"><i class="fa-solid fa-face-frown"></i></div>
             <div class="stat-value">{{ session_data.pain_before | default(0) }} → {{ session_data.pain_after | default(0) }}</div>
             <div class="stat-label">Pain (Before → After)</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon">💪</div>
+            <div class="stat-icon"><i class="fa-solid fa-dumbbell"></i></div>
             <div class="stat-value">{{ session_data.effort_level | default(5) }} / 10</div>
             <div class="stat-label">Effort Level</div>
         </div>
         <div class="stat-card">
-            <div class="stat-icon">⏱️</div>
+            <div class="stat-icon"><i class="fa-solid fa-stopwatch"></i></div>
             <div class="stat-value">
                 {% if overall_duration %}{{ (overall_duration // 60) }}:{{ '%02d' | format(overall_duration % 60) }}{% else %}--{% endif %}
             </div>
@@ -171,19 +171,19 @@
     <div class="action-row">
         {% set completion = session_data.completed_perc | default(0) %}
         {% if completion < 100 %}
-            <a href="{{ url_for('rehab_session') }}" class="action-btn action-primary">🔄 Restart Session</a>
-            <a href="{{ url_for('rehab_session') }}" class="action-btn action-success">▶️ Start From Where You Left</a>
-            <a href="{{ url_for('patient_dashboard') }}" class="action-btn action-secondary">🏠 Go to Dashboard</a>
+            <a href="{{ url_for('rehab_session') }}" class="action-btn action-primary"><i class="fa-solid fa-rotate"></i> Restart Session</a>
+            <a href="{{ url_for('rehab_session') }}" class="action-btn action-success"><i class="fa-solid fa-play"></i> Start From Where You Left</a>
+            <a href="{{ url_for('patient_dashboard') }}" class="action-btn action-secondary"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo-inline"> Go to Dashboard</a>
         {% else %}
-            <a href="{{ url_for('rehab_session') }}" class="action-btn action-primary">🔄 Restart Session</a>
-            <a href="{{ url_for('patient_dashboard') }}" class="action-btn action-secondary">🏠 Go to Dashboard</a>
+            <a href="{{ url_for('rehab_session') }}" class="action-btn action-primary"><i class="fa-solid fa-rotate"></i> Restart Session</a>
+            <a href="{{ url_for('patient_dashboard') }}" class="action-btn action-secondary"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo-inline"> Go to Dashboard</a>
         {% endif %}
     </div>
 
     {% else %}
     <!-- No session data -->
     <div style="text-align:center; padding:60px 20px;">
-        <div style="font-size:3rem;margin-bottom:16px;">📋</div>
+        <div style="font-size:3rem;margin-bottom:16px;"><i class="fa-solid fa-clipboard-list"></i></div>
         <h2>No Session Data</h2>
         <p style="color:#666;">Complete a session to see your summary here.</p>
         <a href="{{ url_for('rehab_session') }}" class="action-btn action-primary" style="display:inline-block;margin-top:16px;">Start a Session</a>

@@ -4,19 +4,19 @@
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('clinician_dashboard') }}">👨‍⚕️ RehabCoach</a></h1>
+    <h1><a href="{{ url_for('clinician_dashboard') }}"><i class="fa-solid fa-user-doctor"></i> RehabCoach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('clinician_dashboard') }}" class="active">Dashboard</a>
         <a href="{{ url_for('plan_editor') }}">Plan Editor</a>
         <a href="{{ url_for('consultation') }}">Consultations</a>
         <div class="nav-user">
-            <button class="nav-user-btn" title="Account">👤</button>
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
             <div class="nav-user-dropdown">
                 <div class="nav-user-dropdown-inner">
                     <div class="dropdown-header">Signed in as<strong>Dr. {{ session.get('user_name', 'Doctor') }}</strong></div>
-                    <a href="{{ url_for('clinician_profile') }}"><span class="dropdown-icon">👤</span> My Profile</a>
+                    <a href="{{ url_for('clinician_profile') }}"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
                     <div class="dropdown-divider"></div>
-                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
                 </div>
             </div>
         </div>
@@ -52,14 +52,14 @@
 
 <!-- Quick Actions -->
 <div style="display: flex; gap: 15px; margin-bottom: 20px;">
-    <a href="{{ url_for('consultation') }}" class="btn" style="background: #17a2b8;">📹 Schedule Video Call</a>
-    <a href="{{ url_for('plan_editor') }}" class="btn" style="background: #28a745;">📝 Create Rehab Plan</a>
+    <a href="{{ url_for('consultation') }}" class="btn" style="background: #17a2b8;"><i class="fa-solid fa-video"></i> Schedule Video Call</a>
+    <a href="{{ url_for('plan_editor') }}" class="btn" style="background: #28a745;"><i class="fa-solid fa-pen-to-square"></i> Create Rehab Plan</a>
 </div>
 
 <!-- Filter Bar -->
 <div class="filter-bar">
     <button class="filter-btn active">All Patients ({{ total_patients }})</button>
-    <button class="filter-btn" style="background: #f8d7da; border-color: #dc3545; color: #721c24;">⚠️ Needs Attention ({{ needs_attention }})</button>
+    <button class="filter-btn" style="background: #f8d7da; border-color: #dc3545; color: #721c24;"><i class="fa-solid fa-triangle-exclamation"></i> Needs Attention ({{ needs_attention }})</button>
 </div>
 
 <!-- Patient List -->
@@ -73,13 +73,13 @@
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
                 {% if patient.adherence_rate < 50 %}
-                    <span class="risk-flag high">⚠️ Low Adherence</span>
+                    <span class="risk-flag high"><i class="fa-solid fa-triangle-exclamation"></i> Low Adherence</span>
                 {% elif patient.avg_pain_level and patient.avg_pain_level > 6 %}
-                    <span class="risk-flag medium">⚠️ Pain Spike</span>
+                    <span class="risk-flag medium"><i class="fa-solid fa-triangle-exclamation"></i> Pain Spike</span>
                 {% elif patient.avg_quality_score and patient.avg_quality_score < 60 %}
-                    <span class="risk-flag medium">⚠️ Form Quality Low</span>
+                    <span class="risk-flag medium"><i class="fa-solid fa-triangle-exclamation"></i> Form Quality Low</span>
                 {% else %}
-                    <span class="risk-flag low">✓ On Track</span>
+                    <span class="risk-flag low"><i class="fa-solid fa-circle-check"></i> On Track</span>
                 {% endif %}
                 <span style="color: #666;">{{ patient.adherence_rate or 0 }}% adherence</span>
                 <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="btn">View Details</a>

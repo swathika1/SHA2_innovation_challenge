@@ -3,56 +3,300 @@
 {% block title %}Login - Home Rehab Coach{% endblock %}
 
 {% block content %}
-<div class="login-page">
-    <h1>🔐 Login</h1>
-    <p class="subtitle">Welcome back to Home Rehab Coach</p>
-    
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div style="max-width: 400px; margin: 0 auto 20px;">
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }}" style="padding: 10px; margin-bottom: 10px; border-radius: 4px; 
-                    {% if category == 'error' %}background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
-                    {% else %}background: #d4edda; color: #155724; border: 1px solid #c3e6cb;{% endif %}">
-                    {{ message }}
+<style>
+    .auth-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        min-height: calc(100vh - 80px);
+        background: #fff;
+    }
+
+    .auth-left {
+        padding: 60px 50px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .auth-right {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--info) 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 40px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .auth-right::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 600px;
+        height: 600px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        animation: float 6s ease-in-out infinite;
+    }
+
+    .auth-right::after {
+        content: '';
+        position: absolute;
+        bottom: -30%;
+        left: -30%;
+        width: 500px;
+        height: 500px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 50%;
+        animation: float 8s ease-in-out infinite reverse;
+    }
+
+    .auth-form {
+        position: relative;
+        z-index: 1;
+    }
+
+    .auth-form h2 {
+        font-size: 2.2rem;
+        margin-bottom: 15px;
+        color: var(--dark);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .auth-form .form-subtitle {
+        color: var(--gray);
+        font-size: 1.05rem;
+        margin-bottom: 35px;
+    }
+
+    .auth-form .form-group {
+        margin-bottom: 25px;
+    }
+
+    .auth-form .form-group label {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .auth-form .form-group label i {
+        color: var(--primary);
+        font-size: 1.2rem;
+    }
+
+    .auth-form .form-control {
+        font-size: 1.05rem;
+        padding: 15px 18px;
+    }
+
+    .auth-form .btn {
+        width: 100%;
+        margin-top: 10px;
+        font-size: 1.1rem;
+    }
+
+    .auth-form .form-links {
+        margin-top: 25px;
+        text-align: center;
+    }
+
+    .auth-form .form-links p {
+        color: var(--gray);
+        font-size: 1rem;
+        margin-bottom: 15px;
+    }
+
+    .auth-form .form-links a {
+        color: var(--primary);
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .auth-form .form-links a:hover {
+        color: var(--primary-dark);
+    }
+
+    .auth-right-content {
+        position: relative;
+        z-index: 2;
+        text-align: center;
+        color: #fff;
+    }
+
+    .auth-right-icon {
+        font-size: 6rem;
+        margin-bottom: 30px;
+        animation: bounce-3d 3s ease-in-out infinite;
+        filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
+    }
+
+    .auth-right h3 {
+        font-size: 2rem;
+        margin-bottom: 20px;
+        font-weight: 700;
+    }
+
+    .auth-right p {
+        font-size: 1.15rem;
+        opacity: 0.95;
+        line-height: 1.8;
+        max-width: 400px;
+        margin: 0 auto 30px;
+    }
+
+    .auth-right-features {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        padding: 25px;
+        border-radius: 15px;
+        text-align: left;
+        max-width: 400px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .auth-right-features ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .auth-right-features li {
+        padding: 12px 0;
+        padding-left: 35px;
+        position: relative;
+        font-size: 1rem;
+        opacity: 0.95;
+    }
+
+    .auth-right-features li:before {
+        content: '✓';
+        position: absolute;
+        left: 0;
+        font-weight: bold;
+        font-size: 1.3rem;
+        color: #00ff88;
+    }
+
+    @keyframes bounce-3d {
+        0%, 100% { transform: translateY(0) rotateZ(0deg); }
+        25% { transform: translateY(-20px) rotateZ(-5deg); }
+        75% { transform: translateY(-20px) rotateZ(5deg); }
+    }
+
+    @media (max-width: 1024px) {
+        .auth-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .auth-right {
+            display: none;
+        }
+
+        .auth-left {
+            min-height: auto;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .auth-left {
+            padding: 40px 25px;
+        }
+
+        .auth-form h2 {
+            font-size: 1.8rem;
+        }
+    }
+</style>
+
+<div class="auth-layout">
+    <!-- Left: Login Form -->
+    <div class="auth-left">
+        <div class="auth-form">
+            <h2>
+                <i class="fas fa-sign-in-alt"></i> Welcome Back
+            </h2>
+            <p class="form-subtitle">Sign in to continue your recovery journey</p>
+
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div style="margin-bottom: 25px;">
+                    {% for category, message in messages %}
+                        <div class="alert {% if category == 'error' %}alert-danger{% elif category == 'success' %}alert-success{% else %}alert-info{% endif %}" style="justify-content: flex-start;">
+                            <i class="fas fa-{% if category == 'error' %}exclamation-circle{% elif category == 'success' %}check-circle{% else %}info-circle{% endif %}"></i>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('login') }}">
+                <div class="form-group">
+                    <label for="email">
+                        <i class="fas fa-envelope"></i> Email Address
+                    </label>
+                    <input type="email" id="email" name="email" required 
+                           placeholder="your@email.com" class="form-control">
                 </div>
-            {% endfor %}
+
+                <div class="form-group">
+                    <label for="password">
+                        <i class="fas fa-lock"></i> Password
+                    </label>
+                    <input type="password" id="password" name="password" required 
+                           placeholder="••••••••" class="form-control">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-large">
+                    <i class="fas fa-sign-in-alt"></i> Sign In
+                </button>
+            </form>
+
+            <div class="form-links">
+                <p>New to Home Rehab Coach?</p>
+                <a href="{{ url_for('signup') }}">
+                    <i class="fas fa-user-plus"></i> Create New Account
+                </a>
             </div>
-        {% endif %}
-    {% endwith %}
-    
-    <div class="login-box">
-        <h2>Sign In</h2>
-        
-        <form method="POST" action="{{ url_for('login') }}">
-            <div class="form-group">
-                <label for="email">Email Address</label>
-                <input type="email" id="email" name="email" required 
-                       placeholder="Enter your email" class="form-control">
+
+            <div style="margin-top: 30px; text-align: center; padding-top: 30px; border-top: 2px solid var(--border);">
+                <a href="{{ url_for('landing') }}" style="color: var(--gray); font-size: 0.95rem;">
+                    <i class="fas fa-arrow-left"></i> Back to Home
+                </a>
             </div>
-            
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required 
-                       placeholder="Enter your password" class="form-control">
-            </div>
-            
-            <button type="submit" class="btn btn-primary btn-large" style="width: 100%;">
-                Login
-            </button>
-        </form>
-        
-        <div style="text-align: center; margin-top: 20px;">
-            <p style="color: #666;">Don't have an account?</p>
-            <a href="{{ url_for('signup') }}" class="btn" style="margin-top: 10px;">
-                📝 Create New Account
-            </a>
         </div>
-        
-        <div style="text-align: center; margin-top: 20px;">
-            <a href="{{ url_for('landing') }}" style="color: #666;">← Back to Home</a>
+    </div>
+
+    <!-- Right: Visual Section -->
+    <div class="auth-right">
+        <div class="auth-right-content">
+            <div class="auth-right-icon">
+                <i class="fas fa-stethoscope"></i>
+            </div>
+            <h3>Expert Care at Home</h3>
+            <p>Access professional physiotherapy from the comfort of your home with personalized guidance and real-time support.</p>
+            
+            <div class="auth-right-features">
+                <ul>
+                    <li>AI-powered form detection</li>
+                    <li>Real-time expert feedback</li>
+                    <li>Personalized recovery plans</li>
+                    <li>Progress tracking</li>
+                    <li>Video consultations</li>
+                </ul>
+            </div>
         </div>
     </div>
 </div>
+
 {% endblock %}

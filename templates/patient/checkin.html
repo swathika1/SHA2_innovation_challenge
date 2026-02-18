@@ -4,18 +4,18 @@
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('patient_dashboard') }}">🏠 Home Rehab Coach</a></h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo"> Home Rehab Coach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
         <a href="{{ url_for('patient_appointments') }}">Consultations</a>
         <div class="nav-user">
-            <button class="nav-user-btn" title="Account">👤</button>
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
             <div class="nav-user-dropdown">
                 <div class="nav-user-dropdown-inner">
                     <div class="dropdown-header">Signed in as<strong>{{ user.name if user else 'Patient' }}</strong></div>
-                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon">�</span> My Profile</a>
+                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
                     <div class="dropdown-divider"></div>
-                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
                 </div>
             </div>
         </div>
@@ -62,7 +62,7 @@
         
         <!-- Voice Input -->
         <div class="voice-input">
-            <div class="mic-icon">🎤</div>
+            <div class="mic-icon"><i class="fa-solid fa-microphone"></i></div>
             <p><strong>Describe your pain (Optional)</strong></p>
             <p style="color: #666; font-size: 0.9rem;">Tap to record voice note</p>
             <button class="btn" style="margin-top: 15px;">Start Recording</button>
@@ -78,7 +78,7 @@
         <div class="form-group">
             <label>Pain Location</label>
             <div style="background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; padding: 30px; text-align: center;">
-                <div style="font-size: 4rem;">🦵</div>
+                <div style="font-size: 4rem;"><i class="fa-solid fa-person-walking"></i></div>
                 <p style="color: #666; margin-top: 10px;">[ Body diagram - tap to mark pain location ]</p>
             </div>
         </div>

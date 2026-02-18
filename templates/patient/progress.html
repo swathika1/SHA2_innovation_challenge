@@ -4,18 +4,18 @@
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('patient_dashboard') }}">🏠 Home Rehab Coach</a></h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo"> Home Rehab Coach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
         <a href="{{ url_for('patient_appointments') }}">Consultations</a>
         <div class="nav-user">
-            <button class="nav-user-btn" title="Account">👤</button>
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
             <div class="nav-user-dropdown">
                 <div class="nav-user-dropdown-inner">
                     <div class="dropdown-header">Signed in as<strong>{{ user.name if user else 'Patient' }}</strong></div>
-                    <a href="{{ url_for('patient_profile') }}" class="active"><span class="dropdown-icon">�</span> My Profile</a>
+                    <a href="{{ url_for('patient_profile') }}" class="active"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
                     <div class="dropdown-divider"></div>
-                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
                 </div>
             </div>
         </div>
@@ -95,10 +95,10 @@
     <nav class="profile-sidebar">
         <h3>Profile</h3>
         <a href="{{ url_for('patient_profile') }}">
-            <span class="sidebar-icon">👤</span> Personal Details
+            <span class="sidebar-icon"><i class="fa-solid fa-user"></i></span> Personal Details
         </a>
         <a href="{{ url_for('progress_history') }}" class="active">
-            <span class="sidebar-icon">📊</span> Your Progress
+            <span class="sidebar-icon"><i class="fa-solid fa-chart-line"></i></span> Your Progress
         </a>
     </nav>
 
@@ -270,7 +270,7 @@
 
 <!-- Download Report -->
 <div style="text-align: center; margin-top: 30px;">
-    <button class="btn btn-primary btn-large">📄 Download Session Report (PDF)</button>
+    <button class="btn btn-primary btn-large"><i class="fa-solid fa-file-lines"></i> Download Session Report (PDF)</button>
 </div>
 
     </div><!-- /.profile-content -->

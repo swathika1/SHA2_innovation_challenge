@@ -3,33 +3,88 @@
 {% block title %}Select Role - Home Rehab Coach{% endblock %}
 
 {% block content %}
-<div class="role-selection">
-    <h1>Select Your Role</h1>
-    <div class="role-cards">
+<div class="landing-section" style="justify-content: flex-start; padding-top: 50px;">
+    <!-- Header -->
+    <div style="text-align: center; margin-bottom: 50px; width: 100%; animation: slideInLeft 0.5s ease;">
+        <h1 style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 15px;">
+            <i class="fas fa-sign-in-alt" style="color: var(--primary);"></i>
+            Choose Your Role
+        </h1>
+        <p class="subtitle" style="font-size: 1.2rem;">Welcome! Select how you'd like to access the system</p>
+    </div>
+
+    <!-- Role Cards Grid -->
+    <div class="role-cards" style="width: 100%; max-width: 1100px; margin-bottom: 50px;">
+        
         <!-- Patient Role -->
-        <a href="{{ url_for('patient_dashboard') }}" class="role-card">
-            <div class="icon">🧑‍🦽</div>
-            <h3>Patient</h3>
-            <p>Access your rehab sessions, track progress, and complete exercises</p>
+        <a href="{{ url_for('patient_dashboard') }}" class="role-card" style="animation: slideInLeft 0.5s ease 0.1s backwards;">
+            <div class="icon">
+                <i class="fas fa-user-injured" style="color: var(--success);"></i>
+            </div>
+            <h3 style="color: var(--dark); display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <i class="fas fa-heart" style="font-size: 1.4rem;"></i>
+                Patient
+            </h3>
+            <p style="font-size: 1.05rem;">
+                Complete your daily rehab sessions, track your recovery progress, and work with your physiotherapist on personalized exercises designed for your condition.
+            </p>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid var(--light); font-size: 0.95rem; color: var(--primary); font-weight: 600;">
+                <i class="fas fa-arrow-right"></i> Start your recovery journey
+            </div>
         </a>
         
         <!-- Clinician Role -->
-        <a href="{{ url_for('clinician_dashboard') }}" class="role-card">
-            <div class="icon">👨‍⚕️</div>
-            <h3>Physiotherapist / Doctor</h3>
-            <p>Monitor patients, create rehab plans, and schedule consultations</p>
+        <a href="{{ url_for('clinician_dashboard') }}" class="role-card" style="animation: slideInRight 0.5s ease 0.15s backwards;">
+            <div class="icon">
+                <i class="fas fa-stethoscope" style="color: var(--primary);"></i>
+            </div>
+            <h3 style="color: var(--dark); display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <i class="fas fa-briefcase-medical" style="font-size: 1.4rem;"></i>
+                Physiotherapist
+            </h3>
+            <p style="font-size: 1.05rem;">
+                Manage your patient roster, create customized rehab plans, monitor progress with real-time data, and schedule video consultations.
+            </p>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid var(--light); font-size: 0.95rem; color: var(--primary); font-weight: 600;">
+                <i class="fas fa-arrow-right"></i> Manage your patients
+            </div>
         </a>
         
         <!-- Caregiver Role -->
-        <a href="{{ url_for('caregiver_dashboard') }}" class="role-card">
-            <div class="icon">👨‍👩‍👧</div>
-            <h3>Family Caregiver</h3>
-            <p>View progress summaries, receive alerts, and send encouragement</p>
+        <a href="{{ url_for('caregiver_dashboard') }}" class="role-card" style="animation: slideInRight 0.5s ease 0.2s backwards;">
+            <div class="icon">
+                <i class="fas fa-people-robbery" style="color: var(--warning);"></i>
+            </div>
+            <h3 style="color: var(--dark); display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <i class="fas fa-handshake" style="font-size: 1.4rem;"></i>
+                Family Caregiver
+            </h3>
+            <p style="font-size: 1.05rem;">
+                Stay informed about your loved one's recovery, receive alerts for important milestones, and provide encouragement and support.
+            </p>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid var(--light); font-size: 0.95rem; color: var(--primary); font-weight: 600;">
+                <i class="fas fa-arrow-right"></i> Support your loved one
+            </div>
         </a>
     </div>
-    
-    <div style="margin-top: 40px;">
-        <a href="{{ url_for('landing') }}" class="btn">← Back to Login</a>
+
+    <!-- Back Button -->
+    <div style="text-align: center; animation: fadeIn 0.8s ease 0.3s backwards;">
+        <a href="{{ url_for('landing') }}" class="btn btn-outline" style="gap: 10px;">
+            <i class="fas fa-arrow-left"></i> Back to Login
+        </a>
     </div>
 </div>
+
+<style>
+    @keyframes slideInLeft {
+        from { opacity: 0; transform: translateX(-30px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+    
+    @keyframes slideInRight {
+        from { opacity: 0; transform: translateX(30px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+</style>
 {% endblock %}

@@ -2,13 +2,13 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='chatbot.css') }}">
 
 <div id="chat-fab" onclick="toggleChat()" title="Chat with AI Health Assistant">
-    <span id="chat-fab-icon">💬</span>
+    <span id="chat-fab-icon"><i class="fa-solid fa-comment-dots"></i></span>
 </div>
 
 <div id="chat-window" style="display: none;">
     <div id="chat-header">
         <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 1.2rem;">🤖</span>
+            <span style="font-size: 1.2rem;"><i class="fa-solid fa-robot"></i></span>
             <div>
                 <strong>Health Assistant</strong>
                 <div style="font-size: 0.7rem; opacity: 0.85;">Powered by MeriLion AI</div>
@@ -37,7 +37,7 @@
     </div>
 
     <div id="chat-risk-alert" style="display: none;">
-        <span>⚠️ High risk detected — please consult your doctor</span>
+        <span><i class="fa-solid fa-triangle-exclamation"></i> High risk detected — please consult your doctor</span>
     </div>
 
     <div id="chat-chips">

@@ -4,18 +4,18 @@
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('patient_dashboard') }}"></a>🏠 Home Rehab Coach</a></h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo"> Home Rehab Coach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}" class="active">Dashboard</a>
         <a href="{{ url_for('patient_appointments') }}">Consultations</a>
         <div class="nav-user">
-            <button class="nav-user-btn" title="Account">👤</button>
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
             <div class="nav-user-dropdown">
                 <div class="nav-user-dropdown-inner">
                     <div class="dropdown-header">Signed in as<strong>{{ user.name }}</strong></div>
-                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon">�</span> My Profile</a>
+                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
                     <div class="dropdown-divider"></div>
-                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
                 </div>
             </div>
         </div>
@@ -49,7 +49,7 @@
         <div class="stat-label">Adherence Rate</div>
     </div>
     <div class="stat-box">
-        <div class="stat-value">🔥 {{ patient.streak_days }}</div>
+        <div class="stat-value"><i class="fa-solid fa-fire"></i> {{ patient.streak_days }}</div>
         <div class="stat-label">Day Streak</div>
     </div>
     <div class="stat-box">
@@ -65,20 +65,20 @@
 <!-- Upcoming Video Calls - PROMINENT -->
 {% if upcoming_appointments %}
 <div class="card" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); border: 2px solid #2196f3; margin-bottom: 20px;">
-    <div class="card-header" style="color: #1565c0;">📹 Upcoming Video Consultations</div>
+    <div class="card-header" style="color: #1565c0;"><i class="fa-solid fa-video"></i> Upcoming Video Consultations</div>
     {% for apt in upcoming_appointments %}
     <div style="padding: 15px; background: white; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
         <div>
             <strong style="font-size: 1.1rem;">Dr. {{ apt.doctor_name }}</strong>
             <p style="font-size: 0.9rem; color: #666; margin: 5px 0 0 0;">
-                📅 {{ apt.appointment_date }} at {{ apt.appointment_time }} ({{ apt.duration }} min)
+                <i class="fa-solid fa-calendar-days"></i> {{ apt.appointment_date }} at {{ apt.appointment_time }} ({{ apt.duration }} min)
             </p>
             {% if apt.notes %}
             <p style="font-size: 0.85rem; color: #888; margin: 3px 0 0 0;">{{ apt.notes }}</p>
             {% endif %}
         </div>
         <a href="{{ url_for('video_call', appointment_id=apt.id) }}" class="btn btn-success btn-large" style="padding: 12px 24px; font-size: 1rem;">
-            🎥 Join Video Call
+            <i class="fa-solid fa-video"></i> Join Video Call
         </a>
     </div>
     {% endfor %}
@@ -92,41 +92,41 @@
 {% if today_completed %}
 <div class="today-banner today-done">
     <div class="today-banner-content">
-        <div class="today-icon">🎉</div>
+        <div class="today-icon"><i class="fa-solid fa-circle-check"></i></div>
         <div>
             <h3>Well done! Keep up with the progress!</h3>
             <p>You completed today's session at {{ today_perc|round|int }}%. Great job staying consistent.</p>
         </div>
     </div>
     <div class="today-actions">
-        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-outline">🔄 Restart</a>
+        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-outline"><i class="fa-solid fa-rotate"></i> Restart</a>
     </div>
 </div>
 {% elif today_session_id %}
 <div class="today-banner today-pending">
     <div class="today-banner-content">
-        <div class="today-icon">⚡</div>
+        <div class="today-icon"><i class="fa-solid fa-bolt"></i></div>
         <div>
             <h3>Complete your session today!</h3>
             <p>You're at {{ today_perc|round|int }}% — pick up where you left off or start fresh.</p>
         </div>
     </div>
     <div class="today-actions">
-        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-solid">▶ Start From Where You Left</a>
-        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-outline-dark">🔄 Restart</a>
+        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-solid"><i class="fa-solid fa-play"></i> Start From Where You Left</a>
+        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-outline-dark"><i class="fa-solid fa-rotate"></i> Restart</a>
     </div>
 </div>
 {% else %}
 <div class="today-banner today-pending">
     <div class="today-banner-content">
-        <div class="today-icon">⚡</div>
+        <div class="today-icon"><i class="fa-solid fa-bolt"></i></div>
         <div>
             <h3>Complete your session today!</h3>
             <p>{{ patient.condition }} Exercises{% if workouts %} — {{ workouts|length }} exercises assigned{% endif %}</p>
         </div>
     </div>
     <div class="today-actions">
-        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-solid">▶ Start Today's Session</a>
+        <a href="{{ url_for('rehab_session') }}" class="btn-today btn-today-solid"><i class="fa-solid fa-play"></i> Start Today's Session</a>
     </div>
 </div>
 {% endif %}
@@ -134,7 +134,7 @@
 <div class="grid grid-2">
     <!-- My Exercises -->
     <div class="card">
-        <div class="card-header">📋 My Exercise Plan</div>
+        <div class="card-header"><i class="fa-solid fa-clipboard-list"></i> My Exercise Plan</div>
         {% if workouts %}
             {% for workout in workouts %}
             <div style="padding: 12px; background: #f5f5f5; border-radius: 4px; margin-bottom: 10px;">
@@ -156,7 +156,7 @@
     
     <!-- Recent Sessions -->
     <div class="card">
-        <div class="card-header">📊 Recent Sessions</div>
+        <div class="card-header"><i class="fa-solid fa-chart-line"></i> Recent Sessions</div>
         {% if recent_sessions %}
             {% for sess in recent_sessions %}
             <a href="{{ url_for('session_summary', session_id=sess.id) }}" class="recent-session-block">
@@ -182,7 +182,7 @@
                     {% endif %}
                 </div>
                 <div class="rs-footer">
-                    <span>⏱️ {% if sess.duration_seconds %}{{ (sess.duration_seconds // 60) }}m {{ sess.duration_seconds % 60 }}s{% else %}--{% endif %}</span>
+                    <span><i class="fa-solid fa-stopwatch"></i> {% if sess.duration_seconds %}{{ (sess.duration_seconds // 60) }}m {{ sess.duration_seconds % 60 }}s{% else %}--{% endif %}</span>
                     <span>Completion: {{ sess.completed_perc|default(0)|round|int }}%</span>
                 </div>
             </a>
@@ -198,7 +198,7 @@
 <!-- No appointments message if none scheduled -->
 {% if not upcoming_appointments %}
 <div class="card" style="margin-top: 20px; text-align: center; padding: 30px; background: #fff3e0; border: 1px solid #ffb74d;">
-    <h3 style="color: #f57c00;">📅 No Upcoming Consultations</h3>
+    <h3 style="color: #f57c00;"><i class="fa-solid fa-calendar-days"></i> No Upcoming Consultations</h3>
     <p style="color: #666;">Your doctor will schedule video consultations as needed.</p>
     <a href="{{ url_for('patient_appointments') }}" class="btn" style="margin-top: 15px;">View Consultations Page</a>
 </div>

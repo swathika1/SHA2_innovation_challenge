@@ -4,18 +4,18 @@
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('patient_dashboard') }}">🏠 Home Rehab Coach</a></h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo"> Home Rehab Coach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
         <a href="{{ url_for('patient_appointments') }}">Consultations</a>
         <div class="nav-user">
-            <button class="nav-user-btn" title="Account">👤</button>
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
             <div class="nav-user-dropdown">
                 <div class="nav-user-dropdown-inner">
                     <div class="dropdown-header">Signed in as<strong>{{ user.name }}</strong></div>
-                    <a href="{{ url_for('patient_profile') }}" class="active"><span class="dropdown-icon">👤</span> My Profile</a>
+                    <a href="{{ url_for('patient_profile') }}" class="active"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
                     <div class="dropdown-divider"></div>
-                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon">🚪</span> Logout</a>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
                 </div>
             </div>
         </div>
@@ -228,10 +228,10 @@
     <nav class="profile-sidebar">
         <h3>Profile</h3>
         <a href="{{ url_for('patient_profile') }}" class="active">
-            <span class="sidebar-icon">👤</span> Personal Details
+            <span class="sidebar-icon"><i class="fa-solid fa-user"></i></span> Personal Details
         </a>
         <a href="{{ url_for('progress_history') }}">
-            <span class="sidebar-icon">📊</span> Your Progress
+            <span class="sidebar-icon"><i class="fa-solid fa-chart-line"></i></span> Your Progress
         </a>
     </nav>
 
@@ -242,7 +242,7 @@
         <!-- User Information -->
         <div class="info-card">
             <div class="info-card-title">
-                <span class="card-icon">🪪</span> Account Information
+                <span class="card-icon"><i class="fa-solid fa-id-card"></i></span> Account Information
             </div>
             <div class="info-grid">
                 <div class="info-item">
@@ -283,7 +283,7 @@
         <!-- Care Team -->
         <div class="info-card">
             <div class="info-card-title">
-                <span class="card-icon">🩺</span> Your Care Team
+                <span class="card-icon"><i class="fa-solid fa-stethoscope"></i></span> Your Care Team
             </div>
             <div class="care-team-grid">
                 <!-- Doctor -->
@@ -296,11 +296,11 @@
                         </div>
                         {% if doctor.phone %}
                         <div class="cp-detail">
-                            <span class="cp-icon">📞</span> {{ doctor.phone }}
+                            <span class="cp-icon"><i class="fa-solid fa-phone"></i></span> {{ doctor.phone }}
                         </div>
                         {% endif %}
                         <div class="cp-detail">
-                            <span class="cp-icon">📅</span> Since {{ doctor.assigned_date }}
+                            <span class="cp-icon"><i class="fa-solid fa-calendar-days"></i></span> Since {{ doctor.assigned_date }}
                         </div>
                     {% else %}
                         <p class="no-assignment">No doctor assigned yet</p>
@@ -317,12 +317,12 @@
                         </div>
                         {% if caregiver.phone %}
                         <div class="cp-detail">
-                            <span class="cp-icon">📞</span> {{ caregiver.phone }}
+                            <span class="cp-icon"><i class="fa-solid fa-phone"></i></span> {{ caregiver.phone }}
                         </div>
                         {% endif %}
                         {% if caregiver.relationship %}
                         <div class="cp-detail">
-                            <span class="cp-icon">🤝</span> {{ caregiver.relationship }}
+                            <span class="cp-icon"><i class="fa-solid fa-handshake"></i></span> {{ caregiver.relationship }}
                         </div>
                         {% endif %}
                     {% else %}
@@ -335,7 +335,7 @@
         <!-- Appointment Preferences -->
         <div class="info-card">
             <div class="info-card-title">
-                <span class="card-icon">⚙️</span> Appointment Preferences
+                <span class="card-icon"><i class="fa-solid fa-sliders"></i></span> Appointment Preferences
             </div>
             {% if patient %}
             <div class="info-grid">
@@ -343,7 +343,7 @@
                     <span class="info-label">Appointment Urgency</span>
                     <span class="info-value">
                         {{ patient.urgency if patient.urgency else 'Medium' }}
-                        {% if patient.urgency == 'High' %}🔴{% elif patient.urgency == 'Medium' %}🟡{% else %}🟢{% endif %}
+                        {% if patient.urgency == 'High' %}<i class="fa-solid fa-circle" style="color: #dc2626;"></i>{% elif patient.urgency == 'Medium' %}<i class="fa-solid fa-circle" style="color: #f59e0b;"></i>{% else %}<i class="fa-solid fa-circle" style="color: #22c55e;"></i>{% endif %}
                     </span>
                 </div>
                 <div class="info-item">
@@ -375,14 +375,14 @@
                     <span class="info-value">
                         {{ patient.avg_quality_score if patient.avg_quality_score else '—' }}/10
                         {% if patient.avg_quality_score %}
-                            {% if patient.avg_quality_score < 3 %}❗{% elif patient.avg_quality_score < 5 %}⚠️{% else %}✅{% endif %}
+                            {% if patient.avg_quality_score < 3 %}<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i>{% elif patient.avg_quality_score < 5 %}<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i>{% else %}<i class="fa-solid fa-circle-check" style="color: #22c55e;"></i>{% endif %}
                         {% endif %}
                     </span>
                 </div>
             </div>
             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e8ebf0;">
                 <a href="{{ url_for('patient_appointments') }}" class="btn btn-primary" style="text-decoration: none; display: inline-block; padding: 10px 20px; background: #1a73e8; color: white; border-radius: 6px; font-weight: 600;">
-                    📝 Edit Preferences
+                    <i class="fa-solid fa-pen-to-square"></i> Edit Preferences
                 </a>
                 <small style="color: #666; margin-left: 15px;">Update your scheduling preferences on the Appointments page</small>
             </div>
