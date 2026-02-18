@@ -2419,7 +2419,8 @@ def api_chat():
         recent_sessions_db = query_db('''
             SELECT s.*, e.name as exercise_name
             FROM sessions s
-            JOIN workouts w ON s.workout_id = w.id
+            JOIN session_exercises se ON se.session_id = s.id
+            JOIN workouts w ON se.workout_id = w.id
             JOIN exercises e ON w.exercise_id = e.id
             WHERE s.patient_id = ?
             ORDER BY s.completed_at DESC
@@ -2494,7 +2495,7 @@ Avg Quality Score: {patient_info['avg_quality_score']}/100
 
         # 7. Query MeriLion
         full_history = conversation_history + [{"role": "user", "content": message}]
-        response_text = query_merilion_sync(full_history, patient_context)
+        response_text = query_merilion_sync(full_history, patient_context, rag_context, lang_key)
 
         return jsonify({
             "response": response_text,
