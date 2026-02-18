@@ -1,0 +1,45 @@
+{
+  "name": "kimore_exercise_detection_preprocessing",
+  "version": "1.0",
+  "created_from_notebook": "Excercise_Detection_From_Pose_Vectors.ipynb",
+  "input_tensor": {
+    "dtype": "float32",
+    "shape": [1, 100, 100],
+    "T": 100,
+    "F": 100,
+    "feature_source": "pose_feature_vector",
+    "note": "Your training windows are shaped (N, 100, 100). In the app, feed a window built from landmarks_to_feature100() or the same 100D pose vector used during training."
+  },
+  "windowing": {
+    "function": "to_sequences_trim",
+    "expected_T": 100,
+    "trim_policy": "truncate_to_multiple_of_T",
+    "overlap": 0,
+    "window_type": "non_overlapping_chunks",
+    "implementation": {
+      "trim_len": "L - (L % T)",
+      "reshape": "X_trim.reshape(-1, T, F)",
+      "labels": "y_trim.reshape(-1, T).mean(axis=1)"
+    },
+    "label_assumption": "Within each 100-frame chunk, y is constant so mean(y_chunk) equals the class id."
+  },
+  "scaling": {
+    "enabled": false,
+    "type": "none",
+    "note": "Notebook does not apply StandardScaler/MinMaxScaler. If you later add one, apply it on flattened (T,F) -> (T,F) then reshape back."
+  },
+  "model_output": {
+    "num_classes": 5,
+    "activation": "softmax",
+    "prediction": "argmax(probs)"
+  },
+  "runtime_recommendation": {
+    "online_inference_window": "sliding_last_T_frames",
+    "buffer_policy": "maintain last 100 pose vectors",
+    "if_buffer_len_not_T": "resample_to_T or wait until buffer has T frames",
+    "debug": {
+      "print_probs": true,
+      "print_topk": 5
+    }
+  }
+}

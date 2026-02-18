@@ -13,3 +13,6 @@ joblib
 requests
 pyttsx3
 google-generativeai
+chromadb==0.5.5
+sentence-transformers==3.0.1
+openpifpaf

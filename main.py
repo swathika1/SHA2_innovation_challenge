@@ -1,17 +1,94 @@
+import os
+os.environ["TRANSFORMERS_NO_TF"] = "1"
+os.environ["USE_TF"] = "0"
+
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 from flask import request, jsonify
 from flask import request, jsonify
 from Rehab_Scorer_Coach.src.web_pipeline import WebRehabPipeline
-from flask_cors import CORS
+from flask_cors import CORS # type: ignore
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from datetime import datetime
 import os
 from optim import get_top3_recommendations, optimize_all_patients, build_demo_data, load_dataset
-import base64
-import cv2
-import numpy as np
+
+# main.py (top-level)
+import os
+import sys
+import time
+import socket
+import subprocess
+from pathlib import Path
+import subprocess, sys, os, time, requests
+import hashlib
+import tempfile
+import os
+import asyncio
+from flask import request, jsonify, send_file
+import edge_tts
+
+
+OPENPOSE_PORT = 9001
+OPENPOSE_URL = f"http://127.0.0.1:{OPENPOSE_PORT}"
+OPENPOSE_LOG = Path(__file__).resolve().parent / "openpose_server.log"
+OPENPOSE_PROC = None
+
+def _port_open(host: str, port: int, timeout: float = 0.2) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def start_openpose_server():
+    host = "127.0.0.1"
+    port = 9001
+    url = f"http://{host}:{port}/health"
+
+    # If already running, do nothing
+    try:
+        r = requests.get(url, timeout=0.5)
+        if r.status_code == 200:
+            print("[OPENPOSE] already running")
+            return
+    except Exception:
+        pass
+
+    log_path = Path(__file__).resolve().parent / "openpose_server.log"
+    server_py = Path(__file__).resolve().parent / "openpose_http_server.py"
+
+    if not server_py.exists():
+        raise RuntimeError(f"openpose_http_server.py not found at {server_py}")
+
+    print("[OPENPOSE] starting server...")
+    with open(log_path, "w") as f:
+        # start: python3 openpose_http_server.py --host 127.0.0.1 --port 9001
+        proc = subprocess.Popen(
+            [sys.executable, str(server_py), "--host", host, "--port", str(port)],
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            cwd=str(Path(__file__).resolve().parent),
+        )
+
+    # wait for health
+    for _ in range(30):
+        try:
+            r = requests.get(url, timeout=0.5)
+            if r.status_code == 200:
+                print("[OPENPOSE] ready")
+                return
+        except Exception:
+            time.sleep(0.2)
+
+    raise RuntimeError(f"OpenPose server not healthy. Check {log_path}")
+
+#from Rehab_Scorer_Coach.src.meralion_client import MeralionClient
+
+#MERALION_API_KEY = os.environ.get("MERALION_API_KEY", "oyNXaKPBnylXWVMxINztmNBfEBHqVZmTpKzz2HE")
+#MERALION = MeralionClient(MERALION_API_KEY) if MERALION_API_KEY else None
 
 # Create instance folder if it doesn't exist
 os.makedirs('instance', exist_ok=True)
@@ -75,8 +152,64 @@ class UserVisit(db.Model):
     def __repr__(self):
         return f'<UserVisit {self.user_id} at {self.visit_time}>'
 
-# ==================== FLASK-LOGIN USER LOADER ====================
+VOICE_MAP = {
+    "English": "en-US-JennyNeural",
+    "Tamil":   "ta-IN-ValluvarNeural",
+    "Chinese": "zh-CN-XiaoxiaoNeural",
+    "Malay":   "ms-MY-YasminNeural",
+    "Thai":    "th-TH-PremwadeeNeural",
+}
 
+def _tts_cache_path(text: str, language: str) -> str:
+    h = hashlib.md5(f"{language}|{text}".encode("utf-8")).hexdigest()
+    cache_dir = os.path.join(tempfile.gettempdir(), "rehab_tts_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, f"{h}.mp3")
+
+async def _synth_to_file(text: str, voice: str, out_path: str):
+    communicate = edge_tts.Communicate(text=text, voice=voice)
+    await communicate.save(out_path)
+
+@app.route("/api/tts", methods=["POST"])
+def api_tts():
+    data = request.get_json(force=True) or {}
+
+    text = (data.get("text") or "").strip()
+    language = (data.get("language") or "English").strip()
+
+    if isinstance(text, list):
+        text = ". ".join(text)
+
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+
+    voice = VOICE_MAP.get(language, VOICE_MAP["English"])
+    out_path = _tts_cache_path(text, language)
+
+    try:
+        if not os.path.exists(out_path):
+            print("🔊 Generating new TTS file")
+
+            # SAFE asyncio call inside Flask
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(_synth_to_file(text, voice, out_path))
+            loop.close()
+
+        else:
+            print("♻️ Using cached TTS")
+
+        return send_file(out_path, mimetype="audio/mpeg", as_attachment=False)
+
+    except Exception as e:
+        print("❌ TTS ERROR:", e)
+        return jsonify({"error": f"TTS failed: {type(e).__name__}: {e}"}), 500
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+# ==================== FLASK-LOGIN USER LOADER ====================
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -138,6 +271,50 @@ def logout():
     logout_user()
     session.clear()
     return jsonify({'success': True}), 200
+
+old_code = """
+@app.route("/api/tts", methods=["POST"])
+def api_tts():
+    data = request.get_json(force=True) or {}
+    text = (data.get("text") or "").strip()
+    lang = (data.get("lang") or "en").strip()
+
+    if not text:
+        return jsonify({"error": "text missing"}), 400
+
+    # Map your UI language names to Google TTS codes
+    lang_map = {
+        "English": "en",
+        "Tamil": "ta",
+        "Chinese": "zh-CN",
+        "Malay": "ms",
+        "Thai": "th",
+    }
+    glang = lang_map.get(lang, "en")
+
+    # Google translate TTS endpoint
+    q = urllib.parse.quote(text)
+    url = (
+        "https://translate.google.com/translate_tts"
+        f"?ie=UTF-8&client=tw-ob&tl={glang}&q={q}"
+    )
+
+    headers = {
+        "User-Agent": "Mozilla/5.0"  # needed or Google blocks
+    }
+
+    r = requests.get(url, headers=headers, timeout=15)
+    if not r.ok:
+        return jsonify({"error": f"TTS failed HTTP {r.status_code}: {r.text[:200]}"}), 500
+
+    # Return MP3 bytes
+    return send_file(
+        io.BytesIO(r.content),
+        mimetype="audio/mpeg",
+        as_attachment=False,
+        download_name="tts.mp3",
+    )
+"""
 
 @app.route('/api/current-user', methods=['GET'])
 def get_current_user():
@@ -339,15 +516,74 @@ def api_session_start():
     return jsonify({"ok": True, "threshold": threshold, "exercise_name": exercise_name})
 """
 
+@app.route("/api/session/start_v1", methods=["POST"])
+def api_session_start_v1():
+    data = request.get_json(force=True) or {}
+
+    # Normalize language (frontend can send "English", "en", etc.)
+    lang = (data.get("language") or "en").strip()
+    if lang.lower() in ["english", "en-us", "en-gb"]:
+        lang = "en"
+
+    threshold = float(data.get("threshold", 30.0))
+    cooldown = float(data.get("cooldown_seconds", 10.0))
+
+    # If you still want to keep session info for UI/debug
+    SESSION_STATE["language"] = lang
+    SESSION_STATE["exercise_name"] = "AUTO"   # server will detect per-frame
+
+    # IMPORTANT: reset without exercise_name
+    PIPELINE.reset(
+        threshold=threshold,
+        cooldown_seconds=cooldown,
+        language=lang,
+    )
+
+    return jsonify({
+        "ok": True,
+        "threshold": threshold,
+        "cooldown_seconds": cooldown,
+        "language": lang,
+        "exercise_name": "AUTO"
+    })
+
+
+
 @app.route("/api/session/start", methods=["POST"])
 def api_session_start():
     data = request.get_json(force=True) or {}
-    threshold = float(data.get("threshold", 30.0))
-    exercise_name = data.get("exercise_name", "exercise")
-    cooldown_seconds = float(data.get("cooldown_seconds", 10.0))
+    PIPELINE.reset(
+        threshold=data.get("threshold", 30.0),
+        cooldown_seconds=data.get("cooldown_seconds", 10.0),
+        language=data.get("language", "English"),
+    )
+    return jsonify({"ok": True})
 
-    PIPELINE.reset(threshold=threshold, exercise_name=exercise_name, cooldown_seconds=cooldown_seconds)
-    return jsonify({"ok": True, "threshold": threshold, "exercise_name": exercise_name, "cooldown_seconds": cooldown_seconds})
+@app.route("/api/session/start_old", methods=["POST"])
+def api_session_start_old():
+    #data = request.get_json(force=True) or {}
+    #threshold = float(data.get("threshold", 25.0))
+
+    #exercise_name = data.get("exercise_name", "exercise")
+    #cooldown_seconds = float(data.get("cooldown_seconds", 10.0))
+    #language = data.get("language", "en")
+    #exercise_name = data.get("exercise_name", "squat")
+    
+    #PIPELINE.start_session(threshold=threshold, exercise_name=exercise_name, cooldown_seconds=cooldown_seconds, language=language)
+
+    #PIPELINE.reset(threshold=threshold, exercise_name=exercise_name, cooldown_seconds=cooldown_seconds)
+    #return jsonify({"ok": True, "threshold": threshold, "exercise_name": exercise_name, "cooldown_seconds": cooldown_seconds})
+    data = request.get_json(force=True) or {}
+    SESSION_STATE["language"] = data.get("language", "English")
+    SESSION_STATE["exercise_name"] = data.get("exercise_name", "Unknown")
+
+    PIPELINE.reset(
+        threshold=data.get("threshold", 30.0),
+        #exercise_name=data.get("exercise_name", "exercise"),
+        cooldown_seconds=data.get("cooldown_seconds", 10.0),
+        language=data.get("language", "english")
+    )
+    return jsonify({"ok": True})
 
 old_routes = """
 @app.route("/api/live_feedback", methods=["POST"])
@@ -399,6 +635,160 @@ def api_live_feedback():
     })
     """
 
+@app.route("/api/live_feedback_old", methods=["POST"])
+def api_live_feedback_old():
+    data = request.get_json(force=True) or {}
+    language = data.get("language", "en")
+    exercise_name = data.get("exercise_name", "squat")
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    #out = PIPELINE.process_frame_dataurl(frame_b64)
+    out = PIPELINE.process_frame_dataurl(frame_b64, language=language, exercise_name=exercise_name)
+    return jsonify(out)
+
+@app.route("/api/live_feedback_v1", methods=["POST"])
+def api_live_feedback_v1():  # sourcery skip: use-contextlib-suppress
+    data = request.get_json(force=True, silent=True) or {}
+
+    # ---- 1) Inputs (body overrides server/session defaults) ----
+    # If you have a SESSION_STATE dict from /api/session/start, use it.
+    # Otherwise these fallbacks are fine.
+    language = (data.get("language") or "").strip()
+    exercise = (data.get("exercise") or "").strip()
+    frame_b64 = data.get("frame_b64") or ""
+
+    # Optional: fall back to session state if you maintain it
+    try:
+        if not language and "SESSION_STATE" in globals():
+            language = (SESSION_STATE.get("language") or "").strip()
+        if not exercise_name and "SESSION_STATE" in globals():
+            exercise = (SESSION_STATE.get("exercise") or "").strip()
+    except Exception:
+        pass
+
+    # Defaults
+    if not exercise:
+        exercise_name = "squat"
+    if not language:
+        language = "English"
+
+    # ---- 2) Normalize language ----
+    lang_map = {
+        "en": "English",
+        "english": "English",
+        "ta": "Tamil",
+        "tamil": "Tamil",
+        "hi": "Hindi",
+        "hindi": "Hindi",
+        "ms": "Malay",
+        "malay": "Malay",
+        "zh": "Chinese",
+        "chinese": "Chinese",
+    }
+    lang_key = language.lower()
+    language = lang_map.get(lang_key, language)  # keep custom names too
+
+    # ---- 3) Validate frame payload ----
+    if not frame_b64 or not isinstance(frame_b64, str):
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    # Must look like: data:image/jpeg;base64,....
+    if not frame_b64.startswith("data:image/"):
+        return jsonify({"error": "frame_b64 must be a data URL like data:image/jpeg;base64,..."}), 400
+
+    # ---- 4) Run pipeline safely ----
+    try:
+        # Your pipeline should accept these args (as you already changed)
+        out = PIPELINE.process_frame_dataurl(
+            frame_b64,
+            language=language,
+            exercise=exercise
+        )
+
+        # Ensure response always contains these keys so frontend doesn't break
+        if "llm_feedback" not in out:
+            out["llm_feedback"] = []
+        if "form_status" not in out:
+            out["form_status"] = "PROCESSING"
+        if "frame_score" not in out:
+            out["frame_score"] = 0
+
+        out["language"] = language
+        out["exercise"] = exercise
+        return jsonify(out)
+
+    except Exception as e:
+        # Return 200 so UI polling doesn't die; surface error in feedback panel
+        return jsonify({
+            "form_status": "ERROR",
+            "frame_score": 0,
+            "llm_feedback": [f"Backend error: {type(e).__name__}: {str(e)}"],
+            "language": language,
+            "exercise": exercise
+        })
+
+@app.route("/api/live_feedback_v2", methods=["POST"])
+def api_live_feedback_v2():
+    data = request.get_json(force=True, silent=True) or {}
+
+    language = (data.get("language") or "English").strip()
+    frame_b64 = data.get("frame_b64") or ""
+
+    if not frame_b64 or not isinstance(frame_b64, str):
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    if not frame_b64.startswith("data:image/"):
+        return jsonify({"error": "frame_b64 must be a data URL like data:image/jpeg;base64,..."}), 400
+
+    # normalize language
+    lang_map = {
+        "en": "English", "english": "English",
+        "ta": "Tamil", "tamil": "Tamil",
+        "hi": "Hindi", "hindi": "Hindi",
+        "ms": "Malay", "malay": "Malay",
+        "zh": "Chinese", "chinese": "Chinese",
+    }
+    language = lang_map.get(language.lower(), language)
+
+    try:
+        # ✅ exercise is auto-detected inside pipeline
+        out = PIPELINE.process_frame_dataurl(frame_b64, language=language)
+
+        # make response stable for UI
+        out.setdefault("llm_feedback", [])
+        out.setdefault("form_status", "PROCESSING")
+        out.setdefault("frame_score", 0)
+        out["language"] = language
+
+        # IMPORTANT: pipeline should set this
+        out.setdefault("exercise_name", "unknown")
+
+        return jsonify(out)
+
+    except Exception as e:
+        return jsonify({
+            "form_status": "ERROR",
+            "frame_score": 0,
+            "llm_feedback": [f"Backend error: {type(e).__name__}: {str(e)}"],
+            "language": language,
+            "exercise_name": "unknown",
+        })
+
+@app.route("/api/live_feedback_v3", methods=["POST"])
+def api_live_feedback_v3():
+    data = request.get_json(force=True) or {}
+    language = data.get("language", "en")
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    # Pipeline should infer exercise_name internally and return it in output
+    out = PIPELINE.process_frame_dataurl(frame_b64, language=language)
+
+    return jsonify(out)
+
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():
     data = request.get_json(force=True) or {}
@@ -406,6 +796,10 @@ def api_live_feedback():
     if not frame_b64:
         return jsonify({"error": "frame_b64 missing"}), 400
 
+    # language comes from frontend/session
+    language = data.get("language", "English")
+    PIPELINE.language = language  # keep it simple
+    
     out = PIPELINE.process_frame_dataurl(frame_b64)
     return jsonify(out)
 
@@ -419,6 +813,7 @@ def api_session_stop():  # sourcery skip: use-contextlib-suppress
     return jsonify({"ok": True})
 
 if __name__ == '__main__':
+    start_openpose_server()
     with app.app_context():
         db.create_all()
         print("Database tables created successfully!")

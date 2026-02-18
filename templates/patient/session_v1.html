@@ -1,0 +1,615 @@
+{% extends 'base.html' %}
+
+{% block title %}Rehab Session - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1>🏋️ Rehab Session</h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('patient_dashboard') }}">← Back to Dashboard</a>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="session-layout">
+    <!-- Video Panel -->
+    <div class="video-panel">
+    <div class="skeleton-overlay">
+        <strong>Skeleton Tracking: ON</strong><br />
+        <small>Pose detection active</small>
+    </div>
+
+    <div class="video-placeholder" style="height:420px; padding:0; overflow:hidden; position:relative;">
+        <video id="webcamVideo" autoplay playsinline muted
+                style="width:100%; height:100%; object-fit: cover; background:#000;"></video>
+
+        <div id="camErrorOverlay"
+            style="display:none; position:absolute; inset:0; align-items:center; justify-content:center; flex-direction:column; color:#fff; background:rgba(0,0,0,0.6);">
+        <div class="icon">📹</div>
+        <p>Live Webcam Feed</p>
+        <p style="font-size: 0.8rem; opacity: 0.85;">Allow camera access to start</p>
+        </div>
+    </div>
+    </div>
+
+<!-- Feedback Panel -->
+        <div class="feedback-panel">
+            <div class="rep-counter">
+            <div class="count"><span id="repCountText">0</span> / <span id="repTargetText">10</span></div>
+            <div class="label">Reps (Set <span id="setIndexText">1</span> of <span id="setsTotalText">3</span>)</div>
+        </div>
+
+        <div class="form-status">
+        <h4 style="margin-bottom: 10px;">Form Status</h4>
+        <div id="statusIndicator" class="status-indicator correct">✓ CORRECT FORM</div>
+        <div style="margin-top: 10px; text-align:center; color:#666;">
+            Score: <span id="frameScoreText">--</span> / 50
+        </div>
+        </div>
+
+        <div class="error-messages">
+        <h4>Real-time Feedback</h4>
+        <div id="feedbackList">
+            <div class="error-item">Waiting for feedback...</div>
+        </div>
+        </div>
+
+        <div class="card" style="padding: 12px;">
+        <h4 style="margin-bottom:8px;">Language</h4>
+        <select id="languageSelect" class="form-control">
+            <option value="English" selected>English</option>
+            <option value="Tamil">Tamil</option>
+            <option value="Chinese">Chinese</option>
+            <option value="Malay">Malay</option>
+            <option value="Thai">Thai</option>
+        </select>
+        <div style="font-size:0.8rem; opacity:0.7; margin-top:6px;">
+            API: <span id="apiBaseText">--</span>
+        </div>
+        </div>
+
+        <div class="audio-indicator" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <div class="audio-icon">🔊</div>
+            <div>
+            <strong>Voice Feedback: <span id="voiceStatusText">ON</span></strong><br>
+            <small id="voiceHintText">Audio cues are active</small>
+            </div>
+        </div>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input id="voiceToggle" type="checkbox" checked />
+            <span style="font-weight:600;">Enable</span>
+        </label>
+        </div>
+
+        <div class="card" style="padding: 15px;">
+        <h4>Current Exercise</h4>
+        <p style="font-size: 0.85rem; margin-top: 10px;" id="exerciseMetaText">
+            Target: --<br />
+            ROM Target: --
+            </p>
+
+            <p style="font-size:0.9rem; margin-top:10px;">
+            Detected: <strong id="detectedExerciseText">--</strong>
+        </p>
+        </div>
+
+        <div class="session-controls">
+        <button id="pauseBtn" class="btn" style="flex: 1;">⏸️ Pause</button>
+        <button id="stopBtn" class="btn btn-danger" style="flex: 1;">⏹️ Stop Session</button>
+        </div>
+
+        <a href="{{ url_for('pain_checkin') }}" class="btn btn-success" style="text-align: center;">
+        Complete Set → Check-in
+        </a>
+    </div>
+    </div>
+
+    <script>
+    /* ===================== CONFIG ===================== */
+
+    // If your backend is on a different port than the page, set it here:
+    // const API_BASE = "http://127.0.0.1:5050";
+    const API_BASE = window.location.origin; // safest if page is served by Flask
+    document.getElementById("apiBaseText").textContent = API_BASE;
+
+    const THRESHOLD = 30.0;
+    const COOLDOWN_SECONDS = 2;
+    const POLL_MS = 2000;
+
+    const LANG_TO_BCP47 = {
+        English: "en-US",
+        Tamil: "ta-IN",
+        Chinese: "zh-CN",
+        Malay: "ms-MY",
+        Thai: "th-TH",
+    };
+
+    /* ===================== DOM ===================== */
+
+    const VIDEO = document.getElementById("webcamVideo");
+    const camErrorOverlay = document.getElementById("camErrorOverlay");
+
+    const statusIndicator = document.getElementById("statusIndicator");
+    const scoreSpan = document.getElementById("frameScoreText");
+    const feedbackBox = document.getElementById("feedbackList");
+
+    const voiceToggle = document.getElementById("voiceToggle");
+    const voiceStatusText = document.getElementById("voiceStatusText");
+    const voiceHintText = document.getElementById("voiceHintText");
+
+    const languageSelect = document.getElementById("languageSelect");
+    const detectedExerciseText = document.getElementById("detectedExerciseText");
+
+    const pauseBtn = document.getElementById("pauseBtn");
+    const stopBtn  = document.getElementById("stopBtn");
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    /* ===================== STATE ===================== */
+
+    let isPaused = false;
+    let pollTimer = null;
+    let inflight = false;
+
+    let LAST_FEEDBACK = null;
+    let LAST_FEEDBACK_TIME = 0;
+
+    let lastSpokenHash = "";
+    let lastSpokenAt = 0;
+    const SPEAK_COOLDOWN_MS = 8000;
+
+    function getLanguageName() {
+        return languageSelect ? languageSelect.value : "English";
+    }
+    function getLanguageCode() {
+        return LANG_TO_BCP47[getLanguageName()] || "en-US";
+    }
+
+    function setStatus(status, score) {
+        scoreSpan.textContent = Number(score || 0).toFixed(2);
+
+        statusIndicator.classList.remove("correct", "incorrect");
+
+        if (status === "CORRECT") {
+        statusIndicator.classList.add("correct");
+        statusIndicator.textContent = "✓ CORRECT FORM";
+        } else if (status === "WRONG") {
+        statusIndicator.classList.add("incorrect");
+        statusIndicator.textContent = "✗ FORM NEEDS ADJUSTMENT";
+        } else if (status === "NO_POSE") {
+        statusIndicator.classList.add("incorrect");
+        statusIndicator.textContent = "… POSE NOT DETECTED";
+        } else if (status === "NO_FRAME") {
+        statusIndicator.classList.add("incorrect");
+        statusIndicator.textContent = "… NO FRAME";
+        } else if (status === "WARMUP") {
+        statusIndicator.classList.add("incorrect");
+        statusIndicator.textContent = "… WARMING UP";
+        } else if (status === "ERROR") {
+        statusIndicator.classList.add("incorrect");
+        statusIndicator.textContent = "✗ ERROR";
+        } else {
+        statusIndicator.classList.add("incorrect");
+        statusIndicator.textContent = "… PROCESSING";
+        }
+    }
+
+    function renderFeedback(items) {
+        if (items && items.length > 0) {
+        LAST_FEEDBACK = items;
+        LAST_FEEDBACK_TIME = Date.now();
+        }
+
+        const displayItems = (LAST_FEEDBACK && LAST_FEEDBACK.length > 0) ? LAST_FEEDBACK : null;
+        feedbackBox.innerHTML = "";
+
+        if (!displayItems) {
+        const div = document.createElement("div");
+        div.className = "error-item";
+        div.textContent = "Waiting for feedback...";
+        feedbackBox.appendChild(div);
+        return;
+        }
+
+        displayItems.slice(0, 4).forEach((txt) => {
+        const div = document.createElement("div");
+        div.className = "error-item";
+        div.textContent = "⚠️ " + txt;
+        feedbackBox.appendChild(div);
+        });
+
+        const ageSec = Math.round((Date.now() - LAST_FEEDBACK_TIME) / 1000);
+        const ts = document.createElement("div");
+        ts.style.fontSize = "0.8rem";
+        ts.style.opacity = "0.6";
+        ts.style.marginTop = "8px";
+        ts.textContent = `Last updated ${ageSec}s ago`;
+        feedbackBox.appendChild(ts);
+    }
+
+    /* ===================== TTS ===================== */
+
+    function setVoiceUI(on) {
+        if (voiceStatusText) voiceStatusText.textContent = on ? "ON" : "OFF";
+        if (voiceHintText) voiceHintText.textContent = on ? "Audio cues are active" : "Audio cues are muted";
+    }
+
+    function stopSpeaking() {
+        try { window.speechSynthesis.cancel(); } catch(e) {}
+    }
+
+    function pickVoiceForLang(langCode) {
+        const voices = window.speechSynthesis.getVoices?.() || [];
+        const lc = (langCode || "en-US").toLowerCase();
+        const base = lc.split("-")[0];
+
+        let v = voices.find(x => (x.lang || "").toLowerCase() === lc);
+        if (v) return v;
+
+        v = voices.find(x => (x.lang || "").toLowerCase().startsWith(base));
+        if (v) return v;
+
+        if (base === "zh") {
+        v = voices.find(x => (x.lang || "").toLowerCase().startsWith("zh"));
+        if (v) return v;
+        }
+
+        return voices.find(x => (x.lang || "").toLowerCase().startsWith("en")) || voices[0] || null;
+    }
+
+    async function speakText(text) {
+        if (!text) return;
+
+        // Use server TTS (works for non-English scripts)
+        try {
+            await speakViaServerTTS(text);
+        } catch (e) {
+            console.error("Server TTS failed, fallback to speechSynthesis:", e);
+
+            // fallback: browser TTS
+            try {
+            if (!window.speechSynthesis) return;
+            stopSpeaking();
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = getLanguageCode();
+            window.speechSynthesis.speak(u);
+            } catch (_) {}
+        }
+        }
+
+    async function speakFeedbackList(items) {
+        if (!items || items.length === 0) return;
+
+        const now = Date.now();
+        if (now - lastSpokenAt < SPEAK_COOLDOWN_MS) return;
+
+        const hash = items.join("|");
+        if (hash === lastSpokenHash) return;
+
+        const short = items.slice(0, 2).join(". ");
+        await speakText(short);
+
+        lastSpokenHash = hash;
+        lastSpokenAt = now;
+        }
+
+    function warmupVoices() {
+        try { window.speechSynthesis.getVoices(); } catch(e) {}
+    }
+    if (window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = warmupVoices;
+        warmupVoices();
+    }
+
+    if (voiceToggle) {
+        setVoiceUI(voiceToggle.checked);
+        voiceToggle.addEventListener("change", () => {
+        setVoiceUI(voiceToggle.checked);
+        if (!voiceToggle.checked) stopSpeaking();
+        });
+    }
+
+    if (languageSelect) {
+        languageSelect.addEventListener("change", async () => {
+        stopSpeaking();
+        await startSession(); // refresh backend language
+        });
+    }
+
+    // Prime TTS once on first click (browser policy)
+    document.addEventListener("click", () => {
+        try {
+        const u = new SpeechSynthesisUtterance("ok");
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+        window.speechSynthesis.cancel();
+        } catch (e) {}
+    }, { once: true });
+
+    async function startWebcam() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (camErrorOverlay) camErrorOverlay.style.display = "flex";
+        return false;
+        }
+
+        try {
+        const constraints = { video: { facingMode: "user" }, audio: false };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        VIDEO.srcObject = stream;
+
+        await new Promise((resolve) => {
+            VIDEO.onloadedmetadata = () => resolve();
+        });
+
+        await VIDEO.play();
+        if (camErrorOverlay) camErrorOverlay.style.display = "none";
+        return true;
+        } catch (err) {
+        console.error("Camera error:", err);
+        if (camErrorOverlay) camErrorOverlay.style.display = "flex";
+        return false;
+        }
+    }
+
+    function stopCamera() {
+        try {
+        if (VIDEO && VIDEO.srcObject) {
+            VIDEO.srcObject.getTracks().forEach(t => t.stop());
+            VIDEO.srcObject = null;
+        }
+        } catch (e) {
+        console.warn("stopCamera failed:", e);
+        }
+    }
+
+    function pauseCameraPreview() {
+        try { VIDEO.pause(); } catch(e) {}
+    }
+
+    async function resumeCameraPreview() {
+        try { await VIDEO.play(); } catch(e) {}
+    }
+
+    /* ===================== BACKEND ===================== */
+
+    async function startSession() {
+        try {
+        await fetch(`${API_BASE}/api/session/start`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+            threshold: THRESHOLD,
+            cooldown_seconds: COOLDOWN_SECONDS,
+            language: getLanguageName(),
+            })
+        });
+        } catch (e) {
+        console.error("startSession failed:", e);
+        setStatus("ERROR", 0);
+        renderFeedback(["Network error: failed to reach backend (session start)"]);
+        }
+    }
+
+    function grabFrameDataURL() {
+        const w = VIDEO.videoWidth, h = VIDEO.videoHeight;
+        if (!w || !h) return null;
+
+        const targetW = 640;
+        const targetH = Math.round((h / w) * targetW);
+
+        canvas.width = targetW;
+        canvas.height = targetH;
+        ctx.drawImage(VIDEO, 0, 0, targetW, targetH);
+        return canvas.toDataURL("image/jpeg", 0.65);
+    }
+
+    async function pollFeedback() {
+        if (inflight) return;
+        inflight = true;
+
+        const frame_b64 = grabFrameDataURL();
+        if (!frame_b64) {
+        inflight = false;
+        return;
+        }
+
+        try {
+        const res = await fetch(`${API_BASE}/api/live_feedback`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ frame_b64, language: getLanguageName() })
+        });
+
+        const out = await res.json().catch(() => ({}));
+
+        const repCountText = document.getElementById("repCountText");
+        const repTargetText = document.getElementById("repTargetText");
+        const setIndexText = document.getElementById("setIndexText");
+        const setsTotalText = document.getElementById("setsTotalText");
+        const detectedExerciseText = document.getElementById("detectedExerciseText");
+
+        if (detectedExerciseText && out.exercise_name) {
+        detectedExerciseText.textContent = out.exercise_name;
+        }
+        if (repCountText && out.rep_count != null) {
+        repCountText.textContent = out.rep_count;
+        }
+        if (repTargetText && out.rep_target != null) {
+        repTargetText.textContent = out.rep_target;
+        }
+        if (setIndexText && out.set_index != null) {
+        setIndexText.textContent = out.set_index;
+        }
+        if (setsTotalText && out.sets_total != null) {
+        setsTotalText.textContent = out.sets_total;
+        }
+
+        if (!res.ok) {
+            setStatus("ERROR", 0);
+            renderFeedback([out.error || `Backend error (HTTP ${res.status})`]);
+            return;
+        }
+
+        setStatus(out.form_status, out.frame_score);
+
+        let fb = out.llm_feedback;
+        if (typeof fb === "string") fb = [fb];
+        renderFeedback(fb);
+
+        if (detectedExerciseText && out.exercise_name) {
+            detectedExerciseText.textContent = out.exercise_name;
+        }
+
+        if (out.form_status === "WRONG" && fb && fb.length > 0) {
+            speakFeedbackList(fb);
+        }
+
+        if (out.exercise_name) {
+            updateExerciseUI(out.exercise_name);
+        }
+
+        } catch (e) {
+            console.error("pollFeedback failed:", e);
+            setStatus("ERROR", 0);
+            renderFeedback(["Network error: failed to reach backend"]);
+            } finally {
+        inflight = false;
+        }
+    }
+
+    function startPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(() => {
+        if (!isPaused) pollFeedback();
+        }, POLL_MS);
+    }
+
+    function stopPolling() {
+        if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        }
+    }
+
+    if (pauseBtn) {
+        pauseBtn.addEventListener("click", async () => {
+        isPaused = !isPaused;
+        if (isPaused) {
+            pauseBtn.textContent = "▶️ Resume";
+            pauseCameraPreview();
+            stopSpeaking();
+        } else {
+            pauseBtn.textContent = "⏸️ Pause";
+            await resumeCameraPreview();
+            await pollFeedback();
+        }
+        });
+    }
+
+    if (stopBtn) {
+        stopBtn.addEventListener("click", async () => {
+        isPaused = true;
+        stopPolling();
+        stopCamera();
+        stopSpeaking();
+
+        if (pauseBtn) pauseBtn.disabled = true;
+        stopBtn.disabled = true;
+        stopBtn.textContent = "✅ Session Stopped";
+
+        setStatus("NO_FRAME", 0);
+        renderFeedback(["Session stopped."]);
+        });
+    }
+
+    /* ===================== INIT ===================== */
+
+    (async function init() {
+        const camOk = await startWebcam();
+        if (!camOk) return;
+
+        await startSession();
+        await pollFeedback();
+        startPolling();
+    })();
+
+    let ttsAudio = null;
+
+    async function speakViaServerTTS(text) {
+    if (!text) return;
+    if (voiceToggle && !voiceToggle.checked) return;
+
+    // stop any previous
+    try {
+        if (ttsAudio) {
+        ttsAudio.pause();
+        ttsAudio.src = "";
+        ttsAudio = null;
+        }
+    } catch(e){}
+
+    const language = getLanguageName(); // "Tamil", "Chinese", etc.
+
+    const res = await fetch(`${API_BASE}/api/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, language })
+    });
+
+    if (!res.ok) {
+        const msg = await res.text().catch(()=> "");
+        throw new Error(`TTS HTTP ${res.status}: ${msg.slice(0,200)}`);
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    ttsAudio = new Audio(url);
+    ttsAudio.onended = () => URL.revokeObjectURL(url);
+    await ttsAudio.play();
+    }
+    
+    const EXERCISE_PLAN = {
+        "lifting_of_arms":      { target: "3 sets × 10 reps", rom: "Raise arms to shoulder height" },
+        "lateral_trunk_tilt":   { target: "3 sets × 10 reps", rom: "Tilt ~20–30° each side" },
+        "trunk_rotation":       { target: "3 sets × 10 reps", rom: "Rotate comfortably (no pain)" },
+        "pelvis_rotation":      { target: "3 sets × 10 reps", rom: "Small controlled pelvis rotation" },
+        "squat":                { target: "3 sets × 10 reps", rom: "Hip crease to knee level (as tolerated)" },
+        "unknown":              { target: "3 sets × 10 reps", rom: "--" },
+        };
+
+    // Normalizer because your backend may return variations like "squatting"
+    function normalizeExerciseName(name) {
+        if (!name) return "unknown";
+        const n = name.toLowerCase().trim();
+
+        if (n.includes("squat")) return "squat";
+        if (n.includes("lifting")) return "lifting_of_arms";
+        if (n.includes("lateral")) return "lateral_trunk_tilt";
+        if (n.includes("trunk")) return "trunk_rotation";
+        if (n.includes("pelvis")) return "pelvis_rotation";
+
+        // if backend already returns your exact keys
+        if (EXERCISE_PLAN[n]) return n;
+
+        return "unknown";
+        }
+
+    function updateExerciseUI(exerciseNameRaw) {
+        const detected = document.getElementById("detectedExerciseText");
+        const meta = document.getElementById("exerciseMetaText");
+
+        const key = normalizeExerciseName(exerciseNameRaw);
+        const plan = EXERCISE_PLAN[key] || EXERCISE_PLAN["unknown"];
+
+        if (detected) detected.textContent = key.replaceAll("_", " ");
+        if (meta) {
+            meta.innerHTML = `Target: ${plan.target}<br />ROM Target: ${plan.rom}`;
+        }
+    }
+    </script>
+    {% endblock %}
