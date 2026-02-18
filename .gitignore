@@ -1,2 +1,5 @@
 venv/
+.venv/
 .DS_Store
+chroma_db/
+vector_store/
