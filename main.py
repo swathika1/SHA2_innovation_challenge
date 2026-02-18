@@ -2408,8 +2408,15 @@ def api_chat():
         # 1. Detect language
         try:
             lang = detect_language(message)
-            lang = lang if lang in ["en", "zh-cn", "ms", "ta"] else "en"
-            lang_key = "zh" if "zh" in lang else lang
+            # langdetect returns 'id' for Malay/Indonesian — treat as Malay
+            if lang in ("id", "ms"):
+                lang_key = "ms"
+            elif "zh" in lang:
+                lang_key = "zh"
+            elif lang == "ta":
+                lang_key = "ta"
+            else:
+                lang_key = "en"
         except Exception:
             lang_key = "en"
 
