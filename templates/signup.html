@@ -333,18 +333,18 @@
                 <div class="role-selector">
                     <p><i class="fas fa-shield-alt"></i> I am a...</p>
                     <div class="role-options">
-                        <div class="role-option">
-                            <input type="radio" id="role_patient" name="role" value="patient" required onchange="togglePatientFields()">
+                        <div class="role-option" onclick="selectRole('patient', this)">
+                            <input type="radio" id="role_patient" name="role" value="patient" required>
                             <label for="role_patient">Patient</label>
                             <i class="fas fa-heart"></i>
                         </div>
-                        <div class="role-option">
-                            <input type="radio" id="role_clinic" name="role" value="doctor" onchange="togglePatientFields()">
+                        <div class="role-option" onclick="selectRole('doctor', this)">
+                            <input type="radio" id="role_clinic" name="role" value="doctor">
                             <label for="role_clinic">Clinician</label>
                             <i class="fas fa-stethoscope"></i>
                         </div>
-                        <div class="role-option">
-                            <input type="radio" id="role_caregiver" name="role" value="caregiver" onchange="togglePatientFields()">
+                        <div class="role-option" onclick="selectRole('caregiver', this)">
+                            <input type="radio" id="role_caregiver" name="role" value="caregiver">
                             <label for="role_caregiver">Caregiver</label>
                             <i class="fas fa-handshake"></i>
                         </div>
@@ -387,6 +387,24 @@
                            placeholder="At least 6 characters" minlength="6" class="form-control">
                 </div>
 
+                <!-- Phone & DOB (all roles) -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="phone">
+                            <i class="fas fa-phone"></i> Phone Number
+                        </label>
+                        <input type="tel" id="phone" name="phone" class="form-control"
+                               placeholder="e.g. 91234567" maxlength="15">
+                    </div>
+                    <div class="form-group">
+                        <label for="dob">
+                            <i class="fas fa-calendar"></i> Date of Birth
+                        </label>
+                        <input type="date" id="dob" name="dob" class="form-control"
+                               max="2010-01-01">
+                    </div>
+                </div>
+
                 <!-- Patient-specific fields (hidden by default) -->
                 <div id="patientFields" style="display: none; padding-top: 15px; border-top: 2px solid var(--border);">
                     <div class="form-group">
@@ -395,14 +413,17 @@
                         </label>
                         <select id="condition" name="condition" class="form-control">
                             <option value="">Select a condition</option>
-                            <option value="General Rehab">General Rehabilitation</option>
-                            <option value="Knee Replacement">Knee Replacement Recovery</option>
-                            <option value="Hip Replacement">Hip Replacement Recovery</option>
-                            <option value="ACL Reconstruction">ACL Reconstruction</option>
-                            <option value="Shoulder Surgery">Shoulder Surgery Recovery</option>
-                            <option value="Back Pain">Back Pain / Spinal</option>
-                            <option value="Stroke Recovery">Stroke Recovery</option>
-                            <option value="Other">Other</option>
+                            <option value="Joint disorders">Joint disorders</option>
+                            <option value="Muscle injuries">Muscle injuries</option>
+                            <option value="Tendon & ligament disorders">Tendon & ligament disorders</option>
+                            <option value="Spine conditions">Spine conditions</option>
+                            <option value="Nerve compression syndromes">Nerve compression syndromes</option>
+                            <option value="Post-surgical rehabilitation">Post-surgical rehabilitation</option>
+                            <option value="Sports & overuse injuries">Sports & overuse injuries</option>
+                            <option value="Degenerative conditions">Degenerative conditions</option>
+                            <option value="Inflammatory conditions">Inflammatory conditions</option>
+                            <option value="Balance & functional decline disorders">Balance & functional decline disorders</option>
+                            <option value="Others">Others</option>
                         </select>
                     </div>
                     
@@ -411,8 +432,10 @@
                             <i class="fas fa-map-marker-alt"></i> Pincode / Postal Code
                         </label>
                         <input type="text" id="pincode" name="pincode" class="form-control" 
-                               placeholder="Enter your pincode" maxlength="10">
-                        <small style="color: var(--gray); margin-top: 5px; display: block;">Used to find nearby doctors</small>
+                               placeholder="Start typing postal code..." maxlength="10"
+                               autocomplete="off">
+                        <div id="pincodeSuggestions" style="display:none; position:absolute; z-index:100; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); max-height:180px; overflow-y:auto; width:100%;"></div>
+                        <small style="color: var(--gray); margin-top: 5px; display: block;">Singapore postal code — used to find nearby doctors</small>
                     </div>
                 </div>
 
@@ -506,22 +529,74 @@
 </div>
 
 <script>
-function togglePatientFields() {
-    const role = document.getElementById('role').value || 
-                 (document.querySelector('input[name="role"]:checked') ? document.querySelector('input[name="role"]:checked').value : '');
+function selectRole(role, el) {
+    // Check the radio inside this option
+    const radio = el.querySelector('input[type="radio"]');
+    radio.checked = true;
+
+    // Highlight selected, un-highlight others
+    document.querySelectorAll('.role-option').forEach(opt => {
+        opt.style.borderColor = '';
+        opt.style.background = '';
+    });
+    el.style.borderColor = 'var(--primary)';
+    el.style.background = 'rgba(26,115,232,.06)';
+
+    // Toggle conditional sections
     const patientFields = document.getElementById('patientFields');
-    const doctorFields = document.getElementById('doctorFields');
-    
+    const doctorFields  = document.getElementById('doctorFields');
+
     if (role === 'patient') {
         patientFields.style.display = 'block';
-        doctorFields.style.display = 'none';
+        doctorFields.style.display  = 'none';
     } else if (role === 'doctor') {
         patientFields.style.display = 'none';
-        doctorFields.style.display = 'block';
+        doctorFields.style.display  = 'block';
     } else {
         patientFields.style.display = 'none';
-        doctorFields.style.display = 'none';
+        doctorFields.style.display  = 'none';
     }
+}
+
+/* ── Postal Code Autocomplete ── */
+const pincodeInput = document.getElementById('pincode');
+const suggestionsDiv = document.getElementById('pincodeSuggestions');
+let debounceTimer;
+
+if (pincodeInput) {
+    // Make parent position:relative for dropdown positioning
+    pincodeInput.parentElement.style.position = 'relative';
+
+    pincodeInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const q = this.value.trim();
+        if (q.length < 2) { suggestionsDiv.style.display = 'none'; return; }
+        debounceTimer = setTimeout(async () => {
+            try {
+                const res = await fetch('/api/postal/search?q=' + encodeURIComponent(q));
+                const data = await res.json();
+                if (data.length === 0) { suggestionsDiv.style.display = 'none'; return; }
+                suggestionsDiv.innerHTML = data.map(r =>
+                    '<div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:.92rem;" ' +
+                    'onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'#fff\'" ' +
+                    'onclick="selectPostal(\'' + r.postal_code + '\')">' +
+                    '<strong>' + r.postal_code + '</strong> <span style="color:#888;">— ' + r.street_name + '</span></div>'
+                ).join('');
+                suggestionsDiv.style.display = 'block';
+            } catch(e) { suggestionsDiv.style.display = 'none'; }
+        }, 250);
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!pincodeInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+            suggestionsDiv.style.display = 'none';
+        }
+    });
+}
+
+function selectPostal(code) {
+    pincodeInput.value = code;
+    suggestionsDiv.style.display = 'none';
 }
 </script>
 {% endblock %}

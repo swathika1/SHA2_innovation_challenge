@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     role TEXT NOT NULL CHECK(role IN ('doctor', 'patient', 'caregiver')),
     phone TEXT,
+    pincode TEXT,
+    dob TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -123,6 +125,14 @@ CREATE TABLE IF NOT EXISTS appointments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (doctor_id) REFERENCES users(id),
     FOREIGN KEY (patient_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS sg_postal (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    postal_code TEXT NOT NULL,
+    street_name TEXT,
+    lat REAL,
+    lon REAL
 );
 ''')
 conn.commit()

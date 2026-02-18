@@ -205,14 +205,32 @@ def api_current_user():
     return jsonify({'authenticated': False}), 401
 
 
+@app.route('/api/postal/search')
+def postal_search():
+    """Search SG postal codes for autocomplete"""
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    results = query_db(
+        'SELECT DISTINCT postal_code, street_name FROM sg_postal WHERE postal_code LIKE ? LIMIT 20',
+        (f'{q}%',)
+    )
+    return jsonify([{'postal_code': r['postal_code'], 'street_name': r['street_name']} for r in results] if results else [])
+
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     """Signup Page"""
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
-        name = request.form['name']
+        first_name = request.form.get('first_name', '')
+        last_name = request.form.get('last_name', '')
+        name = f"{first_name} {last_name}".strip() or request.form.get('name', 'User')
         role = request.form['role']
+        phone = request.form.get('phone', '').strip() or None
+        pincode = request.form.get('pincode', '').strip() or None
+        dob = request.form.get('dob', '').strip() or None
         
         # Check if email already exists
         existing_user = query_db('SELECT id FROM users WHERE email = ?', (email,), one=True)
@@ -223,8 +241,8 @@ def signup():
         # Hash password and create user
         hashed_password = generate_password_hash(password)
         user_id = execute_db(
-            'INSERT INTO users (email, password, name, role) VALUES (?, ?, ?, ?)',
-            (email, hashed_password, name, role)
+            'INSERT INTO users (email, password, name, role, phone, pincode, dob) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (email, hashed_password, name, role, phone, pincode, dob)
         )
         
         # If patient, create patients record with optimization data
@@ -232,10 +250,20 @@ def signup():
             condition = request.form.get('condition', 'General Rehab')
             urgency = request.form.get('urgency', 'Medium')
             max_distance = float(request.form.get('max_distance', 20))
-            pincode = request.form.get('pincode', '')
             
             # Map condition to specialty needed
             condition_to_specialty = {
+                'Joint disorders': 'Orthopedic',
+                'Muscle injuries': 'Sports',
+                'Tendon & ligament disorders': 'Sports',
+                'Spine conditions': 'MSK',
+                'Nerve compression syndromes': 'Neuro',
+                'Post-surgical rehabilitation': 'Post-op',
+                'Sports & overuse injuries': 'Sports',
+                'Degenerative conditions': 'MSK',
+                'Inflammatory conditions': 'General',
+                'Balance & functional decline disorders': 'Neuro',
+                'Others': 'General',
                 'Knee Replacement': 'Post-op',
                 'Hip Replacement': 'Post-op',
                 'ACL Reconstruction': 'Sports',
@@ -624,7 +652,7 @@ def session_summary(session_id=None):
 def patient_profile():
     """Personal Details page"""
     user_info = query_db(
-        'SELECT id, name, email, role, phone, created_at FROM users WHERE id = ?',
+        'SELECT id, name, email, role, phone, pincode, dob, created_at FROM users WHERE id = ?',
         (session['user_id'],), one=True
     )
     patient_info = query_db(
@@ -643,12 +671,63 @@ def patient_profile():
         JOIN users u ON cp.caregiver_id = u.id
         WHERE cp.patient_id = ?
     ''', (session['user_id'],), one=True)
+
+    # Compute age from dob
+    age = None
+    if user_info and user_info['dob']:
+        dob = date.fromisoformat(user_info['dob'])
+        today = date.today()
+        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
     return render_template('patient/profile.html',
                          user_info=user_info,
                          patient=patient_info,
                          doctor=doctor,
                          caregiver=caregiver,
+                         age=age,
                          active_tab='personal')
+
+
+@app.route('/api/profile/update', methods=['POST'])
+@login_required
+def update_profile():
+    """Update user profile fields (email, phone, pincode) — works for all roles"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+
+    user_id = session['user_id']
+    allowed_fields = {'email', 'phone', 'pincode'}
+    updates = []
+    values = []
+
+    for field in allowed_fields:
+        if field in data:
+            val = data[field].strip() if data[field] else ''
+            # Email validation
+            if field == 'email':
+                if not val or '@' not in val:
+                    return jsonify({'success': False, 'error': 'Invalid email address'}), 400
+                # Check uniqueness
+                existing = query_db(
+                    'SELECT id FROM users WHERE email = ? AND id != ?',
+                    (val, user_id), one=True
+                )
+                if existing:
+                    return jsonify({'success': False, 'error': 'Email already in use'}), 400
+            updates.append(f'{field} = ?')
+            values.append(val if val else None)
+
+    if not updates:
+        return jsonify({'success': False, 'error': 'No valid fields to update'}), 400
+
+    values.append(user_id)
+    execute_db(
+        f'UPDATE users SET {", ".join(updates)} WHERE id = ?',
+        tuple(values)
+    )
+
+    return jsonify({'success': True, 'message': 'Profile updated successfully'})
 
 
 @app.route('/patient/progress')
@@ -773,7 +852,7 @@ def clinician_profile():
 
     # Doctor's own info
     user_info = query_db(
-        'SELECT id, name, email, role, phone, created_at FROM users WHERE id = ?',
+        'SELECT id, name, email, role, phone, pincode, dob, created_at FROM users WHERE id = ?',
         (doctor_id,), one=True
     )
 
@@ -806,12 +885,20 @@ def clinician_profile():
         sum(p['adherence_rate'] for p in patients_with_caregivers) / total_patients, 1
     ) if total_patients > 0 else 0
 
+    # Compute age from dob
+    age = None
+    if user_info and user_info['dob']:
+        dob = date.fromisoformat(user_info['dob'])
+        today = date.today()
+        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
     return render_template('clinician/profile.html',
                          user_info=user_info,
                          patients=patients_with_caregivers,
                          total_patients=total_patients,
                          patients_with_cg=patients_with_cg,
-                         avg_adherence=avg_adherence)
+                         avg_adherence=avg_adherence,
+                         age=age)
 
 
 @app.route('/clinician/dashboard')

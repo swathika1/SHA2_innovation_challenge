@@ -241,8 +241,11 @@
 
         <!-- User Information -->
         <div class="info-card">
-            <div class="info-card-title">
-                <span class="card-icon"><i class="fa-solid fa-id-card"></i></span> Account Information
+            <div class="info-card-title" style="justify-content: space-between;">
+                <span><span class="card-icon"><i class="fa-solid fa-id-card"></i></span> Account Information</span>
+                <button class="btn-edit-profile" onclick="toggleEditMode()" id="editProfileBtn">
+                    <i class="fa-solid fa-pen"></i> Edit
+                </button>
             </div>
             <div class="info-grid">
                 <div class="info-item">
@@ -251,7 +254,8 @@
                 </div>
                 <div class="info-item">
                     <span class="info-label">Email Address</span>
-                    <span class="info-value">{{ user_info.email }}</span>
+                    <span class="info-value info-display" data-field="email">{{ user_info.email }}</span>
+                    <input type="email" class="info-edit-input" data-field="email" value="{{ user_info.email }}" style="display:none;">
                 </div>
                 <div class="info-item">
                     <span class="info-label">Role</span>
@@ -259,7 +263,21 @@
                 </div>
                 <div class="info-item">
                     <span class="info-label">Phone</span>
-                    <span class="info-value">{{ user_info.phone if user_info.phone else '—  Not set' }}</span>
+                    <span class="info-value info-display" data-field="phone">{{ user_info.phone if user_info.phone else '— Not set' }}</span>
+                    <input type="tel" class="info-edit-input" data-field="phone" value="{{ user_info.phone or '' }}" placeholder="e.g. +91 98765 43210" style="display:none;">
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Pincode</span>
+                    <span class="info-value info-display" data-field="pincode">{{ user_info.pincode if user_info.pincode else '— Not set' }}</span>
+                    <input type="text" class="info-edit-input" data-field="pincode" value="{{ user_info.pincode or '' }}" placeholder="e.g. 600001" style="display:none;">
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Date of Birth</span>
+                    <span class="info-value">{{ user_info.dob if user_info.dob else '—' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Age</span>
+                    <span class="info-value">{{ (age|string + ' years') if age else '—' }}</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">Member Since</span>
@@ -277,6 +295,16 @@
                     <span class="info-value">{{ patient.condition }}</span>
                 </div>
                 {% endif %}
+            </div>
+            <!-- Save / Cancel buttons (hidden by default) -->
+            <div class="edit-actions" id="editActions" style="display:none; margin-top:20px; padding-top:18px; border-top:1px solid #e8ebf0; display:none;">
+                <button class="btn btn-primary" onclick="saveProfile()" style="padding:10px 24px; font-weight:600;">
+                    <i class="fa-solid fa-check"></i> Save Changes
+                </button>
+                <button class="btn" onclick="cancelEdit()" style="padding:10px 24px; margin-left:10px;">
+                    Cancel
+                </button>
+                <span id="editStatus" style="margin-left:15px; font-size:.9rem;"></span>
             </div>
         </div>
 
@@ -393,4 +421,90 @@
 
     </div>
 </div>
+
+<style>
+.btn-edit-profile {
+    background: #f0f4ff; color: #1a73e8; border: 1px solid #c4d7f5;
+    padding: 7px 18px; border-radius: 8px; cursor: pointer; font-size: .88rem;
+    font-weight: 600; transition: all .2s;
+}
+.btn-edit-profile:hover { background: #1a73e8; color: #fff; }
+.info-edit-input {
+    width: 100%; padding: 9px 12px; border: 1.5px solid #1a73e8; border-radius: 8px;
+    font-size: .95rem; font-family: inherit; outline: none; background: #f7f9fc;
+    transition: border-color .2s;
+}
+.info-edit-input:focus { border-color: #0d47a1; background: #fff; }
+.edit-actions .btn-primary { background: #1a73e8; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+.edit-actions .btn-primary:hover { background: #1558b0; }
+.edit-actions .btn { background: #f0f0f0; color: #333; border: none; border-radius: 8px; cursor: pointer; }
+.edit-actions .btn:hover { background: #e0e0e0; }
+</style>
+
+<script>
+let editMode = false;
+
+function toggleEditMode() {
+    editMode = !editMode;
+    const displays = document.querySelectorAll('.info-display');
+    const inputs   = document.querySelectorAll('.info-edit-input');
+    const actions  = document.getElementById('editActions');
+    const btn      = document.getElementById('editProfileBtn');
+
+    displays.forEach(el => el.style.display = editMode ? 'none' : '');
+    inputs.forEach(el   => el.style.display = editMode ? 'block' : 'none');
+    actions.style.display = editMode ? 'flex' : 'none';
+    btn.innerHTML = editMode
+        ? '<i class="fa-solid fa-xmark"></i> Cancel'
+        : '<i class="fa-solid fa-pen"></i> Edit';
+}
+
+function cancelEdit() {
+    // reset inputs to original values
+    document.querySelectorAll('.info-edit-input').forEach(inp => {
+        const field = inp.dataset.field;
+        const display = document.querySelector(`.info-display[data-field="${field}"]`);
+        const origVal = display.textContent.trim();
+        inp.value = origVal.startsWith('—') ? '' : origVal;
+    });
+    toggleEditMode();
+}
+
+async function saveProfile() {
+    const status = document.getElementById('editStatus');
+    status.textContent = 'Saving…';
+    status.style.color = '#1a73e8';
+
+    const body = {};
+    document.querySelectorAll('.info-edit-input').forEach(inp => {
+        body[inp.dataset.field] = inp.value.trim();
+    });
+
+    try {
+        const res = await fetch('/api/profile/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            status.textContent = '✓ Saved';
+            status.style.color = '#22c55e';
+            // update display spans
+            document.querySelectorAll('.info-edit-input').forEach(inp => {
+                const field = inp.dataset.field;
+                const display = document.querySelector(`.info-display[data-field="${field}"]`);
+                display.textContent = inp.value.trim() || '— Not set';
+            });
+            setTimeout(() => toggleEditMode(), 800);
+        } else {
+            status.textContent = data.error || 'Error saving';
+            status.style.color = '#dc2626';
+        }
+    } catch (e) {
+        status.textContent = 'Network error';
+        status.style.color = '#dc2626';
+    }
+}
+</script>
 {% endblock %}
