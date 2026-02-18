@@ -2457,6 +2457,15 @@ def api_live_feedback():
 
 # ==================== MERILION CHATBOT API ====================
 
+@app.route('/api/chat/clear', methods=['POST'])
+@login_required
+def api_chat_clear():
+    """Clear chat history from server session."""
+    session.pop('chat_history', None)
+    session.modified = True
+    return jsonify({"ok": True})
+
+
 @app.route('/api/chat', methods=['POST'])
 @login_required
 def api_chat():
@@ -2469,7 +2478,11 @@ def api_chat():
         return jsonify({"error": "Missing 'message' field"}), 400
 
     message = data['message']
-    conversation_history = data.get('conversation_history', [])
+
+    # Use server-side session to persist conversation history across page navigations
+    if 'chat_history' not in session:
+        session['chat_history'] = []
+    conversation_history = session['chat_history']
     role = session.get('role')
     user_id = session['user_id']
 
@@ -2495,8 +2508,15 @@ def api_chat():
         # 1. Detect language
         try:
             lang = detect_language(message)
-            lang = lang if lang in ["en", "zh-cn", "ms", "ta"] else "en"
-            lang_key = "zh" if "zh" in lang else lang
+            # langdetect returns 'id' for Malay/Indonesian — treat as Malay
+            if lang in ("id", "ms"):
+                lang_key = "ms"
+            elif "zh" in lang:
+                lang_key = "zh"
+            elif lang == "ta":
+                lang_key = "ta"
+            else:
+                lang_key = "en"
         except Exception:
             lang_key = "en"
 
@@ -2554,6 +2574,11 @@ Avg Quality Score: {patient_info['avg_quality_score']}/100
         # 4. If high risk — return referral immediately
         if risk["should_refer"]:
             referral_msg = REFERRAL_MESSAGES.get(lang_key, REFERRAL_MESSAGES["en"])
+            session['chat_history'] = conversation_history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": referral_msg}
+            ]
+            session.modified = True
             return jsonify({
                 "response": referral_msg,
                 "risk_score": risk["score"],
@@ -2591,6 +2616,15 @@ Avg Quality Score: {patient_info['avg_quality_score']}/100
         # 7. Query MeriLion
         full_history = conversation_history + [{"role": "user", "content": message}]
         response_text = query_merilion_sync(full_history, patient_context, rag_context, lang_key)
+
+        # 8. Save conversation to server-side session (keep last 20 messages)
+        session['chat_history'] = conversation_history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": response_text}
+        ]
+        if len(session['chat_history']) > 20:
+            session['chat_history'] = session['chat_history'][-20:]
+        session.modified = True
 
         return jsonify({
             "response": response_text,

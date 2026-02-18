@@ -19,3 +19,6 @@ httpx
 langdetect
 sqlalchemy
 pydantic
+faiss-cpu>=1.7.0
+sentence-transformers>=2.2.0
+PyPDF2>=3.0.0
