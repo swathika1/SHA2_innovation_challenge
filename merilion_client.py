@@ -17,7 +17,15 @@ def _build_headers() -> dict:
     }
 
 
-def _build_chat_payload(messages: list, patient_context: str) -> dict:
+LANGUAGE_INSTRUCTIONS = {
+    "ms": "PENTING: Pesakit menulis dalam Bahasa Melayu. Anda MESTI membalas SEPENUHNYA dalam Bahasa Melayu. Jangan gunakan bahasa Inggeris langsung.",
+    "zh": "重要：患者用中文书写。您必须完全用中文回复。请勿使用英语。",
+    "ta": "முக்கியம்: நோயாளி தமிழில் எழுதுகிறார். நீங்கள் முழுவதுமாக தமிழில் பதிலளிக்க வேண்டும். ஆங்கிலம் பயன்படுத்த வேண்டாம்.",
+    "en": ""
+}
+
+
+def _build_chat_payload(messages: list, patient_context: str, rag_context: str = "", lang_key: str = "en") -> dict:
     """Build payload for MERaLiON /chat endpoint.
 
     MERaLiON responds best when the full prompt is in the 'instruction' field.
@@ -40,6 +48,11 @@ def _build_chat_payload(messages: list, patient_context: str) -> dict:
         "You are a healthcare rehab assistant. Answer the patient's question directly with specific, practical advice.",
         SAFETY_RULES
     ]
+
+    # Explicit language override — placed early so the model sees it clearly
+    lang_instruction = LANGUAGE_INSTRUCTIONS.get(lang_key, "")
+    if lang_instruction:
+        instruction_parts.append(f"\n{lang_instruction}")
 
     if patient_context and patient_context != "New patient - no history available.":
         instruction_parts.append(f"\nPatient Info:\n{patient_context}")
@@ -68,10 +81,10 @@ def _extract_response(data: dict) -> str:
         return str(data)
 
 
-def query_merilion_sync(messages: list, patient_context: str) -> str:
+def query_merilion_sync(messages: list, patient_context: str, rag_context: str = "", lang_key: str = "en") -> str:
     """Synchronous version for Flask routes."""
     headers = _build_headers()
-    payload = _build_chat_payload(messages, patient_context)
+    payload = _build_chat_payload(messages, patient_context, rag_context, lang_key)
 
     response = requests.post(
         f"{MERILION_BASE_URL}/chat",
@@ -83,10 +96,10 @@ def query_merilion_sync(messages: list, patient_context: str) -> str:
     return _extract_response(response.json())
 
 
-async def query_merilion(messages: list, patient_context: str) -> str:
+async def query_merilion(messages: list, patient_context: str, rag_context: str = "", lang_key: str = "en") -> str:
     """Async version for FastAPI routes."""
     headers = _build_headers()
-    payload = _build_chat_payload(messages, patient_context)
+    payload = _build_chat_payload(messages, patient_context, rag_context, lang_key)
 
     async with httpx.AsyncClient() as client:
         response = await client.post(

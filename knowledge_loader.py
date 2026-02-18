@@ -199,7 +199,8 @@ def load_exercises_from_db():
                    AVG(s.pain_after) as avg_pain,
                    COUNT(*) as session_count
             FROM sessions s
-            JOIN workouts w ON s.workout_id = w.id
+            JOIN session_exercises se ON se.session_id = s.id
+            JOIN workouts w ON se.workout_id = w.id
             JOIN exercises e ON w.exercise_id = e.id
             GROUP BY e.id
             HAVING session_count >= 3
