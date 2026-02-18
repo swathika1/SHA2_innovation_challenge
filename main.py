@@ -2493,6 +2493,14 @@ Avg Quality Score: {patient_info['avg_quality_score']}/100
         if role == 'caregiver':
             patient_context += f"\n[Note: This conversation is with a caregiver, not the patient directly. Provide information appropriate for a family caregiver.]"
 
+        # 6.5. RAG retrieval — enrich with rehabilitation knowledge
+        rag_context = ""
+        try:
+            from rag_engine import retrieve
+            rag_context = retrieve(message, top_k=3)
+        except Exception as rag_err:
+            print(f"[WARN] RAG retrieval skipped: {rag_err}")
+
         # 7. Query MeriLion
         full_history = conversation_history + [{"role": "user", "content": message}]
         response_text = query_merilion_sync(full_history, patient_context, rag_context, lang_key)
