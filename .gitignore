@@ -1,9 +1,15 @@
 venv/
+.venv/
 
 # Python cache
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
 
 # Flask session files
 flask_session/
@@ -24,12 +30,7 @@ instance/
 # OS
 .DS_Store
 Thumbs.db
-.DS_Store
 
-
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.egg-info/
+# Vector store
+chroma_db/
+vector_store/
