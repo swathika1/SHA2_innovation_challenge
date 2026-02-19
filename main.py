@@ -232,6 +232,27 @@ def signup():
         pincode = request.form.get('pincode', '').strip() or None
         dob = request.form.get('dob', '').strip() or None
         
+        # Validate pincode against sg_postal table (if provided)
+        if pincode:
+            valid_postal = query_db(
+                'SELECT postal_code FROM sg_postal WHERE postal_code = ? LIMIT 1',
+                (pincode,), one=True
+            )
+            if not valid_postal:
+                flash('Invalid postal code. Please choose a valid Singapore postal code from the suggestions.', 'error')
+                return redirect(url_for('signup'))
+
+        # For doctors, also validate clinic pincode
+        clinic_pincode = request.form.get('clinic_pincode', '').strip()
+        if role == 'doctor' and clinic_pincode:
+            valid_clinic = query_db(
+                'SELECT postal_code FROM sg_postal WHERE postal_code = ? LIMIT 1',
+                (clinic_pincode,), one=True
+            )
+            if not valid_clinic:
+                flash('Invalid clinic postal code. Please choose a valid Singapore postal code from the suggestions.', 'error')
+                return redirect(url_for('signup'))
+
         # Check if email already exists
         existing_user = query_db('SELECT id FROM users WHERE email = ?', (email,), one=True)
         if existing_user:
@@ -345,6 +366,13 @@ def signup():
                 'INSERT INTO doctor_locations (doctor_id, clinic_name, address) VALUES (?, ?, ?)',
                 (user_id, clinic_name, clinic_pincode)
             )
+
+            # Also store clinic pincode in users.pincode for distance calculations
+            if clinic_pincode:
+                execute_db(
+                    'UPDATE users SET pincode = ? WHERE id = ?',
+                    (clinic_pincode, user_id)
+                )
             
             # Set default availability (all weekday timeslots available)
             timeslots = query_db('SELECT id FROM timeslots')

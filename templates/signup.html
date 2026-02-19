@@ -13,11 +13,7 @@
     }
 
     .auth-left {
-        padding: 60px 50px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        max-height: calc(100vh - 80px);
+        padding: 40px 50px;
         overflow-y: auto;
     }
 
@@ -28,7 +24,9 @@
         align-items: center;
         justify-content: center;
         padding: 60px 40px;
-        position: relative;
+        position: sticky;
+        top: 0;
+        height: 100vh;
         overflow: hidden;
     }
 
@@ -281,15 +279,11 @@
         .auth-right {
             display: none;
         }
-
-        .auth-left {
-            min-height: auto;
-        }
     }
 
     @media (max-width: 768px) {
         .auth-left {
-            padding: 40px 25px;
+            padding: 30px 20px;
         }
 
         .auth-form h2 {
@@ -431,11 +425,13 @@
                         <label for="pincode">
                             <i class="fas fa-map-marker-alt"></i> Pincode / Postal Code
                         </label>
-                        <input type="text" id="pincode" name="pincode" class="form-control" 
-                               placeholder="Start typing postal code..." maxlength="10"
-                               autocomplete="off">
-                        <div id="pincodeSuggestions" style="display:none; position:absolute; z-index:100; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); max-height:180px; overflow-y:auto; width:100%;"></div>
-                        <small style="color: var(--gray); margin-top: 5px; display: block;">Singapore postal code — used to find nearby doctors</small>
+                        <div style="position:relative;">
+                            <input type="text" id="pincode" name="pincode" class="form-control" 
+                                   placeholder="Start typing postal code..." maxlength="6"
+                                   autocomplete="off">
+                            <div id="pincodeSuggestions" style="display:none; position:absolute; z-index:100; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); max-height:180px; overflow-y:auto; width:100%;"></div>
+                        </div>
+                        <small id="pincodeStatus" style="margin-top:5px; display:block; color:var(--gray);">Singapore postal code — used to find nearby doctors</small>
                     </div>
                 </div>
 
@@ -453,9 +449,13 @@
                         <label for="clinic_pincode">
                             <i class="fas fa-map-marker-alt"></i> Clinic Pincode
                         </label>
-                        <input type="text" id="clinic_pincode" name="clinic_pincode" class="form-control" 
-                               placeholder="Clinic pincode" maxlength="10">
-                        <small style="color: var(--gray); margin-top: 5px; display: block;">For patient distance calculations</small>
+                        <div style="position:relative;">
+                            <input type="text" id="clinic_pincode" name="clinic_pincode" class="form-control" 
+                                   placeholder="Start typing clinic postal code..." maxlength="6"
+                                   autocomplete="off">
+                            <div id="clinicPincodeSuggestions" style="display:none; position:absolute; z-index:100; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); max-height:180px; overflow-y:auto; width:100%;"></div>
+                        </div>
+                        <small id="clinicPincodeStatus" style="margin-top:5px; display:block; color:var(--gray);">For patient distance calculations</small>
                     </div>
 
                     <div class="form-group">
@@ -558,45 +558,156 @@ function selectRole(role, el) {
     }
 }
 
-/* ── Postal Code Autocomplete ── */
-const pincodeInput = document.getElementById('pincode');
-const suggestionsDiv = document.getElementById('pincodeSuggestions');
-let debounceTimer;
+/* ── Reusable Postal Code Autocomplete ── */
+function setupPostalAutocomplete(inputId, suggestionsId, statusId, validFlag) {
+    const input = document.getElementById(inputId);
+    const sugDiv = document.getElementById(suggestionsId);
+    const status = document.getElementById(statusId);
+    if (!input || !sugDiv) return;
 
-if (pincodeInput) {
-    // Make parent position:relative for dropdown positioning
-    pincodeInput.parentElement.style.position = 'relative';
+    let timer;
 
-    pincodeInput.addEventListener('input', function() {
-        clearTimeout(debounceTimer);
+    // Mark invalid whenever user types (must re-select from suggestions)
+    input.addEventListener('input', function() {
+        window[validFlag] = false;
+        clearTimeout(timer);
         const q = this.value.trim();
-        if (q.length < 2) { suggestionsDiv.style.display = 'none'; return; }
-        debounceTimer = setTimeout(async () => {
+
+        // Reset status
+        if (status) {
+            status.style.color = 'var(--gray)';
+            status.innerHTML = q.length > 0
+                ? '<i class="fas fa-spinner fa-spin"></i> Searching...'
+                : (inputId === 'pincode'
+                    ? 'Singapore postal code — used to find nearby doctors'
+                    : 'For patient distance calculations');
+        }
+
+        if (q.length < 2) { sugDiv.style.display = 'none'; return; }
+
+        timer = setTimeout(async () => {
             try {
                 const res = await fetch('/api/postal/search?q=' + encodeURIComponent(q));
                 const data = await res.json();
-                if (data.length === 0) { suggestionsDiv.style.display = 'none'; return; }
-                suggestionsDiv.innerHTML = data.map(r =>
-                    '<div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:.92rem;" ' +
-                    'onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'#fff\'" ' +
-                    'onclick="selectPostal(\'' + r.postal_code + '\')">' +
-                    '<strong>' + r.postal_code + '</strong> <span style="color:#888;">— ' + r.street_name + '</span></div>'
+                if (data.length === 0) {
+                    sugDiv.style.display = 'none';
+                    if (status) {
+                        status.style.color = '#dc3545';
+                        status.innerHTML = '<i class="fas fa-exclamation-circle"></i> No matching postal code found';
+                    }
+                    input.style.borderColor = '#dc3545';
+                    return;
+                }
+
+                // Check if typed value is an exact match
+                const exact = data.find(r => r.postal_code === q);
+                if (exact) {
+                    window[validFlag] = true;
+                    input.style.borderColor = '#28a745';
+                    if (status) {
+                        status.style.color = '#28a745';
+                        status.innerHTML = '<i class="fas fa-check-circle"></i> ' + exact.street_name;
+                    }
+                }
+
+                sugDiv.innerHTML = data.map(r =>
+                    `<div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:.92rem;transition:background .15s;"
+                          onmouseover="this.style.background='#f0f4ff'"
+                          onmouseout="this.style.background='#fff'"
+                          data-code="${r.postal_code}" data-street="${r.street_name}">
+                        <strong>${r.postal_code}</strong>
+                        <span style="color:#888;"> — ${r.street_name}</span>
+                    </div>`
                 ).join('');
-                suggestionsDiv.style.display = 'block';
-            } catch(e) { suggestionsDiv.style.display = 'none'; }
+
+                // Click handler for each suggestion
+                sugDiv.querySelectorAll('[data-code]').forEach(el => {
+                    el.addEventListener('click', function() {
+                        input.value = this.dataset.code;
+                        window[validFlag] = true;
+                        sugDiv.style.display = 'none';
+                        input.style.borderColor = '#28a745';
+                        if (status) {
+                            status.style.color = '#28a745';
+                            status.innerHTML = '<i class="fas fa-check-circle"></i> ' + this.dataset.street;
+                        }
+                    });
+                });
+
+                sugDiv.style.display = 'block';
+            } catch(e) {
+                sugDiv.style.display = 'none';
+            }
         }, 250);
     });
 
+    // Clear value → reset
+    input.addEventListener('blur', function() {
+        setTimeout(() => {
+            sugDiv.style.display = 'none';
+            if (this.value.trim() === '') {
+                window[validFlag] = true; // empty is ok (optional)
+                input.style.borderColor = '';
+                if (status) {
+                    status.style.color = 'var(--gray)';
+                    status.innerHTML = inputId === 'pincode'
+                        ? 'Singapore postal code — used to find nearby doctors'
+                        : 'For patient distance calculations';
+                }
+            }
+        }, 200);
+    });
+
+    // Close dropdown on outside click
     document.addEventListener('click', function(e) {
-        if (!pincodeInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-            suggestionsDiv.style.display = 'none';
+        if (!input.contains(e.target) && !sugDiv.contains(e.target)) {
+            sugDiv.style.display = 'none';
         }
     });
 }
 
-function selectPostal(code) {
-    pincodeInput.value = code;
-    suggestionsDiv.style.display = 'none';
-}
+// Track validity flags
+window._pincodeValid = true;        // true = empty (optional) or selected from list
+window._clinicPincodeValid = true;
+
+// Init autocomplete for both fields
+setupPostalAutocomplete('pincode', 'pincodeSuggestions', 'pincodeStatus', '_pincodeValid');
+setupPostalAutocomplete('clinic_pincode', 'clinicPincodeSuggestions', 'clinicPincodeStatus', '_clinicPincodeValid');
+
+/* ── Block form submission if pincode is invalid ── */
+document.getElementById('signupForm').addEventListener('submit', function(e) {
+    const role = document.querySelector('input[name="role"]:checked');
+    const roleName = role ? role.value : '';
+
+    if (roleName === 'patient') {
+        const pc = document.getElementById('pincode').value.trim();
+        if (pc && !window._pincodeValid) {
+            e.preventDefault();
+            const status = document.getElementById('pincodeStatus');
+            if (status) {
+                status.style.color = '#dc3545';
+                status.innerHTML = '<i class="fas fa-exclamation-circle"></i> Please select a valid postal code from the suggestions';
+            }
+            document.getElementById('pincode').focus();
+            document.getElementById('pincode').style.borderColor = '#dc3545';
+            return false;
+        }
+    }
+
+    if (roleName === 'doctor') {
+        const cpc = document.getElementById('clinic_pincode').value.trim();
+        if (cpc && !window._clinicPincodeValid) {
+            e.preventDefault();
+            const status = document.getElementById('clinicPincodeStatus');
+            if (status) {
+                status.style.color = '#dc3545';
+                status.innerHTML = '<i class="fas fa-exclamation-circle"></i> Please select a valid postal code from the suggestions';
+            }
+            document.getElementById('clinic_pincode').focus();
+            document.getElementById('clinic_pincode').style.borderColor = '#dc3545';
+            return false;
+        }
+    }
+});
 </script>
 {% endblock %}

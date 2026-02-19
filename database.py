@@ -4,6 +4,7 @@ Uses SQLite with Flask's application context
 """
 
 import sqlite3
+import math
 from flask import g
 
 DATABASE = 'rehab_coach.db'
@@ -42,63 +43,52 @@ def execute_db(query, args=()):
     return lastrowid
 
 
+def _haversine(lat1, lon1, lat2, lon2):
+    """Return distance in km between two (lat, lon) points using Haversine."""
+    R = 6371.0  # Earth radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _get_postal_coords(pincode):
+    """
+    Look up (lat, lon) for a Singapore postal code from the sg_postal table.
+    Returns (lat, lon) tuple or None if not found.
+    """
+    if not pincode:
+        return None
+    pc = ''.join(filter(str.isdigit, str(pincode)))
+    if not pc:
+        return None
+    row = query_db(
+        'SELECT lat, lon FROM sg_postal WHERE postal_code = ? LIMIT 1',
+        (pc,), one=True
+    )
+    if row:
+        return (float(row['lat']), float(row['lon']))
+    return None
+
+
 def calculate_pincode_distance(pincode1, pincode2):
     """
-    Calculate distance in km between two pincodes using dynamic calculation.
-    
-    Approach: Use pincode similarity levels + numerical distance
-    - Same pincode: ~0.5km
-    - First 5 digits match: ~1-2km based on exact difference
-    - First 4 digits match: ~2-8km based on exact difference
-    - First 3 digits match: ~8-25km based on exact difference
-    - First 2 digits match: ~25-60km
-    - Otherwise: 100+ km
+    Calculate distance in km between two Singapore postal codes
+    using their lat/lon from the sg_postal table (Haversine formula).
+
+    Falls back to 15.0 km if either postal code is not found.
     """
-    try:
-        # Extract digits only
-        p1 = ''.join(filter(str.isdigit, str(pincode1)))
-        p2 = ''.join(filter(str.isdigit, str(pincode2)))
-        
-        # Pad to 6 digits
-        p1 = p1.ljust(6, '0')[:6]
-        p2 = p2.ljust(6, '0')[:6]
-        
-        if not p1 or not p2:
-            return 15.0
-        
-        # Exact match
-        if p1 == p2:
-            return 0.5
-        
-        # Calculate numeric difference
-        diff = abs(int(p1) - int(p2))
-        
-        # Check digit-by-digit similarity
-        if p1[:6] == p2[:6]:
-            # Impossible, but just in case
-            return 0.5
-        elif p1[:5] == p2[:5]:
-            # Last digit differs - very close (same postal region)
-            # Map last digit difference (0-9) to 0.5-2km
-            return 0.5 + (diff * 0.2)  # 0.5 to 2.3km
-        elif p1[:4] == p2[:4]:
-            # Same sub-region, last 2 digits differ
-            # Map to 2-8km range based on difference
-            return 2.0 + min(diff * 0.03, 6.0)  # 2 to 8km
-        elif p1[:3] == p2[:3]:
-            # Same region (first 3 digits), last 3 differ
-            # Map to 8-25km range
-            return 8.0 + min(diff * 0.05, 17.0)  # 8 to 25km
-        elif p1[:2] == p2[:2]:
-            # Same major area, first 2 digits match
-            # Map to 25-60km range
-            return 25.0 + min(diff * 0.08, 35.0)  # 25 to 60km
-        else:
-            # Different major regions - far apart
-            return 100.0 + min(diff * 0.1, 200.0)
-    except:
-        # Fallback if any error
-        return 15.0
+    coords1 = _get_postal_coords(pincode1)
+    coords2 = _get_postal_coords(pincode2)
+
+    if coords1 and coords2:
+        dist = _haversine(coords1[0], coords1[1], coords2[0], coords2[1])
+        return round(dist, 2)
+
+    # Fallback if postal code not in sg_postal
+    return 15.0
 
 
 def init_db(app):
@@ -238,24 +228,25 @@ def load_optimization_data():
                 continuity[str(pat_row['preferred_doctor_id'])] = 1
             
             distances = {}
-            patient_pincode = pat_row['address'] if pat_row['address'] else None
+            # Primary: users.pincode, Fallback: patients.address
+            patient_user_row = query_db(
+                'SELECT pincode FROM users WHERE id = ?',
+                (pat_row['id'],), one=True
+            )
+            patient_pincode = (patient_user_row['pincode'] if patient_user_row and patient_user_row['pincode']
+                               else (pat_row['address'] if pat_row['address'] else None))
             
             for doc in doctors:
-                # Get doctor pincode from doctor_locations table
-                doc_location = query_db(
-                    'SELECT address FROM doctor_locations WHERE doctor_id = ?',
-                    (int(doc['id']),),
-                    one=True
+                # Primary: users.pincode for the doctor, Fallback: doctor_locations.address
+                doc_user_row = query_db(
+                    'SELECT pincode FROM users WHERE id = ?',
+                    (int(doc['id']),), one=True
                 )
-                doctor_pincode = doc_location['address'] if doc_location and doc_location['address'] else None
+                doctor_pincode = (doc_user_row['pincode'] if doc_user_row and doc_user_row['pincode']
+                                  else (doc.get('clinic_address') if doc.get('clinic_address') else None))
                 
-                # Calculate distance from pincodes
-                if patient_pincode and doctor_pincode:
-                    # Use dynamic pincode distance calculation
-                    distances[doc['id']] = calculate_pincode_distance(patient_pincode, doctor_pincode)
-                else:
-                    # If pincodes missing, allow match with default distance
-                    distances[doc['id']] = 15.0
+                # Calculate real Haversine distance from postal-code lat/lon
+                distances[doc['id']] = calculate_pincode_distance(patient_pincode, doctor_pincode)
             
             max_distance = float(pat_row['max_distance']) if pat_row['max_distance'] else 20.0
             specialty_needed = pat_row['specialty_needed'] if pat_row['specialty_needed'] else 'General'
@@ -301,72 +292,6 @@ def load_optimization_data():
         print(f"[DB ERROR] Failed to load optimization data: {e}")
         print(traceback.format_exc())
         return [], [], []
-
-
-def calculate_distance(pat_lat, pat_lon, doctor_id):
-    """
-    Calculate distance between patient and doctor based on pincodes.
-    
-    Args:
-        pat_lat: Patient latitude (unused - we use pincode instead)
-        pat_lon: Patient longitude (unused)
-        doctor_id: Doctor ID
-    
-    Returns:
-        float: Distance in kilometers
-    """
-    # Get patient pincode from address field
-    patient_id = g.get('current_patient_id')  # Set this in calling function
-    if patient_id:
-        patient = query_db('SELECT address FROM patients WHERE user_id = ?', (int(patient_id),), one=True)
-        patient_pincode = patient['address'] if patient and patient['address'] else None
-    else:
-        patient_pincode = None
-    
-    # Get doctor pincode from location
-    doc_location = query_db(
-        'SELECT address FROM doctor_locations WHERE doctor_id = ?',
-        (int(doctor_id),),
-        one=True
-    )
-    doctor_pincode = doc_location['address'] if doc_location and doc_location['address'] else None
-    
-    # If either pincode is missing, return default
-    if not patient_pincode or not doctor_pincode:
-        return 5.0
-    
-    # Simple pincode-based distance estimate
-    # Assumes pincodes are numeric and first few digits indicate region
-    try:
-        # Extract numeric part of pincode
-        pat_num = ''.join(filter(str.isdigit, str(patient_pincode)))
-        doc_num = ''.join(filter(str.isdigit, str(doctor_pincode)))
-        
-        if not pat_num or not doc_num:
-            return 5.0
-        
-        # Compare first 3 digits (region)
-        pat_region = pat_num[:3] if len(pat_num) >= 3 else pat_num
-        doc_region = doc_num[:3] if len(doc_num) >= 3 else doc_num
-        
-        if pat_region == doc_region:
-            # Same region - check sub-region (next 2 digits)
-            pat_sub = pat_num[:5] if len(pat_num) >= 5 else pat_num
-            doc_sub = doc_num[:5] if len(doc_num) >= 5 else doc_num
-            
-            if pat_sub == doc_sub:
-                return 2.0  # Very close (same area)
-            else:
-                return 8.0  # Same region, different area
-        else:
-            # Different regions - calculate rough difference
-            region_diff = abs(int(pat_region) - int(doc_region))
-            # Each region code difference ≈ 50km (rough estimate)
-            estimated_km = min(region_diff * 50, 200)  # Cap at 200km
-            return float(estimated_km)
-    except:
-        # If calculation fails, return default
-        return 10.0
 
 
 def load_patient_optimization_data(patient_id):
