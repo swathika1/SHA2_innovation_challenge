@@ -482,7 +482,7 @@ def signup():
             
             execute_db('''
                 INSERT INTO patients (user_id, condition, urgency, max_distance, 
-                                     specialty_needed, address) 
+                                    specialty_needed, address) 
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', (user_id, condition, urgency, max_distance, specialty_needed, pincode))
             
@@ -751,20 +751,20 @@ def patient_dashboard():
     ''', (session['user_id'],))
 
     return render_template('patient/dashboard.html',
-                         user=user,
-                         patient=patient_info,
-                         workouts=workouts if workouts else [],
-                         recent_sessions=recent_sessions,
-                         chart_sessions=chart_sessions if chart_sessions else [],
-                         upcoming_appointments=upcoming_appointments if upcoming_appointments else [],
-                         caregivers=caregivers if caregivers else [],
-                         pending_caregiver_requests=pending_requests if pending_requests else [],
-                         total_sessions=total_sessions['count'] if total_sessions else 0,
-                         sessions_this_week=sessions_this_week['count'] if sessions_this_week else 0,
-                         today_completed=today_completed,
-                         today_session_id=today_session_id,
-                         today_perc=today_perc,
-                         chat_patient_id=None)
+                            user=user,
+                            patient=patient_info,
+                            workouts=workouts if workouts else [],
+                            recent_sessions=recent_sessions,
+                            chart_sessions=chart_sessions if chart_sessions else [],
+                            upcoming_appointments=upcoming_appointments if upcoming_appointments else [],
+                            caregivers=caregivers if caregivers else [],
+                            pending_caregiver_requests=pending_requests if pending_requests else [],
+                            total_sessions=total_sessions['count'] if total_sessions else 0,
+                            sessions_this_week=sessions_this_week['count'] if sessions_this_week else 0,
+                            today_completed=today_completed,
+                            today_session_id=today_session_id,
+                            today_perc=today_perc,
+                            chat_patient_id=None)
 
 
 @app.route('/patient/session')
@@ -815,10 +815,10 @@ def session_summary(session_id=None):
                          (session_id, session['user_id']), one=True)
         if sess:
             exercises = query_db('''
-                SELECT se.*, e.name as exercise_name
+                SELECT se.*, COALESCE(se.exercise_name, e.name) as exercise_name
                 FROM session_exercises se
-                JOIN workouts w ON se.workout_id = w.id
-                JOIN exercises e ON w.exercise_id = e.id
+                LEFT JOIN workouts w ON se.workout_id = w.id
+                LEFT JOIN exercises e ON w.exercise_id = e.id
                 WHERE se.session_id = ?
                 ORDER BY se.exercise_start_time
             ''', (session_id,))
@@ -2342,6 +2342,7 @@ def api_session_exercise_save():
         return jsonify({'ok': False, 'error': 'session_id and workout_id are required'}), 400
 
     quality_score = float(data.get('quality_score', 0))
+    exercise_name = data.get('exercise_name', '')  # Get user-selected exercise name
     sets_required = _json.dumps(data.get('sets_required', {}))
     sets_completed = _json.dumps(data.get('sets_completed', {}))
     exercise_start_time = data.get('exercise_start_time')
@@ -2349,10 +2350,10 @@ def api_session_exercise_save():
 
     execute_db('''
         INSERT INTO session_exercises
-            (session_id, patient_id, workout_id, exercise_start_time, exercise_end_time,
+            (session_id, patient_id, workout_id, exercise_name, exercise_start_time, exercise_end_time,
              quality_score, sets_required, sets_completed)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (session_id, session['user_id'], workout_id,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (session_id, session['user_id'], workout_id, exercise_name,
           exercise_start_time, exercise_end_time,
           quality_score, sets_required, sets_completed))
 
@@ -2479,11 +2480,22 @@ def api_session_start():
         return jsonify({"error": "CV pipeline not available"}), 503
 
     data = request.get_json(force=True) or {}
+    target_reps = data.get("target_reps", 10)
+    target_sets = data.get("target_sets", 3)
+    
     PIPELINE.reset(
         threshold=data.get("threshold", 30.0),
         cooldown_seconds=data.get("cooldown_seconds", 10.0),
         language=data.get("language", "English"),
     )
+    
+    # Set the target reps and sets for rep counting
+    PIPELINE.target_reps = target_reps
+    PIPELINE.target_sets = target_sets
+    PIPELINE.current_rep_count = 0
+    PIPELINE.current_set_count = 1
+    
+    print(f"🎯 Session started with target_reps={target_reps}, target_sets={target_sets}")
     return jsonify({"ok": True})
 
 @app.route("/api/session/start_old", methods=["POST"])
@@ -2868,6 +2880,7 @@ def ensure_tables_exist():
             quality_score REAL DEFAULT 0,
             sets_required TEXT DEFAULT '{}',
             sets_completed TEXT DEFAULT '{}',
+            exercise_name TEXT DEFAULT '',
             FOREIGN KEY (session_id) REFERENCES sessions(id),
             FOREIGN KEY (patient_id) REFERENCES users(id),
             FOREIGN KEY (workout_id) REFERENCES workouts(id)
@@ -2948,6 +2961,7 @@ def ensure_tables_exist():
             quality_score REAL DEFAULT 0,
             sets_required TEXT DEFAULT '{}',
             sets_completed TEXT DEFAULT '{}',
+            exercise_name TEXT DEFAULT '',
             FOREIGN KEY (session_id) REFERENCES sessions(id),
             FOREIGN KEY (patient_id) REFERENCES users(id),
             FOREIGN KEY (workout_id) REFERENCES workouts(id)
@@ -3273,10 +3287,37 @@ def api_live_feedback():
 
     # language comes from frontend/session
     language = data.get("language", "English")
+    mode = data.get("mode", "auto")
+    manual_exercise = data.get("manual_exercise", None)
+    
     PIPELINE.language = language  # keep it simple
     
-    out = PIPELINE.process_frame_dataurl(frame_b64)
-    return jsonify(out)
+    try:
+        out = PIPELINE.process_frame_dataurl(
+            frame_b64,
+            language=language,
+            mode=mode,
+            manual_exercise=manual_exercise
+        )
+        return jsonify(out)
+    except Exception as e:
+        print(f"❌ API Error: {e}")
+        return jsonify({
+            "frame_score": 0.0,
+            "form_status": "ERROR",
+            "llm_feedback": [f"Backend error: {str(e)}"],
+            "exercise_name": "error",
+            "exercise_confidence": 0.0,
+            "rep_info": {
+                "rep_now": 0,
+                "rep_target": 10,
+                "set_now": 1,
+                "set_target": 3,
+                "rep_incremented": False,
+                "set_completed": False,
+                "exercise_completed": False,
+            },
+        }), 500
 
 @app.post("/api/session/stop")
 def api_session_stop():  # sourcery skip: use-contextlib-suppress

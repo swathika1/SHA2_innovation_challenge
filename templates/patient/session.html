@@ -116,6 +116,15 @@
     .rep-counter-card { text-align: center; }
     .rep-counter-card .count { font-size: 2rem; font-weight: 800; color: #333; }
     .rep-counter-card .label { font-size: .85rem; color: #888; margin-top: 4px; }
+    .rep-counter-card.rep-pulse .count {
+        animation: repPulse 0.6s ease-out;
+    }
+
+    @keyframes repPulse {
+        0% { transform: scale(1); color: #28a745; }
+        50% { transform: scale(1.15); color: #20c997; }
+        100% { transform: scale(1); color: #333; }
+    }
 
     /* Form status */
     .form-status {
@@ -147,6 +156,28 @@
     .feedback-item.error   { background:#f8d7da; border-left:3px solid #dc3545; color:#721c24; }
     .feedback-item.success { background:#d4edda; border-left:3px solid #28a745; color:#155724; }
     .feedback-item.info    { background:#d1ecf1; border-left:3px solid #17a2b8; color:#0c5460; }
+
+    /* Exercise selector */
+    .exercise-checkbox {
+        accent-color: #007bff;
+    }
+    #exerciseSelector label {
+        background: #f9f9f9;
+        color: #333;
+        font-weight: 500;
+    }
+    #exerciseSelector label:hover {
+        background: #f0f4ff;
+        border-color: #007bff !important;
+    }
+    #exerciseSelector input:checked + * {
+        background: #e7f3ff;
+    }
+    #exerciseSelector label:has(input:checked) {
+        background: #e7f3ff;
+        border-color: #007bff !important;
+        color: #0056d2;
+    }
 
     /* Controls */
     .session-controls { display: flex; gap: 10px; }
@@ -197,18 +228,38 @@
 <!-- ===================== PHASE 1 — PRE-SESSION ===================== -->
 <div id="phasePreSession" class="phase-screen active">
     <div class="pre-session-card">
-        <h2><i class="fa-solid fa-dumbbell"></i> Today's Session</h2>
-        <p style="color:#666;">Review your exercises and let us know your current pain level before we start.</p>
+        <h2><i class="fa-solid fa-dumbbell"></i> Select Your Exercises</h2>
+        <p style="color:#666;">Choose which exercises you'd like to do today (in any order). All will have 3 sets x 10 reps.</p>
 
-        {% if workouts %}
-        <ul class="exercise-list">
-            {% for w in workouts %}
-            <li>
-                <span>{{ loop.index }}. {{ w.exercise_name }}</span>
-                <span class="meta">{{ w.sets }} sets &times; {{ w.reps }} reps</span>
-            </li>
-            {% endfor %}
-        </ul>
+        <!-- Available exercises -->
+        <div style="margin: 18px 0;">
+            <label style="font-weight:600; display:block; margin-bottom:12px;">Available Exercises:</label>
+            <div id="exerciseSelector" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:20px;">
+                <label style="display:flex; align-items:center; padding:12px; border:2px solid #ddd; border-radius:8px; cursor:pointer; transition:all 0.3s;">
+                    <input type="checkbox" value="lifting_of_arms" class="exercise-checkbox" style="margin-right:8px; cursor:pointer;"> Lifting of Arms
+                </label>
+                <label style="display:flex; align-items:center; padding:12px; border:2px solid #ddd; border-radius:8px; cursor:pointer; transition:all 0.3s;">
+                    <input type="checkbox" value="lateral_trunk_tilt" class="exercise-checkbox" style="margin-right:8px; cursor:pointer;"> Lateral Trunk Tilt
+                </label>
+                <label style="display:flex; align-items:center; padding:12px; border:2px solid #ddd; border-radius:8px; cursor:pointer; transition:all 0.3s;">
+                    <input type="checkbox" value="trunk_rotation" class="exercise-checkbox" style="margin-right:8px; cursor:pointer;"> Trunk Rotation
+                </label>
+                <label style="display:flex; align-items:center; padding:12px; border:2px solid #ddd; border-radius:8px; cursor:pointer; transition:all 0.3s;">
+                    <input type="checkbox" value="pelvis_rotation" class="exercise-checkbox" style="margin-right:8px; cursor:pointer;"> Pelvis Rotation
+                </label>
+                <label style="display:flex; align-items:center; padding:12px; border:2px solid #ddd; border-radius:8px; cursor:pointer; transition:all 0.3s;">
+                    <input type="checkbox" value="squat" class="exercise-checkbox" style="margin-right:8px; cursor:pointer;"> Squat
+                </label>
+            </div>
+        </div>
+
+        <!-- Selected exercises list -->
+        <div style="margin: 18px 0;">
+            <label style="font-weight:600; display:block; margin-bottom:12px;">Your Selected Exercises:</label>
+            <ul id="selectedExercisesList" style="list-style:none; padding:0; margin:0; background:#f9f9f9; padding:12px; border-radius:8px; min-height:40px;">
+                <li style="color:#999; font-size:0.9rem;">No exercises selected yet</li>
+            </ul>
+        </div>
 
         <!-- Language selector -->
         <div style="margin: 18px 0;">
@@ -228,11 +279,7 @@
                    oninput="document.getElementById('painBeforeVal').textContent=this.value">
         </div>
 
-        <button class="btn-start-session" onclick="startSession()"><i class="fa-solid fa-play"></i> Start Today's Session</button>
-        {% else %}
-        <p style="color:#c00; margin-top: 16px;"><i class="fa-solid fa-triangle-exclamation"></i> No exercises assigned yet. Ask your clinician to create a plan.</p>
-        <a href="{{ url_for('patient_dashboard') }}" class="btn" style="margin-top:12px;display:inline-block;">&larr; Back to Dashboard</a>
-        {% endif %}
+        <button class="btn-start-session" onclick="startSession()"><i class="fa-solid fa-play"></i> Start Session</button>
     </div>
 </div>
 
@@ -366,19 +413,55 @@
 
 <!-- Hidden workout data for JS -->
 <script>
-    const WORKOUTS = [
+    const BACKEND_WORKOUTS = [
         {% for w in workouts %}
         { id: {{ w.id }}, name: "{{ w.exercise_name }}", sets: {{ w.sets }}, reps: {{ w.reps }} }{{ "," if not loop.last }}
         {% endfor %}
     ];
+    // Will be replaced by user selections in startSession()
+    let WORKOUTS = [];
 </script>
 
 <script>
+/* ===================== EXERCISE SELECTION ===================== */
+const AVAILABLE_EXERCISES = {
+    "lifting_of_arms": { name: "Lifting of Arms", sets: 3, reps: 10 },
+    "lateral_trunk_tilt": { name: "Lateral Trunk Tilt", sets: 3, reps: 10 },
+    "trunk_rotation": { name: "Trunk Rotation", sets: 3, reps: 10 },
+    "pelvis_rotation": { name: "Pelvis Rotation", sets: 3, reps: 10 },
+    "squat": { name: "Squat", sets: 3, reps: 10 }
+};
+
+let selectedExerciseIds = [];
+
+// Handle exercise checkbox changes
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.exercise-checkbox');
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', updateSelectedExercises);
+    });
+    updateSelectedExercises();
+});
+
+function updateSelectedExercises() {
+    const checkboxes = document.querySelectorAll('.exercise-checkbox:checked');
+    selectedExerciseIds = Array.from(checkboxes).map(cb => cb.value);
+    
+    const list = document.getElementById('selectedExercisesList');
+    if (selectedExerciseIds.length === 0) {
+        list.innerHTML = '<li style="color:#999; font-size:0.9rem;">No exercises selected yet</li>';
+    } else {
+        list.innerHTML = selectedExerciseIds.map((id, idx) => 
+            `<li style="padding:6px 0; border-bottom:1px solid #eee;"><strong>${idx+1}. ${AVAILABLE_EXERCISES[id].name}</strong> - 3 sets × 10 reps</li>`
+        ).join('');
+    }
+}
+
 /* ===================== CONFIG ===================== */
 const API_BASE = window.location.origin;
 const THRESHOLD = 30.0;
 const COOLDOWN_SECONDS = 2;
-const POLL_MS = 100;
+const POLL_MS = 100; // 200
 
 const LANG_TO_BCP47 = {
     English: "en-US", Tamil: "ta-IN", Chinese: "zh-CN", Malay: "ms-MY", Thai: "th-TH"
@@ -395,8 +478,9 @@ let inflight = false;
 let currentExIndex = 0;
 let currentRep = 0;
 let currentSet = 1;
-let targetReps = WORKOUTS.length ? WORKOUTS[0].reps : 10;
-let targetSets = WORKOUTS.length ? WORKOUTS[0].sets : 3;
+let targetReps = 10;  // Default, will be set when user selects exercises
+let targetSets = 3;   // Default, will be set when user selects exercises
+let currentExerciseCompleted = false; // Track if current exercise already completed
 
 let allScores = [];
 let exerciseData = [];
@@ -418,6 +502,8 @@ const SPEAK_COOLDOWN_MS = 8000;
 // CV feedback persistence
 let LAST_FEEDBACK = null;
 let LAST_FEEDBACK_TIME = 0;
+let LAST_FEEDBACK_RENDER_TIME = 0;
+const FEEDBACK_RENDER_COOLDOWN_MS = 2000; // Pause 2 seconds between feedback updates
 
 // Exercise mode
 let exerciseMode = "auto";
@@ -489,8 +575,14 @@ function getLanguageName() {
 }
 
 function getTotalRepsCompleted() {
-    if (currentRep >= targetReps && currentSet >= targetSets) return targetSets * targetReps;
-    return ((currentSet - 1) * targetReps) + currentRep;
+    let total;
+    if (currentRep >= targetReps && currentSet >= targetSets) {
+        total = targetSets * targetReps;
+    } else {
+        total = ((currentSet - 1) * targetReps) + currentRep;
+    }
+    console.log(`  getTotalRepsCompleted: rep=${currentRep}/${targetReps}, set=${currentSet}/${targetSets} → ${total} reps`);
+    return total;
 }
 
 function calcSessionProgress() {
@@ -498,14 +590,17 @@ function calcSessionProgress() {
     WORKOUTS.forEach(function(w, i) {
         const exReq = w.sets * w.reps;
         totalReq += exReq;
-        if (i < currentExIndex) {
-            const saved = exerciseData[i];
-            if (saved) {
-                totalDone += Object.values(saved.sets_completed).reduce(function(a, b) { return a + b; }, 0);
-            }
+        
+        // Always check exerciseData first (for any completed or in-progress exercise)
+        const saved = exerciseData[i];
+        if (saved) {
+            // Use saved data if available
+            totalDone += Object.values(saved.sets_completed).reduce(function(a, b) { return a + b; }, 0);
         } else if (i === currentExIndex) {
+            // Current exercise not yet saved, use live counters
             totalDone += getTotalRepsCompleted();
         }
+        // If i < currentExIndex and not saved, it contributes 0 (shouldn't happen)
     });
     return totalReq > 0 ? Math.round(totalDone / totalReq * 100) : 0;
 }
@@ -517,8 +612,43 @@ function updateSessionProgress() {
 }
 
 function updateRepCounter() {
-    document.getElementById('repCount').textContent = currentRep + ' / ' + targetReps;
-    document.getElementById('setLabel').textContent = 'Reps (Set ' + currentSet + ' of ' + targetSets + ')';
+    const repElement = document.getElementById('repCount');
+    const setElement = document.getElementById('setLabel');
+    const cardElement = document.querySelector('.rep-counter-card');
+    
+    const newRepText = currentRep + ' / ' + targetReps;
+    const newSetText = 'Reps (Set ' + currentSet + ' of ' + targetSets + ')';
+    
+    console.log('🔄 updateRepCounter called');
+    console.log('  Elements:', { repElement, setElement, cardElement });
+    console.log('  New Text:', { newRepText, newSetText });
+    
+    if (repElement) {
+        console.log('  Updating repElement:', newRepText);
+        repElement.textContent = newRepText;
+    } else {
+        console.log('  ⚠️ repElement not found!');
+    }
+    
+    if (setElement) {
+        console.log('  Updating setElement:', newSetText);
+        setElement.textContent = newSetText;
+    } else {
+        console.log('  ⚠️ setElement not found!');
+    }
+    
+    // Add pulse animation
+    if (cardElement) {
+        console.log('  Adding pulse animation');
+        cardElement.classList.add('rep-pulse');
+        setTimeout(function() {
+            cardElement.classList.remove('rep-pulse');
+        }, 600);
+    } else {
+        console.log('  ⚠️ cardElement not found!');
+    }
+    
+    console.log('✅ Rep counter updated:', newRepText, '|', newSetText);
 }
 
 function updateExerciseSteps() {
@@ -556,6 +686,13 @@ function renderCVFeedback(items) {
     }
     const displayItems = (LAST_FEEDBACK && LAST_FEEDBACK.length > 0) ? LAST_FEEDBACK : null;
     const list = document.getElementById('feedbackList');
+    
+    // Only update the feedback display if enough time has passed
+    const now = Date.now();
+    if (now - LAST_FEEDBACK_RENDER_TIME < FEEDBACK_RENDER_COOLDOWN_MS) {
+        return;
+    }
+    
     list.innerHTML = '';
     if (!displayItems) {
         const div = document.createElement('div');
@@ -570,6 +707,7 @@ function renderCVFeedback(items) {
         div.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + txt;
         list.appendChild(div);
     });
+    LAST_FEEDBACK_RENDER_TIME = now;
 }
 
 function updateFormStatus(status, score) {
@@ -598,21 +736,108 @@ function updateFormStatus(status, score) {
 
 /* ===================== REP COUNTING FROM BACKEND ===================== */
 function updateRepUIFromBackend(out) {
+    const oldRep = currentRep;
+    const oldSet = currentSet;
+    
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('updateRepUIFromBackend called');
+    console.log('  Input:', { out, oldRep, oldSet });
+    console.log('  Current State:', { currentRep, currentSet, targetReps, targetSets });
+    
+    let repIncremented = false;
+    let setCompleted = false;
+    let exerciseCompleted = false;
+    
     if (out && out.rep_info && typeof out.rep_info === "object") {
         const r = out.rep_info;
-        if (r.rep_now != null) currentRep = r.rep_now;
-        if (r.rep_target != null) targetReps = r.rep_target;
-        if (r.set_now != null) currentSet = r.set_now;
-        if (r.set_target != null) targetSets = r.set_target;
+        console.log('  ✅ Got rep_info:', r);
+        
+        if (r.rep_now != null) {
+            console.log(`  Rep: ${currentRep} → ${r.rep_now}`);
+            currentRep = r.rep_now;
+        }
+        if (r.rep_target != null) {
+            console.log(`  Rep Target: ${targetReps} → ${r.rep_target}`);
+            targetReps = r.rep_target;
+        }
+        if (r.set_now != null) {
+            console.log(`  Set: ${currentSet} → ${r.set_now}`);
+            currentSet = r.set_now;
+        }
+        if (r.set_target != null) {
+            console.log(`  Set Target: ${targetSets} → ${r.set_target}`);
+            targetSets = r.set_target;
+        }
+        
+        // Check for completion flags
+        if (r.rep_incremented) {
+            repIncremented = true;
+            console.log('  🔥🔥🔥 REP INCREMENTED! 🔥🔥🔥');
+            addFeedback('success', '✅ Rep ' + currentRep + ' completed!');
+        }
+        
+        if (r.set_completed) {
+            setCompleted = true;
+            console.log('  🎯🎯🎯 SET COMPLETED! 🎯🎯🎯');
+        }
+        
+        if (r.exercise_completed) {
+            exerciseCompleted = true;
+            console.log('  🏆🏆🏆 EXERCISE COMPLETED! 🏆🏆🏆');
+        }
     } else {
-        if (out.rep_count != null) currentRep = out.rep_count;
-        if (out.rep_target != null) targetReps = out.rep_target;
-        if (out.set_index != null) currentSet = out.set_index;
-        if (out.sets_total != null) targetSets = out.sets_total;
+        console.log('  ⚠️ No rep_info in response, using fallback fields');
+        if (out && out.rep_count != null) currentRep = out.rep_count;
+        if (out && out.rep_target != null) targetReps = out.rep_target;
+        if (out && out.set_index != null) currentSet = out.set_index;
+        if (out && out.sets_total != null) targetSets = out.sets_total;
     }
-    setsCompletedDict[String(currentSet)] = currentRep;
+    
+    console.log('  After Update:', { currentRep, currentSet, targetReps, targetSets });
+    console.log('  Flags:', { repIncremented, setCompleted, exerciseCompleted });
+    console.log('═══════════════════════════════════════════════════════════════');
+    
+    // IMPORTANT: When a rep completes a set, BOTH repIncremented and setCompleted are true
+    // In that case, currentRep has been reset to 0, so we must NOT update the dict with it
+    
+    if (setCompleted) {
+        // Set just completed: save the PREVIOUS set with all its reps (targetReps)
+        // currentSet was already incremented, so the finished set is currentSet - 1
+        setsCompletedDict[String(currentSet - 1)] = targetReps;
+        console.log(`  🎯 SET COMPLETED: setsCompletedDict['${currentSet - 1}'] = ${targetReps}`);
+    } else if (repIncremented) {
+        // Mid-set: A new rep was counted, update the current set
+        setsCompletedDict[String(currentSet)] = currentRep;
+        console.log(`  ✅ REP COUNTED: setsCompletedDict['${currentSet}'] = ${currentRep}`);
+    }
+    
+    console.log(`     DICT STATE:`, Object.assign({}, setsCompletedDict));
+    
     updateRepCounter();
+    updateExerciseSteps();
     updateSessionProgress();
+    
+    // ✅ SET COMPLETED - Show alert and speak
+    if (setCompleted) {
+        const setMsg = 'Set ' + (currentSet-1) + ' complete! Excellent work!';
+        console.log('🎯 SET ALERT:', setMsg);
+        addFeedback('success', '🎯 ' + setMsg);
+        queueSpeech(setMsg);
+    }
+    
+    // ✅ EXERCISE COMPLETED - Show alert and speak
+    if (exerciseCompleted && !currentExerciseCompleted) {
+        currentExerciseCompleted = true;  // Mark as completed to prevent duplicate triggers
+        const exerciseMsg = 'Exercise completed! Fantastic effort! Go to the next exercise!';
+        console.log('🏆 EXERCISE ALERT:', exerciseMsg);
+        addFeedback('success', '🏆 ' + exerciseMsg);
+        queueSpeech(exerciseMsg);
+        
+        // Automatically move to next exercise after a brief delay
+        setTimeout(function() {
+            nextExercise();
+        }, 3000);
+    }
 }
 
 /* ===================== TTS (SERVER-SIDE /api/tts with browser fallback) ===================== */
@@ -740,6 +965,7 @@ async function pollFeedback() {
 
         const out = await res.json().catch(function() { return {}; });
 
+        console.log('Backend response:', out);
         updateRepUIFromBackend(out);
         if (out.exercise_name) updateExerciseUI(out.exercise_name);
 
@@ -779,22 +1005,64 @@ function stopPolling() {
 /* ===================== BACKEND SESSION API ===================== */
 async function callSessionStart() {
     try {
-        await fetch(API_BASE + '/api/session/start', {
+        const w = WORKOUTS[currentExIndex];
+        const payload = {
+            threshold: THRESHOLD,
+            cooldown_seconds: COOLDOWN_SECONDS,
+            language: getLanguageName(),
+            target_reps: w ? w.reps : targetReps,
+            target_sets: w ? w.sets : targetSets
+        };
+        console.log('🎯 Starting session with payload:', payload);
+        
+        const resp = await fetch(API_BASE + '/api/session/start', {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                threshold: THRESHOLD,
-                cooldown_seconds: COOLDOWN_SECONDS,
-                language: getLanguageName()
-            })
+            body: JSON.stringify(payload)
         });
+        const result = await resp.json();
+        console.log('✅ Session start response:', result);
     } catch (e) {
-        console.error("session/start failed:", e);
+        console.error("❌ session/start failed:", e);
     }
 }
 
 /* ===================== PHASE 1 → PHASE 2 ===================== */
 async function startSession() {
+    // Check if exercises are selected
+    if (selectedExerciseIds.length === 0) {
+        alert('Please select at least one exercise to continue.');
+        return;
+    }
+    
+    // Build WORKOUTS array from selected exercises
+    const userSelectedWorkouts = selectedExerciseIds.map((id, idx) => ({
+        id: idx + 1,
+        name: AVAILABLE_EXERCISES[id].name,
+        exercise_id: id,
+        sets: AVAILABLE_EXERCISES[id].sets,
+        reps: AVAILABLE_EXERCISES[id].reps
+    }));
+    
+    // Replace WORKOUTS with user selections
+    // Clear and repopulate the global WORKOUTS array
+    WORKOUTS.length = 0;  // Clear existing
+    WORKOUTS.push(...userSelectedWorkouts);  // Add user selections
+    console.log('✅ WORKOUTS set to user selections:', WORKOUTS);
+    
+    // Dynamically rebuild exercise steps list
+    const exerciseStepList = document.getElementById('exerciseStepList');
+    if (exerciseStepList) {
+        exerciseStepList.innerHTML = userSelectedWorkouts.map((w, idx) => `
+            <li id="exStep-${idx}" class="${idx === 0 ? 'current' : 'upcoming'}">
+                <span class="step-icon">
+                    <i class="fa-solid ${idx === 0 ? 'fa-circle-dot' : 'fa-regular fa-circle'}"></i>
+                </span>
+                <span>${w.name}</span>
+            </li>
+        `).join('');
+    }
+    
     const painBefore = parseInt(document.getElementById('painBeforeInput').value);
     try {
         const resp = await fetch('/api/session/create', {
@@ -824,6 +1092,11 @@ async function startSession() {
     }, 1000);
 
     setsCompletedDict = {};
+    currentExerciseCompleted = false; // Reset for first exercise
+    
+    console.log(`🚀 Session started with ${WORKOUTS.length} exercises:`, WORKOUTS);
+    console.log(`First exercise: "${WORKOUTS[0].name}", ${WORKOUTS[0].sets} sets x ${WORKOUTS[0].reps} reps`);
+    
     updateRepCounter();
     updateExerciseSteps();
     updateSessionProgress();
@@ -840,17 +1113,24 @@ async function startSession() {
 
 /* ===================== EXERCISE NAVIGATION ===================== */
 async function nextExercise() {
+    console.log(`📋 nextExercise called: currentExIndex=${currentExIndex}, WORKOUTS.length=${WORKOUTS.length}`);
+    console.log(`  Current setsCompletedDict:`, setsCompletedDict);
+    console.log(`  Current state: rep=${currentRep}/${targetReps}, set=${currentSet}/${targetSets}`);
     await saveCurrentExercise();
+    console.log(`  After save, exerciseData[${currentExIndex}]:`, exerciseData[currentExIndex]);
     if (currentExIndex >= WORKOUTS.length - 1) {
+        console.log('✅ All exercises completed! Showing post-session.');
         showPostSession();
         return;
     }
     currentExIndex++;
     const w = WORKOUTS[currentExIndex];
+    console.log(`➡️ Moving to exercise ${currentExIndex + 1}/${WORKOUTS.length}: ${w.name}`);
     targetSets = w.sets;
     targetReps = w.reps;
     currentRep = 0;
     currentSet = 1;
+    currentExerciseCompleted = false; // Reset completion flag for new exercise
     allScores = [];
     setsCompletedDict = {};
     exerciseStartTs = Date.now();
@@ -869,6 +1149,7 @@ async function nextExercise() {
 }
 
 async function saveCurrentExercise() {
+    console.log(`💾 saveCurrentExercise: currentExIndex=${currentExIndex}, exerciseName=${WORKOUTS[currentExIndex].name}`);
     const w = WORKOUTS[currentExIndex];
     const avgQ = allScores.length > 0
         ? Math.round(allScores.reduce(function(a, b) { return a + b; }, 0) / allScores.length) : 0;
@@ -882,6 +1163,7 @@ async function saveCurrentExercise() {
     const payload = {
         session_id: sessionId,
         workout_id: w.id,
+        exercise_name: w.name,  // Send the user-selected exercise name
         exercise_start_time: exStartISO,
         exercise_end_time: exEndISO,
         quality_score: avgQ,
@@ -889,6 +1171,7 @@ async function saveCurrentExercise() {
         sets_completed: Object.assign({}, setsCompletedDict)
     };
     exerciseData[currentExIndex] = payload;
+    console.log(`  Saving data for exercise ${currentExIndex}:`, payload);
     try {
         const resp = await fetch('/api/session/exercise/save', {
             method: 'POST',
@@ -896,6 +1179,7 @@ async function saveCurrentExercise() {
             body: JSON.stringify(payload)
         });
         const result = await resp.json();
+        console.log(`  Save response:`, result);
         if (result.ok) addFeedback('success', 'Exercise saved!');
     } catch (err) {
         console.error('Error saving exercise:', err);
@@ -910,6 +1194,22 @@ async function stopSession() {
 }
 
 function showPostSession() {
+    console.log('🎉 Post-session: currentExIndex=' + currentExIndex + ', WORKOUTS.length=' + WORKOUTS.length);
+    console.log('exerciseData:', exerciseData);
+    console.log('WORKOUTS:', WORKOUTS);
+    
+    // Debug: Calculate and log detailed breakdown
+    let totalReq = 0, totalDone = 0;
+    WORKOUTS.forEach(function(w, i) {
+        const exReq = w.sets * w.reps;
+        totalReq += exReq;
+        const saved = exerciseData[i];
+        const done = saved ? Object.values(saved.sets_completed).reduce(function(a, b) { return a + b; }, 0) : 0;
+        totalDone += done;
+        console.log(`  Exercise ${i}: "${w.name}" - Required: ${exReq}, Done: ${done}, Saved: `, saved);
+    });
+    console.log(`Total: ${totalDone}/${totalReq} reps (${totalReq > 0 ? Math.round(totalDone/totalReq*100) : 0}%)`);
+    
     stopPolling();
     stopCamera();
     stopSpeaking();
@@ -918,9 +1218,23 @@ function showPostSession() {
 
     const overlay = document.createElement('div');
     overlay.className = 'post-overlay';
+    
+    // Build exercise summary
+    let exerciseSummary = '<div style="margin-bottom:16px;"><h4 style="margin:0 0 8px;">Completed Exercises:</h4>';
+    WORKOUTS.forEach(function(w, i) {
+        const saved = exerciseData[i];
+        const repsCompleted = saved ? Object.values(saved.sets_completed).reduce(function(a, b) { return a + b; }, 0) : 0;
+        const status = repsCompleted >= (w.sets * w.reps) ? '✅' : '⏱️';
+        exerciseSummary += '<div style="padding:4px 0;">' + status + ' ' + w.name + ': ' + repsCompleted + '/' + (w.sets * w.reps) + ' reps</div>';
+    });
+    exerciseSummary += '</div>';
+    
+    const progressPerc = calcSessionProgress();
+    
     overlay.innerHTML = '<div class="post-card">' +
         '<h2><i class="fa-solid fa-circle-check"></i> Session Complete!</h2>' +
-        '<p style="color:#666;">Overall progress: <strong>' + calcSessionProgress() + '%</strong></p>' +
+        '<p style="color:#666;">Overall progress: <strong>' + progressPerc + '%</strong></p>' +
+        exerciseSummary +
         '<div class="pain-slider-group">' +
             '<label>Pain After (0-10): <span class="pain-value" id="painAfterVal">0</span></label>' +
             '<input type="range" id="painAfterInput" min="0" max="10" value="0" ' +
