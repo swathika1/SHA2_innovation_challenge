@@ -1,0 +1,1045 @@
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1771542469.777991       1 gl_context.cc:344] GL version: 2.1 (2.1 Metal - 88.1), renderer: Apple M2
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+ * Serving Flask app 'openpose_http_server'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:9001
+[33mPress CTRL+C to quit[0m
+127.0.0.1 - - [20/Feb/2026 07:29:14] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 07:29:24] "GET /health HTTP/1.1" 200 -
+[2026-02-20 07:29:38,262] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:38] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:29:40,326] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:40] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:29:42,335] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:42] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:29:44,328] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:44] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:29:46,330] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:46] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:29:48,342] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:48] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:29:50,343] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:50] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:29:52,354] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:52] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:29:54,345] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:54] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:29:56,345] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:56] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:29:58,329] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:29:58] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:00,355] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:00] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:02,955] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:02] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:04,942] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:04] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:06,959] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:06] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:08,958] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:08] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:10,961] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:10] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:12,943] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:12] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:14,943] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:14] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:16,943] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:16] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:18,962] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:18] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:20,941] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:20] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:22,943] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:22] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:24,961] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:24] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:26,959] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:26] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:28,951] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:28] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:30,951] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:30] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:32,962] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:32] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:34,959] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:34] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:36,956] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:36] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:38,961] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:38] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:40,960] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:40] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:42,964] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:42] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:44,963] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:44] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:46,961] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:46] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:48,945] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:48] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:50,962] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:50] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:52,356] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:52] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+[2026-02-20 07:30:54,347] ERROR in app: Exception on /pose [POST]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 80, in pose
+    keypoints = extract_keypoints(bgr)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/HariKrishnaD/Downloads/NUS/Hackathons/NUS_BIZ_Synapxe_Innovation_Challenge/Project_Folder/openpose_http_server.py", line 34, in extract_keypoints
+    results = pose_model.process(image_rgb)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solutions/pose.py", line 185, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 381, in process
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/solution_base.py", line 623, in _get_packet_content
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/mediapipe/python/packet_getter.py", line 70, in get_proto
+AttributeError: 'SymbolDatabase' object has no attribute 'GetPrototype'
+127.0.0.1 - - [20/Feb/2026 07:30:54] "[35m[1mPOST /pose HTTP/1.1[0m" 500 -
+127.0.0.1 - - [20/Feb/2026 07:45:25] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 07:45:37] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 07:50:41] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 07:50:52] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 07:52:22] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 07:55:00] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 07:56:03] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 07:57:36] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:06:10] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:07:46] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:08:21] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:14:41] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:14:54] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:16:17] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:18:38] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:36:45] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:41:11] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:41:34] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:42:16] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [20/Feb/2026 08:59:18] "GET /health HTTP/1.1" 200 -

@@ -1,0 +1,45 @@
+{
+  "name": "kimore_ex_preprocessing",
+  "version": 1,
+  "created_utc": "2026-02-16T07:55:16.179162Z",
+  "input": {
+    "source": "pose_feature100",
+    "per_timestep_vector_dim_F": 100,
+    "sequence_length_T": 100,
+    "expected_model_input_shape": [
+      1,
+      100,
+      100
+    ],
+    "dtype": "float32"
+  },
+  "sequence_build": {
+    "method": "reshape_consecutive_rows",
+    "description": "CSV contains per-timestep rows; group every T consecutive rows into one window.",
+    "T": 100,
+    "truncate_incomplete_tail": true
+  },
+  "label_build": {
+    "method": "constant_per_sequence",
+    "description": "Original notebook creates per-row labels of a constant class id; label for a window is mean(y_window) (equivalent to that constant).",
+    "per_row_label": true,
+    "per_window_label": "mean_over_T_then_cast_to_int"
+  },
+  "scaling": {
+    "enabled": false,
+    "type": "none",
+    "scaler_path": null,
+    "note": "Notebook trained directly on raw features (no StandardScaler fit/transform applied)."
+  },
+  "classes": {
+    "num_classes": 5,
+    "label_map_file": "kimore_label_map.json",
+    "id_to_label": {
+      "0": "lifting_of_arms",
+      "1": "lateral_trunk_tilt_with_arms_in_extension",
+      "2": "trunk_rotation",
+      "3": "pelvis_rotation",
+      "4": "squat"
+    }
+  }
+}

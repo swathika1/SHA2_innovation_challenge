@@ -13,12 +13,6 @@ joblib
 requests
 pyttsx3
 google-generativeai
-fastapi
-uvicorn[standard]
-httpx
-langdetect
-sqlalchemy
-pydantic
-faiss-cpu>=1.7.0
-sentence-transformers>=2.2.0
-PyPDF2>=3.0.0
+chromadb==0.5.5
+sentence-transformers==3.0.1
+openpifpaf
