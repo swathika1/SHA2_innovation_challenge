@@ -2,17 +2,35 @@ import os
 os.environ["TRANSFORMERS_NO_TF"] = "1"
 os.environ["USE_TF"] = "0"
 
-from flask import Flask, render_template, request, redirect, url_for, jsonify, session
+from functools import wraps
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
-from flask import request, jsonify
-from flask import request, jsonify
 from Rehab_Scorer_Coach.src.web_pipeline import WebRehabPipeline
 from flask_cors import CORS # type: ignore
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, date
 import os
-from optim import get_top3_recommendations, optimize_all_patients, build_demo_data, load_dataset
+import uuid
+try:
+    from optim import get_top3_recommendations, optimize_all_patients, build_demo_data, load_dataset
+    OPTIM_AVAILABLE = True
+    print("[INIT] Optimization module loaded successfully")
+except Exception as e:
+    OPTIM_AVAILABLE = False
+    print(f"[WARNING] Optimization module not available: {e}")
+
+try:
+    from merilion_client import query_merilion_sync
+    from risk_engine import calculate_risk_score, REFERRAL_MESSAGES
+    from exercise_advisor import get_exercise_modification
+    from langdetect import detect as detect_language
+    import traceback
+    CHATBOT_AVAILABLE = True
+    print("[INIT] Chatbot modules loaded successfully")
+except Exception as e:
+    CHATBOT_AVAILABLE = False
+    print(f"[WARNING] Chatbot modules not available: {e}")
 
 # main.py (top-level)
 import os
@@ -26,7 +44,6 @@ import hashlib
 import tempfile
 import os
 import asyncio
-from flask import request, jsonify, send_file
 import edge_tts
 
 
@@ -96,11 +113,25 @@ def start_openpose_server():
 # Create instance folder if it doesn't exist
 os.makedirs('instance', exist_ok=True)
 
+from database import close_db, query_db, execute_db, load_optimization_data
+
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'  # Required for sessions
 
 # Register database cleanup function
 app.teardown_appcontext(close_db)
+
+
+@app.context_processor
+def inject_user():
+    """Make 'user' available in all templates when logged in."""
+    user = None
+    if 'user_id' in session:
+        user = query_db(
+            'SELECT id, name, email, role, phone, pincode, dob, created_at FROM users WHERE id = ?',
+            (session['user_id'],), one=True
+        )
+    return dict(user=user)
 
 
 # ==================== AUTHENTICATION HELPERS ====================
@@ -194,11 +225,6 @@ def api_tts():
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-# ==================== FLASK-LOGIN USER LOADER ====================
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
 
 
 # ==================== AUTH ROUTES ====================
@@ -2264,6 +2290,141 @@ SESSION_STATE = {
     "cooldown_until": 0
 }
 
+# Initialize the CV pipeline
+try:
+    PIPELINE = WebRehabPipeline()
+    print("[INIT] WebRehabPipeline initialized successfully")
+except Exception as e:
+    PIPELINE = None
+    print(f"[WARNING] WebRehabPipeline failed to initialize: {e}")
+
+
+# ==================== SESSION LIFECYCLE APIs ====================
+
+@app.route('/api/session/create', methods=['POST'])
+@login_required
+@role_required('patient')
+def api_session_create():
+    """Create a new session record. Returns the session_id."""
+    import json as _json
+    data = request.get_json(force=True) or {}
+    pain_before = int(data.get('pain_before', 0))
+
+    # Create a unique session_group_id so we can group exercises
+    group_id = str(uuid.uuid4())
+
+    execute_db('''
+        INSERT INTO sessions (patient_id, session_group_id, pain_before, started_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ''', (session['user_id'], group_id, pain_before))
+
+    row = query_db(
+        'SELECT id FROM sessions WHERE patient_id = ? AND session_group_id = ?',
+        (session['user_id'], group_id), one=True
+    )
+    if not row:
+        return jsonify({'ok': False, 'error': 'Failed to create session'}), 500
+
+    return jsonify({'ok': True, 'session_id': row['id']})
+
+
+@app.route('/api/session/exercise/save', methods=['POST'])
+@login_required
+@role_required('patient')
+def api_session_exercise_save():
+    """Save data for one exercise within a session."""
+    import json as _json
+    data = request.get_json(force=True) or {}
+
+    session_id = data.get('session_id')
+    workout_id = data.get('workout_id')
+    if not session_id or not workout_id:
+        return jsonify({'ok': False, 'error': 'session_id and workout_id are required'}), 400
+
+    quality_score = float(data.get('quality_score', 0))
+    sets_required = _json.dumps(data.get('sets_required', {}))
+    sets_completed = _json.dumps(data.get('sets_completed', {}))
+    exercise_start_time = data.get('exercise_start_time')
+    exercise_end_time = data.get('exercise_end_time')
+
+    execute_db('''
+        INSERT INTO session_exercises
+            (session_id, patient_id, workout_id, exercise_start_time, exercise_end_time,
+             quality_score, sets_required, sets_completed)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (session_id, session['user_id'], workout_id,
+          exercise_start_time, exercise_end_time,
+          quality_score, sets_required, sets_completed))
+
+    return jsonify({'ok': True})
+
+
+@app.route('/api/session/complete', methods=['POST'])
+@login_required
+@role_required('patient')
+def api_session_complete():
+    """Complete a session — save post-session data and update patient stats."""
+    import json as _json
+    data = request.get_json(force=True) or {}
+
+    session_id = data.get('session_id')
+    if not session_id:
+        return jsonify({'ok': False, 'error': 'session_id is required'}), 400
+
+    pain_after = int(data.get('pain_after', 0))
+    effort_level = int(data.get('effort_level', 5))
+    notes = data.get('notes', '')
+
+    # Calculate overall quality from exercise scores
+    exercises = query_db(
+        'SELECT quality_score, sets_required, sets_completed FROM session_exercises WHERE session_id = ?',
+        (session_id,)
+    )
+    total_quality = 0
+    total_req = 0
+    total_comp = 0
+    count = 0
+    for ex in (exercises or []):
+        total_quality += float(ex['quality_score'] or 0)
+        count += 1
+        req = _json.loads(ex['sets_required']) if ex['sets_required'] else {}
+        comp = _json.loads(ex['sets_completed']) if ex['sets_completed'] else {}
+        total_req += sum(int(v) for v in req.values())
+        total_comp += sum(int(v) for v in comp.values())
+
+    avg_quality = round(total_quality / count, 1) if count > 0 else 0
+    completed_perc = round(total_comp / total_req * 100, 1) if total_req > 0 else 0
+
+    execute_db('''
+        UPDATE sessions
+        SET pain_after = ?, effort_level = ?, notes = ?,
+            quality_score = ?, completed_perc = ?,
+            completed_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND patient_id = ?
+    ''', (pain_after, effort_level, notes, avg_quality, completed_perc,
+          session_id, session['user_id']))
+
+    # Update patient stats
+    try:
+        stats = query_db('''
+            SELECT AVG(quality_score) as avg_q, AVG(pain_after) as avg_p, COUNT(*) as cnt
+            FROM sessions
+            WHERE patient_id = ? AND completed_at IS NOT NULL
+        ''', (session['user_id'],), one=True)
+        if stats:
+            execute_db('''
+                UPDATE patients
+                SET avg_quality_score = ?, avg_pain_level = ?
+                WHERE user_id = ?
+            ''', (round(float(stats['avg_q'] or 0), 1),
+                  round(float(stats['avg_p'] or 0), 1),
+                  session['user_id']))
+    except Exception as e:
+        print(f"[WARN] Could not update patient stats: {e}")
+
+    return jsonify({'ok': True, 'session_id': session_id})
+
+
 old_route = """
 @app.route("/api/session/start", methods=["POST"])
 def api_session_start():
@@ -2278,6 +2439,9 @@ def api_session_start():
 
 @app.route("/api/session/start_v1", methods=["POST"])
 def api_session_start_v1():
+    if PIPELINE is None:
+        return jsonify({"error": "CV pipeline not available"}), 503
+
     data = request.get_json(force=True) or {}
 
     # Normalize language (frontend can send "English", "en", etc.)
@@ -2311,6 +2475,9 @@ def api_session_start_v1():
 
 @app.route("/api/session/start", methods=["POST"])
 def api_session_start():
+    if PIPELINE is None:
+        return jsonify({"error": "CV pipeline not available"}), 503
+
     data = request.get_json(force=True) or {}
     PIPELINE.reset(
         threshold=data.get("threshold", 30.0),
@@ -2321,6 +2488,9 @@ def api_session_start():
 
 @app.route("/api/session/start_old", methods=["POST"])
 def api_session_start_old():
+    if PIPELINE is None:
+        return jsonify({"error": "CV pipeline not available"}), 503
+
     #data = request.get_json(force=True) or {}
     #threshold = float(data.get("threshold", 25.0))
 
@@ -2403,7 +2573,7 @@ def api_live_feedback():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+"""
 
 # ==================== MERILION CHATBOT API ====================
 
@@ -2925,15 +3095,11 @@ def ensure_tables_exist():
 # Ensure tables exist on startup
 ensure_tables_exist()
 
-    return jsonify({
-        "frame_score": round(score, 2),
-        "form_status": status,
-        "llm_feedback": feedback
-    })
-    """
-
 @app.route("/api/live_feedback_old", methods=["POST"])
 def api_live_feedback_old():
+    if PIPELINE is None:
+        return jsonify({"error": "CV pipeline not available"}), 503
+
     data = request.get_json(force=True) or {}
     language = data.get("language", "en")
     exercise_name = data.get("exercise_name", "squat")
@@ -2947,6 +3113,9 @@ def api_live_feedback_old():
 
 @app.route("/api/live_feedback_v1", methods=["POST"])
 def api_live_feedback_v1():  # sourcery skip: use-contextlib-suppress
+    if PIPELINE is None:
+        return jsonify({"error": "CV pipeline not available"}), 503
+
     data = request.get_json(force=True, silent=True) or {}
 
     # ---- 1) Inputs (body overrides server/session defaults) ----
@@ -3028,6 +3197,9 @@ def api_live_feedback_v1():  # sourcery skip: use-contextlib-suppress
 
 @app.route("/api/live_feedback_v2", methods=["POST"])
 def api_live_feedback_v2():
+    if PIPELINE is None:
+        return jsonify({"error": "CV pipeline not available"}), 503
+
     data = request.get_json(force=True, silent=True) or {}
 
     language = (data.get("language") or "English").strip()
@@ -3075,6 +3247,9 @@ def api_live_feedback_v2():
 
 @app.route("/api/live_feedback_v3", methods=["POST"])
 def api_live_feedback_v3():
+    if PIPELINE is None:
+        return jsonify({"error": "CV pipeline not available"}), 503
+
     data = request.get_json(force=True) or {}
     language = data.get("language", "en")
     frame_b64 = data.get("frame_b64", "")
@@ -3088,6 +3263,9 @@ def api_live_feedback_v3():
 
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():
+    if PIPELINE is None:
+        return jsonify({"error": "CV pipeline not available"}), 503
+
     data = request.get_json(force=True) or {}
     frame_b64 = data.get("frame_b64", "")
     if not frame_b64:
@@ -3103,6 +3281,8 @@ def api_live_feedback():
 @app.post("/api/session/stop")
 def api_session_stop():  # sourcery skip: use-contextlib-suppress
     global PIPELINE
+    if PIPELINE is None:
+        return jsonify({"ok": True, "warning": "CV pipeline not available"})
     try:
         PIPELINE.reset()  # if you have it
     except Exception:
@@ -3111,9 +3291,5 @@ def api_session_stop():  # sourcery skip: use-contextlib-suppress
 
 if __name__ == '__main__':
     #start_openpose_server()
-    with app.app_context():
-        db.create_all()
-        print("Database tables created successfully!")
-        print(f"Database location: {os.path.join(basedir, 'instance', 'rehab_app.db')}")
-    
+    print("Database tables verified via ensure_tables_exist().")
     app.run(host="127.0.0.1", port=5050, debug=True)

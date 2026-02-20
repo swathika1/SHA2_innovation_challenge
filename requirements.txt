@@ -1,18 +1,51 @@
+# ============================================================
+# SHA2 Rehab Innovation Challenge - Python Dependencies
+# Requires: Python 3.11 (mediapipe/tensorflow not compatible with 3.12+)
+# Install:  pip install -r requirements.txt
+# ============================================================
+
+# --- Web framework (Flask) ---
 Flask==2.3.2
-gurobipy>=12.0.0,<13.0.0
-Flask_SQLAlchemy==3.0.5
-Flask_Login==0.6.3
-Flask_Session==0.5.0
-Flask_CORS==4.0.0
 Werkzeug==2.3.6
+Flask-SQLAlchemy==3.0.5
+Flask-Login==0.6.3
+Flask-Session==0.5.0
+Flask-CORS==4.0.0
+
+# --- FastAPI chatbot server (app_chat.py) ---
+fastapi
+uvicorn
+pydantic
+httpx
+
+# --- Database ---
+SQLAlchemy
+
+# --- Optimization (Gurobi - optional, mock solver used if missing) ---
+gurobipy>=12.0.0,<13.0.0
+
+# --- ML / CV core ---
 numpy
 opencv-python
 mediapipe
 tensorflow
+keras
 joblib
-requests
-pyttsx3
-google-generativeai
+
+# --- RAG / Embeddings ---
 chromadb==0.5.5
 sentence-transformers==3.0.1
-openpifpaf
+faiss-cpu
+
+# --- LLM clients ---
+google-generativeai
+groq
+
+# --- Text-to-Speech ---
+pyttsx3
+edge-tts
+
+# --- Utilities ---
+requests
+langdetect
+Pillow

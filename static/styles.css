@@ -10,54 +10,19 @@
     box-sizing: border-box;
 }
 
-/* ==================== BACKGROUND (VIBRANT) ==================== */
-body {
-    margin: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: #222;
-    line-height: 1.6;
-    min-height: 100vh;
-    position: relative;
-    background: #0b1220; /* fallback if image fails */
-}
-
-/* Background image layer */
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -2;
-
-    background: url("/static/img/bg.jpg") center center / cover no-repeat;
-
-    /* Stronger pop: brighter + more contrast + more saturation */
-    filter: brightness(1.22) contrast(1.35) saturate(1.45);
-    transform: scale(1.03);
-}
-
-/* Overlay layer — use a LIGHT overlay (not dark) so it doesn’t dull */
-body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-
-  /* This keeps text readable WITHOUT killing color */
-    background: linear-gradient(
-        180deg,
-        rgba(255,255,255,0.06) 0%,
-        rgba(255,255,255,0.02) 40%,
-        rgba(0,0,0,0.08) 100%
-    );
-}
-
-/* Cards: reduce whiteness so the background shows through */
-.card, .panel, .container, .content-card, .feedback-panel, .video-panel,
-.stat-box, .rep-counter, .form-status, .error-messages, .audio-indicator {
-    background: rgba(255, 255, 255, 0.80);   /* was 0.92 → too foggy */
-    border: 1px solid rgba(255,255,255,0.25);
-    box-shadow: 0 12px 34px rgba(0,0,0,0.16);
-    backdrop-filter: saturate(1.15);         /* adds punch to what shows behind */
+:root {
+    --primary: #0066cc;
+    --primary-dark: #0052a3;
+    --success: #22c55e;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --info: #3b82f6;
+    --light: #f3f4f6;
+    --dark: #1f2937;
+    --gray: #6b7280;
+    --border: #e5e7eb;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.2);
 }
 
 html {
