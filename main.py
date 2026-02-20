@@ -50,7 +50,7 @@ def start_openpose_server():
 
     # If already running, do nothing
     try:
-        r = requests.get(url, timeout=0.5)
+        r = requests.get(url, timeout=1.0)
         if r.status_code == 200:
             print("[OPENPOSE] already running")
             return
@@ -64,27 +64,30 @@ def start_openpose_server():
         raise RuntimeError(f"openpose_http_server.py not found at {server_py}")
 
     print("[OPENPOSE] starting server...")
+
     with open(log_path, "w") as f:
-        # start: python3 openpose_http_server.py --host 127.0.0.1 --port 9001
-        proc = subprocess.Popen(
-            [sys.executable, str(server_py), "--host", host, "--port", str(port)],
+        subprocess.Popen(
+            [sys.executable, str(server_py)],
             stdout=f,
             stderr=subprocess.STDOUT,
             cwd=str(Path(__file__).resolve().parent),
         )
 
-    # wait for health
-    for _ in range(30):
+    # Wait until server becomes healthy
+    timeout = 20  # seconds
+    start = time.time()
+
+    while time.time() - start < timeout:
         try:
-            r = requests.get(url, timeout=0.5)
+            r = requests.get(url, timeout=1.0)
             if r.status_code == 200:
                 print("[OPENPOSE] ready")
                 return
         except Exception:
-            time.sleep(0.2)
+            pass
+        time.sleep(0.5)
 
     raise RuntimeError(f"OpenPose server not healthy. Check {log_path}")
-
 #from Rehab_Scorer_Coach.src.meralion_client import MeralionClient
 
 #MERALION_API_KEY = os.environ.get("MERALION_API_KEY", "oyNXaKPBnylXWVMxINztmNBfEBHqVZmTpKzz2HE")
@@ -575,7 +578,7 @@ def api_session_start_old():
     #return jsonify({"ok": True, "threshold": threshold, "exercise_name": exercise_name, "cooldown_seconds": cooldown_seconds})
     data = request.get_json(force=True) or {}
     SESSION_STATE["language"] = data.get("language", "English")
-    SESSION_STATE["exercise_name"] = data.get("exercise_name", "Unknown")
+    SESSION_STATE["exercise_name"] = data.get("exercise_name", "idle")
 
     PIPELINE.reset(
         threshold=data.get("threshold", 30.0),
@@ -763,7 +766,7 @@ def api_live_feedback_v2():
         out["language"] = language
 
         # IMPORTANT: pipeline should set this
-        out.setdefault("exercise_name", "unknown")
+        out.setdefault("exercise_name", "idle")
 
         return jsonify(out)
 
@@ -773,7 +776,7 @@ def api_live_feedback_v2():
             "frame_score": 0,
             "llm_feedback": [f"Backend error: {type(e).__name__}: {str(e)}"],
             "language": language,
-            "exercise_name": "unknown",
+            "exercise_name": "idle",
         })
 
 @app.route("/api/live_feedback_v3", methods=["POST"])
@@ -813,7 +816,7 @@ def api_session_stop():  # sourcery skip: use-contextlib-suppress
     return jsonify({"ok": True})
 
 if __name__ == '__main__':
-    start_openpose_server()
+    #start_openpose_server()
     with app.app_context():
         db.create_all()
         print("Database tables created successfully!")

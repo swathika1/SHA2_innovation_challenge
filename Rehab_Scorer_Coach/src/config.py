@@ -18,12 +18,14 @@ class AppConfig:
     # --- Score model (regression) ---
     keras_model_path: Path = models_dir / "poseformer_transformer_model.keras"
     x_scaler_path: Path = models_dir / "x_scaler.pkl"
-    y_map_path: Path = models_dir / "y_map.pkl"
+    y_map_path: Path = models_dir / "y_map.pkl" 
+    scoring_scaler_path: Path = models_dir / "scoring_scaler.pkl"
+    scoring_model_path: Path = models_dir / "scoring_model.keras"
 
     # --- Exercise model (classification) ---
-    exercise_detection_model_path: Path = models_dir / "kimore_exercise_detection_model.keras"
-    exercise_mapping_path: Path = models_dir / "kimore_label_map.json"
-    exercise_scaler_path: Path = models_dir / "x_scaler.pkl"
+    exercise_detection_model_path: Path = models_dir / "mobilenet_exercise_model.keras" #"kimore_exercise_detection_model.keras"
+    exercise_mapping_path: Path = models_dir / "exercise_label_map.json" #"kimore_label_map.json"
+    exercise_scaler_path: Path = models_dir / "exercise_scaler.pkl"
 
     # Expected model input sizes (MUST match training)
     target_timesteps: int = 100

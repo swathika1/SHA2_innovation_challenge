@@ -1,18 +1,25 @@
 import contextlib
-from collections import deque
 from pathlib import Path
 from typing import Dict, Any, List
 import time
 import numpy as np
+import cv2
+import base64
+import mediapipe as mp
 
 from Rehab_Scorer_Coach.src.config import AppConfig
-from Rehab_Scorer_Coach.src.feature_builder_openpose import resample_to_T
-from Rehab_Scorer_Coach.src.model_infer import ScoreModel
 from Rehab_Scorer_Coach.src.rag_store import RAGStore
 from Rehab_Scorer_Coach.src.llm_groq import GroqLLM
 from Rehab_Scorer_Coach.src.rep_counter_kimore import KimoreRepCounter
-from Rehab_Scorer_Coach.src.exercise_model_infer import ExerciseModelInfer
-from Rehab_Scorer_Coach.src.openpose_client import OpenPoseClient
+
+# 🔥 MODEL LOADER (50D + 100-frame scoring)
+from Rehab_Scorer_Coach.src.models_loader import (
+    normalize_pose_xy,
+    to_50d,
+    predict_exercise,
+    predict_score,
+    reset_sequence
+)
 
 
 class WebRehabPipeline:
@@ -21,30 +28,23 @@ class WebRehabPipeline:
 
         self.cfg = AppConfig()
 
-        self.openpose = OpenPoseClient(
-            base_url=str(getattr(self.cfg, "openpose_url", "http://127.0.0.1:9001")),
-            timeout_s=float(getattr(self.cfg, "openpose_timeout_s", 2.5)),
-        )
-
-        self.scorer = ScoreModel(
-            keras_path=str(self.cfg.keras_model_path),
-            x_scaler_path=str(self.cfg.x_scaler_path),
-            y_map_path=str(self.cfg.y_map_path),
-        )
-
-        self.exercise_model = ExerciseModelInfer(self.cfg)
-        self.ex_T = int(self.exercise_model.T)
-
-        self.feat_buffer = deque(maxlen=200)
-        self.ex_feat_buffer = deque(maxlen=self.ex_T)
-
-        self.threshold = 30.0
+        self.threshold=35.0 #30.0
         self.cooldown_seconds = 6.0
 
         self.rep_counter = KimoreRepCounter()
 
         self._prev_feat = None
         self.language = "English"
+
+        # 🔥 MediaPipe Pose
+        self.mp_pose = mp.solutions.pose
+        self.pose = self.mp_pose.Pose(
+            static_image_mode=False,
+            model_complexity=1,
+            enable_segmentation=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+        )
 
         # LLM state
         self.rag = RAGStore(persist_dir=Path(self.cfg.repo_root) / "rag_db")
@@ -56,42 +56,80 @@ class WebRehabPipeline:
         print("✅ Pipeline Ready")
 
     # -----------------------------------------------------
-    # OpenPose BODY_25 → 100D Feature
+    # MediaPipe Pose Extraction
     # -----------------------------------------------------
-    def _openpose25_to_feature100(self, landmarks_25):
+    def _extract_mediapipe_landmarks(self, frame_b64: str):
+        # sourcery skip: class-extract-method, for-append-to-extend
+        try:
+            header, encoded = frame_b64.split(",", 1)
+            frame_data = base64.b64decode(encoded)
+            frame_array = np.frombuffer(frame_data, np.uint8)
+            frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
 
-        lm = np.asarray(landmarks_25, dtype=np.float32)
-        xy = lm[:, :2]
+            if frame is None:
+                return None, None
 
-        root = xy[8]
-        xy = xy - root
+            image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = self.pose.process(image_rgb)
 
-        neck = xy[1]
-        torso = np.linalg.norm(neck)
-        if torso < 1e-6:
-            torso = 1.0
+            if not results.pose_landmarks:
+                return frame, None   # 🔥 return frame but no landmarks
 
-        xy = xy / torso
-        flat = xy.flatten()
-        feat = np.concatenate([flat, flat], axis=0)
+            landmarks = []
+            for lm in results.pose_landmarks.landmark:
+                landmarks.append([lm.x, lm.y, lm.z])
 
-        return feat.astype(np.float32)
+            return frame, np.array(landmarks, dtype=np.float32)
+
+        except Exception as e:
+            print("❌ MediaPipe extraction error:", e)
+            return None, None
+        
+    def _extract_mediapipe_landmarks_old(self, frame_b64: str):
+        # sourcery skip: for-append-to-extend, list-comprehension
+
+        try:
+            header, encoded = frame_b64.split(",", 1)
+            frame_data = base64.b64decode(encoded)
+            frame_array = np.frombuffer(frame_data, np.uint8)
+            frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                return None
+
+            image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = self.pose.process(image_rgb)
+
+            if not results.pose_landmarks:
+                return None
+
+            landmarks = []
+            for lm in results.pose_landmarks.landmark:
+                landmarks.append([lm.x, lm.y, lm.z])
+
+            #return np.array(landmarks, dtype=np.float32)
+            return frame, np.array(landmarks, dtype=np.float32)
+
+        except Exception as e:
+            print("❌ MediaPipe extraction error:", e)
+            return None
 
     # -----------------------------------------------------
     # Main Frame Processing
     # -----------------------------------------------------
-    def process_frame_dataurl(self, frame_b64: str, language: str = None) -> Dict[str, Any]:
+    
+    def process_frame_dataurl(self, frame_b64: str, language: str = None,mode: str = "auto",manual_exercise: str = None) -> Dict[str, Any]:
 
         print("\n================ NEW FRAME ================")
 
         if language:
             self.language = language
 
-        # 1️⃣ OPENPOSE
-        print("➡️ Step 1: OpenPose")
-        op = self.openpose.infer(frame_b64)
+        # 1️⃣ MEDIAPIPE
+        print("➡️ Step 1: MediaPipe")
+        frame, landmarks = self._extract_mediapipe_landmarks(frame_b64)
 
-        if op is None:
+        if landmarks is None:
             print("❌ No pose detected")
             return {
                 "frame_score": 0.0,
@@ -101,58 +139,98 @@ class WebRehabPipeline:
                 "exercise_confidence": 0.0,
             }
 
-        # 2️⃣ FEATURE
-        print("➡️ Step 2: Feature build")
-        feat = self._openpose25_to_feature100(op)
+        # 2️⃣ FEATURE (50D PIPELINE)
+        print("➡️ Step 2: Feature build (50D)")
+
+        keypoints_xy = landmarks[:, :2]
+        normalized = normalize_pose_xy(keypoints_xy)
+        feature_50d = to_50d(normalized)
 
         if self._prev_feat is None:
             delta = 0.0
         else:
-            delta = float(np.mean(np.abs(feat - self._prev_feat)))
+            delta = float(np.mean(np.abs(feature_50d - self._prev_feat)))
 
-        self._prev_feat = feat.copy()
+        self._prev_feat = feature_50d.copy()
         print(f"   delta motion = {delta:.6f}")
-
-        self.feat_buffer.append(feat)
-        self.ex_feat_buffer.append(feat)
 
         # 3️⃣ EXERCISE MODEL
         print("➡️ Step 3: Exercise Model")
+        print("Raw frame dtype:", frame.dtype)
+        print("Raw frame min:", frame.min())
+        print("Raw frame max:", frame.max())
+        print("Raw frame mean:", frame.mean())
+        
+        
+        # -----------------------------------------------------
+        # 2️⃣ EXERCISE MODEL — DIRECT RAW FRAME
+        # -----------------------------------------------------
+        
+        if mode == "manual":
+            if manual_exercise is None:
+                return {
+                    "frame_score": 0.0,
+                    "form_status": "NO_EXERCISE_SELECTED",
+                    "llm_feedback": ["Please select an exercise"],
+                    "exercise_name": "none",
+                    "exercise_confidence": 1.0,
+                }
 
-        buf = np.asarray(self.ex_feat_buffer, dtype=np.float32)
-
-        if buf.shape[0] < self.ex_T:
-            last = buf[-1:]
-            pad = np.repeat(last, self.ex_T - buf.shape[0], axis=0)
-            buf = np.concatenate([buf, pad], axis=0)
+            exercise_name = manual_exercise
+            confidence = 1.0
+            print(f"   MANUAL exercise = {exercise_name}")
         else:
-            buf = buf[-self.ex_T:]
+            header, encoded = frame_b64.split(",", 1)
+            frame_data = base64.b64decode(encoded)
+            frame_array = np.frombuffer(frame_data, np.uint8)
+            frame_ex = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
 
-        F = buf.shape[1]
-        X_ex = buf.reshape(1, self.ex_T, F)
+            if frame_ex is None:
+                return {
+                    "frame_score": 0.0,
+                    "form_status": "NO_FRAME",
+                    "llm_feedback": ["Invalid frame"],
+                    "exercise_name": "no_frame",
+                    "exercise_confidence": 0.0,
+                }
 
-        pred = self.exercise_model.predict_window(X_ex, top_k=5, debug=False)
+            print("➡️ Step 1: Exercise Model (RAW FRAME)")
+            exercise_name, confidence = predict_exercise(frame_ex)
+            print(f"   exercise = {exercise_name} ({confidence:.3f})")
+        #exercise_name, confidence = predict_exercise(frame)
 
-        exercise_name = pred.best_label_raw
-        confidence = float(pred.confidence)
+        #print(f"   exercise = {exercise_name} ({confidence:.3f})")
 
-        print(f"   exercise = {exercise_name} ({confidence:.3f})")
-
-        # 4️⃣ SCORE MODEL
+        # 4️⃣ SCORE MODEL (100-frame internal buffer)
         print("➡️ Step 4: Score Model")
 
-        feats = np.stack(self.feat_buffer, axis=0)
-        seq = resample_to_T(feats, int(self.cfg.target_timesteps))
+        score = predict_score(feature_50d)
+        if score is not None:
+            # Demo variability
+            score += np.random.normal(0, 2.5)
 
-        T_score, F_score = seq.shape
-        X_score = seq.reshape(1, T_score, F_score)
+            # Motion-based penalty
+            if delta < 0.004:
+                score -= 10  # too still
+            elif delta > 0.03:
+                score -= 8  # too unstable
+            # Clamp
+            score = max(0, min(score, 50))
+            
+        if score is None:
+            print("   warming up sequence buffer...")
+            return {
+                "frame_score": 0.0,
+                "form_status": "WARMUP",
+                "llm_feedback": [],
+                "exercise_name": exercise_name,
+                "exercise_confidence": confidence,
+            }
 
-        score = float(self.scorer.predict_score_0_50(X_score))
         status = "CORRECT" if score >= self.threshold else "WRONG"
-
         print(f"   score = {score:.2f} | status = {status}")
 
-        # 5️⃣ LLM FEEDBACK (SAFE)
+        # 5️⃣ LLM FEEDBACK
         print("➡️ Step 5: LLM Check")
 
         feedback_list = self.last_feedback_list
@@ -165,7 +243,6 @@ class WebRehabPipeline:
                 numeric_summary = f"score={score:.2f}/50 status={status}"
                 pose_summary = f"delta_motion={delta:.4f}"
 
-                # RAG SAFE
                 try:
                     chunks = self.rag.query(
                         query_text=f"How to perform {exercise_name}. cues",
@@ -177,7 +254,6 @@ class WebRehabPipeline:
                     print("   ⚠️ RAG failed:", e)
                     rag_context = ""
 
-                # LLM CALL
                 feedback_list = self.llm.generate_feedback(
                     exercise_name=exercise_name,
                     language=self.language,
@@ -203,8 +279,6 @@ class WebRehabPipeline:
             "llm_feedback": feedback_list,
             "exercise_name": exercise_name,
             "exercise_confidence": confidence,
-            "exercise_probs": pred.probs,
-            "exercise_topk": pred.topk,
         }
 
     # -----------------------------------------------------
@@ -213,8 +287,8 @@ class WebRehabPipeline:
     def reset(self, *args, **kwargs):
         print("🔄 Resetting session")
 
-        self.feat_buffer.clear()
-        self.ex_feat_buffer.clear()
+        reset_sequence()
+
         self._prev_feat = None
         self.last_feedback_list = []
         self.last_llm_time = 0.0
@@ -222,5 +296,6 @@ class WebRehabPipeline:
         if self.rep_counter:
             with contextlib.suppress(Exception):
                 self.rep_counter.reset()
-
+                
+        reset_sequence()
         print("✅ Session reset complete")

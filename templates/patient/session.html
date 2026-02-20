@@ -91,7 +91,30 @@
                 <span style="font-weight:600;">Enable</span>
             </label>
         </div>
+        <!-- Exercise Mode -->
+        <div class="card" style="padding:15px;">
+            <h4>Exercise Mode</h4>
 
+            <div style="margin-bottom:10px;">
+                <label>
+                    <input type="radio" name="exerciseMode" value="auto" checked>
+                    Auto Detect
+                </label>
+                &nbsp;&nbsp;
+                <label>
+                    <input type="radio" name="exerciseMode" value="manual">
+                    Manual Select
+                </label>
+            </div>
+
+            <select id="manualExerciseSelect" class="form-control" disabled>
+                <option value="squat">Squat</option>
+                <option value="lifting_of_arms">Lifting of Arms</option>
+                <option value="lateral_trunk_tilt">Lateral Trunk Tilt</option>
+                <option value="trunk_rotation">Trunk Rotation</option>
+                <option value="pelvis_rotation">Pelvis Rotation</option>
+            </select>
+        </div>
         <!-- Exercise Info -->
         <div class="card" style="padding: 15px;">
             <h4>Current Exercise</h4>
@@ -124,7 +147,7 @@ document.getElementById("apiBaseText").textContent = API_BASE;
 
 const THRESHOLD = 30.0;
 const COOLDOWN_SECONDS = 2;
-const POLL_MS = 2000;
+const POLL_MS = 66; //2000 , 66
 
 const LANG_TO_BCP47 = {
   English: "en-US",
@@ -164,6 +187,29 @@ const canvas = document.createElement("canvas");
 const ctx = canvas.getContext("2d");
 
 /* ===================== STATE ===================== */
+let exerciseMode = "auto";
+let manualExercise = "squat";
+
+const modeRadios = document.querySelectorAll("input[name='exerciseMode']");
+const manualSelect = document.getElementById("manualExerciseSelect");
+
+modeRadios.forEach(r => {
+  r.addEventListener("change", () => {
+    exerciseMode = r.value;
+
+    if (exerciseMode === "manual") {
+      manualSelect.disabled = false;
+    } else {
+      manualSelect.disabled = true;
+    }
+  });
+});
+
+if (manualSelect) {
+  manualSelect.addEventListener("change", () => {
+    manualExercise = manualSelect.value;
+  });
+}
 
 let isPaused = false;
 let pollTimer = null;
@@ -191,11 +237,11 @@ const EXERCISE_PLAN = {
   "trunk_rotation":     { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Rotate comfortably (no pain)" },
   "pelvis_rotation":    { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Small controlled pelvis rotation" },
   "squat":              { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Hip crease to knee level (as tolerated)" },
-  "unknown":            { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "--" },
+  "idle":            { reps: 0, sets: 0, target: "You are Idle", rom: "--" },
 };
 
 function normalizeExerciseName(name) {
-  if (!name) return "unknown";
+  if (!name) return "idle";
   const n = name.toLowerCase().trim();
 
   if (n.includes("squat")) return "squat";
@@ -205,7 +251,7 @@ function normalizeExerciseName(name) {
   if (n.includes("pelvis")) return "pelvis_rotation";
 
   if (EXERCISE_PLAN[n]) return n;
-  return "unknown";
+  return "idle";
 }
 
 function updateExerciseUI(exerciseNameRaw) {
@@ -507,7 +553,13 @@ async function pollFeedback() {
     const res = await fetch(`${API_BASE}/api/live_feedback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ frame_b64, language: getLanguageName() })
+      //body: JSON.stringify({ frame_b64, language: getLanguageName() })
+      body: JSON.stringify({
+            frame_b64,
+            language: getLanguageName(),
+            mode: exerciseMode,
+            manual_exercise: manualExercise
+          })
     });
 
     const out = await res.json().catch(() => ({}));
