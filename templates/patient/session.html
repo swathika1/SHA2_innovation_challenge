@@ -4,710 +4,653 @@
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo"> Home Rehab Coach</a></h1>
+    <h1>🏋️ Rehab Session</h1>
     <nav class="nav-links">
-        <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('patient_appointments') }}">Consultations</a>
-        <div class="nav-user">
-            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
-            <div class="nav-user-dropdown">
-                <div class="nav-user-dropdown-inner">
-                    <div class="dropdown-header">Signed in as<strong>{{ user.name if user else 'Patient' }}</strong></div>
-                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
-                    <div class="dropdown-divider"></div>
-                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
-                </div>
-            </div>
-        </div>
+        <a href="{{ url_for('patient_dashboard') }}">← Back to Dashboard</a>
     </nav>
 </header>
 {% endblock %}
 
 {% block content %}
-<style>
-    /* ===== Phase screens ===== */
-    .phase-screen { display: none; }
-    .phase-screen.active { display: block; }
+<div class="session-layout">
+    <!-- Video Panel -->
+    <div class="video-panel">
+    <div class="skeleton-overlay">
+        <strong>Skeleton Tracking: ON</strong><br />
+        <small>Pose detection active</small>
+    </div>
 
-    /* ===== Pre-session ===== */
-    .pre-session-card {
-        max-width: 620px; margin: 40px auto; background: #fff; border-radius: 14px;
-        box-shadow: 0 4px 20px rgba(0,0,0,.08); padding: 36px;
-    }
-    .pre-session-card h2 { margin-top: 0; font-size: 1.5rem; }
-    .exercise-list { list-style: none; padding: 0; margin: 18px 0; }
-    .exercise-list li {
-        padding: 12px 16px; border-radius: 8px; background: #f0f4ff;
-        margin-bottom: 8px; font-weight: 500; display: flex; justify-content: space-between;
-    }
-    .exercise-list li .meta { color: #666; font-weight: 400; font-size: .9rem; }
-    .pain-slider-group { margin: 22px 0; }
-    .pain-slider-group label { font-weight: 600; display: block; margin-bottom: 6px; }
-    .pain-slider-group input[type=range] { width: 100%; }
-    .pain-value { font-size: 1.3rem; font-weight: 700; color: #007bff; }
-    .btn-start-session {
-        width: 100%; padding: 14px; font-size: 1.1rem; font-weight: 700;
-        border: none; border-radius: 10px; background: linear-gradient(135deg,#007bff,#0056d2);
-        color: #fff; cursor: pointer; margin-top: 12px; transition: .2s;
-    }
-    .btn-start-session:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,91,187,.35); }
+    <div class="video-placeholder" style="height:420px; padding:0; overflow:hidden; position:relative;">
+        <video id="webcamVideo" autoplay playsinline muted
+                style="width:100%; height:100%; object-fit: cover; background:#000;"></video>
 
-    /* ===== Live session layout ===== */
-    .live-session-grid {
-        display: grid; grid-template-columns: 1fr 340px; gap: 18px;
-        max-width: 1200px; margin: 20px auto; padding: 0 12px;
-    }
-    @media (max-width: 900px) { .live-session-grid { grid-template-columns: 1fr; } }
+        <div id="camErrorOverlay"
+            style="display:none; position:absolute; inset:0; align-items:center; justify-content:center; flex-direction:column; color:#fff; background:rgba(0,0,0,0.6);">
+        <div class="icon">📹</div>
+        <p>Live Webcam Feed</p>
+        <p style="font-size: 0.8rem; opacity: 0.85;">Allow camera access to start</p>
+        </div>
+    </div>
+    </div>
 
-    /* Timers bar */
-    .timers-bar { display: flex; gap: 14px; margin-bottom: 14px; }
-    .timer-card {
-        flex: 1; background: #fff; border-radius: 10px; padding: 14px 18px;
-        box-shadow: 0 2px 10px rgba(0,0,0,.06); text-align: center;
-    }
-    .timer-card .timer-label { font-size: .8rem; color: #888; text-transform: uppercase; letter-spacing: .5px; }
-    .timer-card .timer-value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; font-family: 'Courier New', monospace; }
-
-    /* Video panel */
-    .video-panel-wrap { background: #1a1a2e; border-radius: 12px; overflow: hidden; position: relative; }
-    .video-container { position: relative; width: 100%; }
-    .video-container video { width: 100%; display: block; }
-    .video-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-    .video-placeholder {
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        min-height: 380px; color: #aaa;
-    }
-    .video-placeholder .icon { font-size: 3rem; margin-bottom: 10px; }
-    .skeleton-overlay {
-        position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,.6);
-        color: #0f0; padding: 6px 12px; border-radius: 6px; font-size: .75rem; z-index: 2;
-    }
-
-    /* Sidebar */
-    .session-sidebar { display: flex; flex-direction: column; gap: 14px; }
-
-    /* Cards */
-    .s-card {
-        background: #fff; border-radius: 10px; padding: 18px;
-        box-shadow: 0 2px 10px rgba(0,0,0,.06);
-    }
-    .s-card h4 { margin: 0 0 10px; font-size: .95rem; color: #555; }
-
-    /* Progress bar */
-    .progress-bar-outer { background: #e9ecef; border-radius: 8px; height: 14px; overflow: hidden; }
-    .progress-bar-inner {
-        height: 100%; border-radius: 8px; background: linear-gradient(90deg,#28a745,#20c997);
-        transition: width .4s ease; width: 0%;
-    }
-    .progress-perc { font-size: 1.1rem; font-weight: 700; margin-top: 6px; color: #28a745; }
-
-    /* Exercise steps sidebar */
-    .exercise-step-list { list-style: none; padding: 0; margin: 8px 0 0; }
-    .exercise-step-list li {
-        padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: .88rem;
-        display: flex; align-items: center; gap: 8px; transition: .2s;
-    }
-    .exercise-step-list li.completed { background: #d4edda; color: #155724; }
-    .exercise-step-list li.current   { background: #cce5ff; color: #004085; font-weight: 600; }
-    .exercise-step-list li.upcoming  { background: #f8f9fa; color: #888; }
-    .exercise-step-list li .step-icon { font-size: 1rem; }
-
-    /* Rep counter */
-    .rep-counter-card { text-align: center; }
-    .rep-counter-card .count { font-size: 2rem; font-weight: 800; color: #333; }
-    .rep-counter-card .label { font-size: .85rem; color: #888; margin-top: 4px; }
-
-    /* Form status */
-    .form-status {
-        text-align: center; padding: 14px; background: #fff; border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,.06);
-    }
-    .form-status .badge {
-        display: inline-block; padding: 8px 18px; border-radius: 20px;
-        font-weight: bold; font-size: .95rem; margin-bottom: 6px;
-    }
-    .form-status .badge.correct   { background: #d4edda; color: #155724; border: 2px solid #28a745; }
-    .form-status .badge.incorrect { background: #f8d7da; color: #721c24; border: 2px solid #dc3545; animation: pulse-warning 1s infinite; }
-    .form-status .badge.analyzing { background: #fff3cd; color: #856404; border: 2px solid #ffc107; }
-    @keyframes pulse-warning { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
-    .form-status .score { font-size: 1rem; color: #333; font-weight: 600; }
-
-    /* Feedback list */
-    .realtime-feedback {
-        background: #fff; border-radius: 10px; padding: 14px;
-        max-height: 180px; overflow-y: auto; box-shadow: 0 2px 10px rgba(0,0,0,.06);
-    }
-    .realtime-feedback h4 { margin: 0 0 8px; font-size: .9rem; color: #555; }
-    .feedback-item {
-        padding: 6px 10px; margin-bottom: 6px; border-radius: 6px; font-size: .82rem;
-        animation: slideIn .3s ease;
-    }
-    @keyframes slideIn { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
-    .feedback-item.warning { background:#fff3cd; border-left:3px solid #ffc107; color:#856404; }
-    .feedback-item.error   { background:#f8d7da; border-left:3px solid #dc3545; color:#721c24; }
-    .feedback-item.success { background:#d4edda; border-left:3px solid #28a745; color:#155724; }
-    .feedback-item.info    { background:#d1ecf1; border-left:3px solid #17a2b8; color:#0c5460; }
-
-    /* Controls */
-    .session-controls { display: flex; gap: 10px; }
-    .session-controls .btn { flex: 1; padding: 10px; font-size: .95rem; border-radius: 8px; cursor: pointer; border: none; }
-    .btn-pause { background: #ffc107; color: #333; font-weight: 600; }
-    .btn-stop  { background: #dc3545; color: #fff; font-weight: 600; }
-    .btn-next  {
-        background: #28a745; color: #fff; font-weight: 700; width: 100%; padding: 12px;
-        border: none; border-radius: 10px; font-size: 1rem; cursor: pointer;
-    }
-    .btn-next:hover { background: #218838; }
-
-    /* Audio indicator */
-    .audio-indicator {
-        display: flex; align-items: center; gap: 10px; background: #fff;
-        border-radius: 10px; padding: 12px 16px; box-shadow: 0 2px 10px rgba(0,0,0,.06); font-size: .85rem;
-    }
-
-    /* ===== Post-session overlay ===== */
-    .post-overlay {
-        position: fixed; inset: 0; background: rgba(0,0,0,.7);
-        display: flex; align-items: center; justify-content: center; z-index: 1000;
-    }
-    .post-card {
-        background: #fff; padding: 34px; border-radius: 14px; max-width: 500px; width: 92%;
-        box-shadow: 0 8px 40px rgba(0,0,0,.25);
-    }
-    .post-card h2 { margin-top: 0; }
-
-    @keyframes pulse {
-        0%{transform:scale(1);box-shadow:0 0 0 0 rgba(40,167,69,.7)}
-        50%{transform:scale(1.05);box-shadow:0 0 0 10px rgba(40,167,69,0)}
-        100%{transform:scale(1);box-shadow:0 0 0 0 rgba(40,167,69,0)}
-    }
-</style>
-
-<!-- ===================== PHASE 1 — PRE-SESSION ===================== -->
-<div id="phasePreSession" class="phase-screen active">
-    <div class="pre-session-card">
-        <h2><i class="fa-solid fa-dumbbell"></i> Today's Session</h2>
-        <p style="color:#666;">Review your exercises and let us know your current pain level before we start.</p>
-
-        {% if workouts %}
-        <ul class="exercise-list">
-            {% for w in workouts %}
-            <li>
-                <span>{{ loop.index }}. {{ w.exercise_name }}</span>
-                <span class="meta">{{ w.sets }} sets × {{ w.reps }} reps</span>
-            </li>
-            {% endfor %}
-        </ul>
-
-        <div class="pain-slider-group">
-            <label>How much pain do you feel right now? <span class="pain-value" id="painBeforeVal">0</span> / 10</label>
-            <input type="range" id="painBeforeInput" min="0" max="10" value="0"
-                   oninput="document.getElementById('painBeforeVal').textContent=this.value">
+    <!-- Feedback Panel -->
+    <div class="feedback-panel">
+        <!-- Rep Counter -->
+        <div class="rep-counter">
+            <div class="count">
+                <span id="repCountText">0</span> / <span id="repTargetText">10</span>
+            </div>
+            <div class="label">
+                Reps (Set <span id="setIndexText">1</span> of <span id="setsTotalText">3</span>)
+            </div>
         </div>
 
-        <button class="btn-start-session" onclick="startSession()"><i class="fa-solid fa-play"></i> Start Today's Session</button>
-        {% else %}
-        <p style="color:#c00; margin-top: 16px;"><i class="fa-solid fa-triangle-exclamation"></i> No exercises assigned yet. Ask your clinician to create a plan.</p>
-        <a href="{{ url_for('patient_dashboard') }}" class="btn" style="margin-top:12px;display:inline-block;">← Back to Dashboard</a>
-        {% endif %}
+        <!-- Form Status -->
+        <div class="form-status">
+            <h4 style="margin-bottom: 10px;">Form Status</h4>
+            <div id="statusIndicator" class="status-indicator correct">✓ CORRECT FORM</div>
+            <div style="margin-top: 10px; text-align:center; color:#666;">
+                Score: <span id="frameScoreText">--</span> / 50
+            </div>
+        </div>
+
+        <!-- Real-time Feedback -->
+        <div class="error-messages">
+            <h4>Real-time Feedback</h4>
+            <div id="feedbackList">
+                <div class="error-item">Waiting for feedback...</div>
+            </div>
+        </div>
+
+        <!-- Language -->
+        <div class="card" style="padding: 12px;">
+            <h4 style="margin-bottom:8px;">Language</h4>
+            <select id="languageSelect" class="form-control">
+                <option value="English" selected>English</option>
+                <option value="Tamil">Tamil</option>
+                <option value="Chinese">Chinese</option>
+                <option value="Malay">Malay</option>
+                <option value="Thai">Thai</option>
+            </select>
+            <div style="font-size:0.8rem; opacity:0.7; margin-top:6px;">
+                API: <span id="apiBaseText">--</span>
+            </div>
+        </div>
+
+        <!-- Audio -->
+        <div class="audio-indicator" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div class="audio-icon">🔊</div>
+                <div>
+                    <strong>Voice Feedback: <span id="voiceStatusText">ON</span></strong><br>
+                    <small id="voiceHintText">Audio cues are active</small>
+                </div>
+            </div>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input id="voiceToggle" type="checkbox" checked />
+                <span style="font-weight:600;">Enable</span>
+            </label>
+        </div>
+        <!-- Exercise Mode -->
+        <div class="card" style="padding:15px;">
+            <h4>Exercise Mode</h4>
+
+            <div style="margin-bottom:10px;">
+                <label>
+                    <input type="radio" name="exerciseMode" value="auto" checked>
+                    Auto Detect
+                </label>
+                &nbsp;&nbsp;
+                <label>
+                    <input type="radio" name="exerciseMode" value="manual">
+                    Manual Select
+                </label>
+            </div>
+
+            <select id="manualExerciseSelect" class="form-control" disabled>
+                <option value="squat">Squat</option>
+                <option value="lifting_of_arms">Lifting of Arms</option>
+                <option value="lateral_trunk_tilt">Lateral Trunk Tilt</option>
+                <option value="trunk_rotation">Trunk Rotation</option>
+                <option value="pelvis_rotation">Pelvis Rotation</option>
+            </select>
+        </div>
+        <!-- Exercise Info -->
+        <div class="card" style="padding: 15px;">
+            <h4>Current Exercise</h4>
+            <p style="font-size: 0.85rem; margin-top: 10px;" id="exerciseMetaText">
+                Target: --<br />
+                ROM Target: --
+            </p>
+            <p style="font-size:0.9rem; margin-top:10px;">
+                Detected: <strong id="detectedExerciseText">--</strong>
+            </p>
+        </div>
+
+        <!-- Controls -->
+        <div class="session-controls">
+            <button id="pauseBtn" class="btn" style="flex: 1;">⏸️ Pause</button>
+            <button id="stopBtn" class="btn btn-danger" style="flex: 1;">⏹️ Stop Session</button>
+        </div>
+
+        <a href="{{ url_for('pain_checkin') }}" class="btn btn-success" style="text-align: center;">
+            Complete Set → Check-in
+        </a>
     </div>
 </div>
 
-<!-- ===================== PHASE 2 — LIVE SESSION ===================== -->
-<div id="phaseLiveSession" class="phase-screen">
-
-    <!-- Timers bar -->
-    <div class="timers-bar" style="max-width:1200px;margin:14px auto 0;padding:0 12px;">
-        <div class="timer-card">
-            <div class="timer-label">Session Time</div>
-            <div class="timer-value" id="sessionTimer">00:00</div>
-        </div>
-        <div class="timer-card">
-            <div class="timer-label">Exercise Time</div>
-            <div class="timer-value" id="exerciseTimer">00:00</div>
-        </div>
-    </div>
-
-    <div class="live-session-grid">
-        <!-- Left column: video + controls -->
-        <div>
-            <div class="video-panel-wrap">
-                <div class="skeleton-overlay">
-                    <strong>Skeleton Tracking: ON</strong><br>
-                    <small>Pose detection active</small>
-                </div>
-                <div class="video-container" id="videoContainer" style="display:none;">
-                    <video id="webcamVideo" autoplay playsinline muted></video>
-                    <canvas id="poseCanvas"></canvas>
-                </div>
-                <div class="video-placeholder" id="videoPlaceholder">
-                    <div class="icon"><i class="fa-solid fa-video"></i></div>
-                    <p>Camera will start when session begins</p>
-                </div>
-            </div>
-
-            <!-- Form status + score -->
-            <div class="form-status" style="margin-top:14px;">
-                <div id="formStatusBadge" class="badge analyzing"><i class="fa-solid fa-hourglass-half"></i> ANALYZING...</div>
-                <div class="score">Score: <span id="frameScoreText">--</span> / 50</div>
-            </div>
-
-            <!-- Realtime feedback -->
-            <div class="realtime-feedback" style="margin-top:14px;">
-                <h4><i class="fa-solid fa-robot"></i> AI Form Feedback</h4>
-                <div id="feedbackList">
-                    <div class="feedback-item info"><i class="fa-solid fa-camera"></i> Position yourself in frame to begin analysis</div>
-                </div>
-            </div>
-
-            <!-- Audio toggle -->
-            <div class="audio-indicator" style="margin-top:14px;">
-                <div><i class="fa-solid fa-volume-high"></i></div>
-                <div><strong>Voice Feedback: <span id="audioStatus">OFF</span></strong><br><small>Click to toggle</small></div>
-                <button onclick="toggleAudio()" style="margin-left:auto;padding:5px 10px;border:1px solid #ccc;border-radius:6px;cursor:pointer;background:#fff;">Toggle</button>
-            </div>
-        </div>
-
-        <!-- Right column: sidebar -->
-        <div class="session-sidebar">
-            <!-- Rep counter -->
-            <div class="s-card rep-counter-card">
-                <div class="count" id="repCount">0 / 10</div>
-                <div class="label" id="setLabel">Reps (Set 1 of 3)</div>
-            </div>
-
-            <!-- Session completion progress -->
-            <div class="s-card">
-                <h4>Session Completion</h4>
-                <div class="progress-bar-outer">
-                    <div class="progress-bar-inner" id="sessionProgressBar"></div>
-                </div>
-                <div class="progress-perc" id="sessionProgressText">0%</div>
-            </div>
-
-            <!-- Exercise steps -->
-            <div class="s-card">
-                <h4>Exercises</h4>
-                <ul class="exercise-step-list" id="exerciseStepList">
-                    {% for w in workouts %}
-                    <li id="exStep-{{ loop.index0 }}" class="{% if loop.first %}current{% else %}upcoming{% endif %}">
-                        <span class="step-icon">
-                            {% if loop.first %}
-                                <i class="fa-solid fa-circle-dot"></i>
-                            {% else %}
-                                <i class="fa-regular fa-circle"></i>
-                            {% endif %}
-                        </span>
-                        <span>{{ w.exercise_name }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-
-            <!-- Controls -->
-            <div class="session-controls">
-                <button class="btn btn-pause" onclick="togglePause()" id="pauseBtn"><i class="fa-solid fa-pause"></i> Pause</button>
-                <button class="btn btn-stop" onclick="stopSession()"><i class="fa-solid fa-stop"></i> Stop</button>
-            </div>
-            <button id="nextExerciseBtn" class="btn-next" onclick="nextExercise()"
-                {% if not workouts or workouts|length <= 1 %}style="display:none;"{% endif %}>
-                <span class="next-label">Next Exercise</span> <i class="fa-solid fa-arrow-right"></i>
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- Hidden workout data for JS -->
 <script>
-    const WORKOUTS = [
-        {% for w in workouts %}
-        { id: {{ w.id }}, name: "{{ w.exercise_name }}", sets: {{ w.sets }}, reps: {{ w.reps }} }{{ "," if not loop.last }}
-        {% endfor %}
-    ];
-</script>
+/* ===================== CONFIG ===================== */
 
-<script>
-    // ===================== STATE =====================
-    let sessionId = null;
-    let webcamStream = null;
-    let isAnalyzing = false;
-    let isPaused = false;
-    let audioEnabled = false;
+const API_BASE = window.location.origin;
+document.getElementById("apiBaseText").textContent = API_BASE;
 
-    let currentExIndex = 0;
-    let currentRep = 0;
-    let currentSet = 1;
-    let targetReps = WORKOUTS.length ? WORKOUTS[0].reps : 10;
-    let targetSets = WORKOUTS.length ? WORKOUTS[0].sets : 3;
+const THRESHOLD = 30.0;
+const COOLDOWN_SECONDS = 2;
+const POLL_MS = 66; //2000 , 66
 
-    let allScores = [];
-    let exerciseData = [];
-    let setsCompletedDict = {};
+const LANG_TO_BCP47 = {
+  English: "en-US",
+  Tamil: "ta-IN",
+  Chinese: "zh-CN",
+  Malay: "ms-MY",
+  Thai: "th-TH",
+};
 
-    // Timers
-    let sessionStartTs = null;
-    let exerciseStartTs = null;
-    let sessionTimerInterval = null;
-    let exerciseTimerInterval = null;
+/* ===================== DOM ===================== */
 
-    // ===================== HELPERS =====================
-    function fmt(seconds) {
-        const m = String(Math.floor(seconds / 60)).padStart(2, '0');
-        const s = String(seconds % 60).padStart(2, '0');
-        return m + ':' + s;
+const VIDEO = document.getElementById("webcamVideo");
+const camErrorOverlay = document.getElementById("camErrorOverlay");
+
+const statusIndicator = document.getElementById("statusIndicator");
+const scoreSpan = document.getElementById("frameScoreText");
+const feedbackBox = document.getElementById("feedbackList");
+
+const voiceToggle = document.getElementById("voiceToggle");
+const voiceStatusText = document.getElementById("voiceStatusText");
+const voiceHintText = document.getElementById("voiceHintText");
+
+const languageSelect = document.getElementById("languageSelect");
+
+const repCountText = document.getElementById("repCountText");
+const repTargetText = document.getElementById("repTargetText");
+const setIndexText = document.getElementById("setIndexText");
+const setsTotalText = document.getElementById("setsTotalText");
+
+const detectedExerciseText = document.getElementById("detectedExerciseText");
+const exerciseMetaText = document.getElementById("exerciseMetaText");
+
+const pauseBtn = document.getElementById("pauseBtn");
+const stopBtn  = document.getElementById("stopBtn");
+
+const canvas = document.createElement("canvas");
+const ctx = canvas.getContext("2d");
+
+/* ===================== STATE ===================== */
+let exerciseMode = "auto";
+let manualExercise = "squat";
+
+const modeRadios = document.querySelectorAll("input[name='exerciseMode']");
+const manualSelect = document.getElementById("manualExerciseSelect");
+
+modeRadios.forEach(r => {
+  r.addEventListener("change", () => {
+    exerciseMode = r.value;
+
+    if (exerciseMode === "manual") {
+      manualSelect.disabled = false;
+    } else {
+      manualSelect.disabled = true;
     }
+  });
+});
 
-    function getWorkoutId() {
-        return WORKOUTS.length ? WORKOUTS[currentExIndex].id : null;
+if (manualSelect) {
+  manualSelect.addEventListener("change", () => {
+    manualExercise = manualSelect.value;
+  });
+}
+
+let isPaused = false;
+let pollTimer = null;
+let inflight = false;
+
+let LAST_FEEDBACK = null;
+let LAST_FEEDBACK_TIME = 0;
+
+let lastSpokenHash = "";
+let lastSpokenAt = 0;
+const SPEAK_COOLDOWN_MS = 8000;
+
+function getLanguageName() {
+  return languageSelect ? languageSelect.value : "English";
+}
+function getLanguageCode() {
+  return LANG_TO_BCP47[getLanguageName()] || "en-US";
+}
+
+/* ===================== EXERCISE PLAN UI ===================== */
+
+const EXERCISE_PLAN = {
+  "lifting_of_arms":    { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Raise arms to shoulder height" },
+  "lateral_trunk_tilt": { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Tilt ~20–30° each side" },
+  "trunk_rotation":     { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Rotate comfortably (no pain)" },
+  "pelvis_rotation":    { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Small controlled pelvis rotation" },
+  "squat":              { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Hip crease to knee level (as tolerated)" },
+  "idle":            { reps: 0, sets: 0, target: "You are Idle", rom: "--" },
+};
+
+function normalizeExerciseName(name) {
+  if (!name) return "idle";
+  const n = name.toLowerCase().trim();
+
+  if (n.includes("squat")) return "squat";
+  if (n.includes("lifting")) return "lifting_of_arms";
+  if (n.includes("lateral")) return "lateral_trunk_tilt";
+  if (n.includes("trunk")) return "trunk_rotation";
+  if (n.includes("pelvis")) return "pelvis_rotation";
+
+  if (EXERCISE_PLAN[n]) return n;
+  return "idle";
+}
+
+function updateExerciseUI(exerciseNameRaw) {
+  const key = normalizeExerciseName(exerciseNameRaw);
+  const plan = EXERCISE_PLAN[key] || EXERCISE_PLAN["unknown"];
+
+  if (detectedExerciseText) detectedExerciseText.textContent = key.replaceAll("_", " ");
+  if (exerciseMetaText) {
+    exerciseMetaText.innerHTML = `Target: ${plan.target}<br />ROM Target: ${plan.rom}`;
+  }
+}
+
+/* ===================== UI HELPERS ===================== */
+
+function setStatus(status, score) {
+  scoreSpan.textContent = Number(score || 0).toFixed(2);
+  statusIndicator.classList.remove("correct", "incorrect");
+
+  if (status === "CORRECT") {
+    statusIndicator.classList.add("correct");
+    statusIndicator.textContent = "✓ CORRECT FORM";
+  } else if (status === "WRONG") {
+    statusIndicator.classList.add("incorrect");
+    statusIndicator.textContent = "✗ FORM NEEDS ADJUSTMENT";
+  } else if (status === "NO_POSE") {
+    statusIndicator.classList.add("incorrect");
+    statusIndicator.textContent = "… POSE NOT DETECTED";
+  } else if (status === "NO_FRAME") {
+    statusIndicator.classList.add("incorrect");
+    statusIndicator.textContent = "… NO FRAME";
+  } else if (status === "WARMUP") {
+    statusIndicator.classList.add("incorrect");
+    statusIndicator.textContent = "… WARMING UP";
+  } else if (status === "ERROR") {
+    statusIndicator.classList.add("incorrect");
+    statusIndicator.textContent = "✗ ERROR";
+  } else {
+    statusIndicator.classList.add("incorrect");
+    statusIndicator.textContent = "… PROCESSING";
+  }
+}
+
+function renderFeedback(items) {
+  if (items && items.length > 0) {
+    LAST_FEEDBACK = items;
+    LAST_FEEDBACK_TIME = Date.now();
+  }
+
+  const displayItems = (LAST_FEEDBACK && LAST_FEEDBACK.length > 0) ? LAST_FEEDBACK : null;
+  feedbackBox.innerHTML = "";
+
+  if (!displayItems) {
+    const div = document.createElement("div");
+    div.className = "error-item";
+    div.textContent = "Waiting for feedback...";
+    feedbackBox.appendChild(div);
+    return;
+  }
+
+  displayItems.slice(0, 4).forEach((txt) => {
+    const div = document.createElement("div");
+    div.className = "error-item";
+    div.textContent = "⚠️ " + txt;
+    feedbackBox.appendChild(div);
+  });
+
+  const ageSec = Math.round((Date.now() - LAST_FEEDBACK_TIME) / 1000);
+  const ts = document.createElement("div");
+  ts.style.fontSize = "0.8rem";
+  ts.style.opacity = "0.6";
+  ts.style.marginTop = "8px";
+  ts.textContent = `Last updated ${ageSec}s ago`;
+  feedbackBox.appendChild(ts);
+}
+
+/* ===================== SERVER TTS ===================== */
+
+/* ===================== SERVER TTS (FIXED) ===================== */
+
+let ttsAudio = null;
+let isSpeaking = false;
+let ttsQueue = [];
+
+function setVoiceUI(on) {
+  if (voiceStatusText) voiceStatusText.textContent = on ? "ON" : "OFF";
+  if (voiceHintText) voiceHintText.textContent = on ? "Audio cues are active" : "Audio cues are muted";
+}
+
+function stopSpeaking() {
+  try {
+    if (ttsAudio) {
+      ttsAudio.pause();
+      ttsAudio.src = "";
+      ttsAudio = null;
     }
+  } catch (e) {}
+  ttsQueue = [];
+  isSpeaking = false;
+}
 
-    function getTotalRepsCompleted() {
-        if (currentRep >= targetReps && currentSet >= targetSets) return targetSets * targetReps;
-        return ((currentSet - 1) * targetReps) + currentRep;
-    }
+async function playNextTTS() {
+  if (ttsQueue.length === 0) {
+    isSpeaking = false;
+    return;
+  }
 
-    function calcSessionProgress() {
-        let totalReq = 0, totalDone = 0;
-        WORKOUTS.forEach((w, i) => {
-            const exReq = w.sets * w.reps;
-            totalReq += exReq;
-            if (i < currentExIndex) {
-                // Past exercise — use saved data if available, else 0
-                const saved = exerciseData[i];
-                if (saved) {
-                    totalDone += Object.values(saved.sets_completed).reduce((a, b) => a + b, 0);
-                }
-                // If no saved data, count 0 reps done (not started / skipped)
-            } else if (i === currentExIndex) {
-                totalDone += getTotalRepsCompleted();
-            }
-            // Future exercises (i > currentExIndex) contribute 0 to totalDone
-        });
-        return totalReq > 0 ? Math.round(totalDone / totalReq * 100) : 0;
-    }
+  isSpeaking = true;
+  const text = ttsQueue.shift();
+  const language = getLanguageName();
 
-    function updateSessionProgress() {
-        const perc = calcSessionProgress();
-        document.getElementById('sessionProgressBar').style.width = perc + '%';
-        document.getElementById('sessionProgressText').textContent = perc + '%';
-    }
-
-    // ===================== PHASE 1 → PHASE 2 =====================
-    async function startSession() {
-        const painBefore = parseInt(document.getElementById('painBeforeInput').value);
-        try {
-            const resp = await fetch('/api/session/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pain_before: painBefore })
-            });
-            const data = await resp.json();
-            if (!data.ok) { alert('Error creating session: ' + (data.error || 'Unknown')); return; }
-            sessionId = data.session_id;
-        } catch (err) {
-            alert('Network error creating session.'); console.error(err); return;
-        }
-
-        // Switch phases
-        document.getElementById('phasePreSession').classList.remove('active');
-        document.getElementById('phaseLiveSession').classList.add('active');
-
-        // Start timers
-        sessionStartTs = Date.now();
-        exerciseStartTs = Date.now();
-        sessionTimerInterval = setInterval(() => {
-            if (!isPaused) document.getElementById('sessionTimer').textContent = fmt(Math.floor((Date.now() - sessionStartTs) / 1000));
-        }, 1000);
-        exerciseTimerInterval = setInterval(() => {
-            if (!isPaused) document.getElementById('exerciseTimer').textContent = fmt(Math.floor((Date.now() - exerciseStartTs) / 1000));
-        }, 1000);
-
-        setsCompletedDict = {};
-        updateRepCounter();
-        updateExerciseSteps();
-        updateSessionProgress();
-
-        await startWebcam();
-
-        await fetch('/api/session/start', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ threshold: 30.0, workout_id: getWorkoutId() })
-        });
-    }
-
-    // ===================== WEBCAM =====================
-    async function startWebcam() {
-        try {
-            webcamStream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 640, height: 480, facingMode: 'user' }, audio: false
-            });
-            const video = document.getElementById('webcamVideo');
-            video.srcObject = webcamStream;
-            document.getElementById('videoPlaceholder').style.display = 'none';
-            document.getElementById('videoContainer').style.display = 'block';
-            isAnalyzing = true;
-            analyzePose();
-            addFeedback('success', 'Camera connected — Begin your exercise');
-        } catch (err) {
-            console.error('Webcam error:', err);
-            addFeedback('error', 'Could not access camera. Analysis will be limited.');
-            isAnalyzing = true;
-            analyzePose();
-        }
-    }
-
-    // ===================== POSE ANALYSIS (simulated) =====================
-    function analyzePose() {
-        if (!isAnalyzing || isPaused) { setTimeout(analyzePose, 500); return; }
-        const formScore = Math.floor(Math.random() * 30) + 20;
-        updateFormStatus(formScore);
-        if (Math.random() > 0.9) incrementRep();
-        setTimeout(analyzePose, 100);
-    }
-
-    function updateFormStatus(score) {
-        const badge = document.getElementById('formStatusBadge');
-        const scoreText = document.getElementById('frameScoreText');
-        scoreText.textContent = score;
-        allScores.push(score);
-        if (score >= 40) {
-            badge.className = 'badge correct'; badge.innerHTML = '<i class="fa-solid fa-circle-check"></i> CORRECT FORM';
-        } else if (score >= 25) {
-            badge.className = 'badge analyzing'; badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ADJUST FORM';
-            if (Math.random() > .95) {
-                const tips = ['Keep your back straight','Slow down the movement','Extend fully at the top','Control the descent','Keep knees aligned with toes'];
-                addFeedback('warning', 'Tip: ' + tips[Math.floor(Math.random() * tips.length)]);
-            }
-        } else {
-            badge.className = 'badge incorrect'; badge.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> FORM NEEDS WORK';
-            if (audioEnabled) speakFeedback('Adjust your form');
-        }
-    }
-
-    // ===================== REP / SET COUNTING =====================
-    function incrementRep() {
-        currentRep++;
-        setsCompletedDict[String(currentSet)] = currentRep;
-
-        if (currentRep >= targetReps) {
-            if (currentSet >= targetSets) {
-                currentRep = targetReps;
-                setsCompletedDict[String(currentSet)] = targetReps;
-                isAnalyzing = false;
-                addFeedback('success', 'Exercise complete!');
-                const btn = document.getElementById('nextExerciseBtn');
-                if (currentExIndex >= WORKOUTS.length - 1) {
-                    btn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Finish Session';
-                    addFeedback('success', 'All exercises complete! Great job!');
-                } else {
-                    addFeedback('info', 'Click "Next Exercise" to continue.');
-                }
-                btn.style.display = 'block';
-                btn.style.animation = 'pulse 1s infinite';
-            } else {
-                addFeedback('success', '✓ Set ' + currentSet + ' complete! Starting set ' + (currentSet + 1));
-                currentRep = 0;
-                currentSet++;
-                setsCompletedDict[String(currentSet)] = 0;
-            }
-        }
-        updateRepCounter();
-        updateSessionProgress();
-    }
-
-    function updateRepCounter() {
-        document.getElementById('repCount').textContent = currentRep + ' / ' + targetReps;
-        document.getElementById('setLabel').textContent = 'Reps (Set ' + currentSet + ' of ' + targetSets + ')';
-    }
-
-    // ===================== EXERCISE NAVIGATION =====================
-    async function nextExercise() {
-        await saveCurrentExercise();
-        if (currentExIndex >= WORKOUTS.length - 1) {
-            showPostSession();
-            return;
-        }
-        currentExIndex++;
-        const w = WORKOUTS[currentExIndex];
-        targetSets = w.sets;
-        targetReps = w.reps;
-        currentRep = 0;
-        currentSet = 1;
-        allScores = [];
-        setsCompletedDict = {};
-        isAnalyzing = true;
-        exerciseStartTs = Date.now();
-        updateRepCounter();
-        updateExerciseSteps();
-        updateSessionProgress();
-        addFeedback('info', 'Now: ' + w.name);
-        const btn = document.getElementById('nextExerciseBtn');
-        btn.style.animation = '';
-        btn.innerHTML = (currentExIndex >= WORKOUTS.length - 1)
-            ? '<i class="fa-solid fa-circle-check"></i> Finish Session'
-            : '<span class="next-label">Next Exercise</span> <i class="fa-solid fa-arrow-right"></i>';
-        await fetch('/api/session/start', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ threshold: 30.0, workout_id: w.id })
-        });
-    }
-
-    async function saveCurrentExercise() {
-        const w = WORKOUTS[currentExIndex];
-        const avgQ = allScores.length > 0
-            ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length) : 0;
-        const setsReq = {};
-        for (let i = 1; i <= w.sets; i++) setsReq[String(i)] = w.reps;
-        for (let i = 1; i <= w.sets; i++) {
-            if (!(String(i) in setsCompletedDict)) setsCompletedDict[String(i)] = 0;
-        }
-        const exStartISO = new Date(exerciseStartTs).toISOString();
-        const exEndISO = new Date().toISOString();
-        const payload = {
-            session_id: sessionId,
-            workout_id: w.id,
-            exercise_start_time: exStartISO,
-            exercise_end_time: exEndISO,
-            quality_score: avgQ,
-            sets_required: setsReq,
-            sets_completed: { ...setsCompletedDict }
-        };
-        exerciseData[currentExIndex] = payload;
-        try {
-            const resp = await fetch('/api/session/exercise/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const result = await resp.json();
-            if (result.ok) addFeedback('success', 'Exercise saved!');
-        } catch (err) {
-            console.error('Error saving exercise:', err);
-        }
-    }
-
-    function updateExerciseSteps() {
-        WORKOUTS.forEach((w, i) => {
-            const li = document.getElementById('exStep-' + i);
-            if (!li) return;
-            const icon = li.querySelector('.step-icon i');
-            if (i < currentExIndex) {
-                li.className = 'completed';
-                icon.className = 'fa-solid fa-circle-check';
-            } else if (i === currentExIndex) {
-                li.className = 'current';
-                icon.className = 'fa-solid fa-circle-dot';
-            } else {
-                li.className = 'upcoming';
-                icon.className = 'fa-regular fa-circle';
-            }
-        });
-    }
-
-    // ===================== STOP / POST-SESSION =====================
-    async function stopSession() {
-        if (!confirm('End this session and save your progress?')) return;
-        await saveCurrentExercise();
-        showPostSession();
-    }
-
-    function showPostSession() {
-        isAnalyzing = false;
-        clearInterval(sessionTimerInterval);
-        clearInterval(exerciseTimerInterval);
-        if (webcamStream) webcamStream.getTracks().forEach(t => t.stop());
-
-        const overlay = document.createElement('div');
-        overlay.className = 'post-overlay';
-        overlay.innerHTML = '<div class="post-card">' +
-            '<h2><i class="fa-solid fa-circle-check"></i> Session Complete!</h2>' +
-            '<p style="color:#666;">Overall progress: <strong>' + calcSessionProgress() + '%</strong></p>' +
-            '<div class="pain-slider-group">' +
-                '<label>Pain After (0-10): <span class="pain-value" id="painAfterVal">0</span></label>' +
-                '<input type="range" id="painAfterInput" min="0" max="10" value="0" ' +
-                    'oninput="document.getElementById(\'painAfterVal\').textContent=this.value">' +
-            '</div>' +
-            '<div class="pain-slider-group">' +
-                '<label>Effort Level (1-10): <span class="pain-value" id="effortVal">5</span></label>' +
-                '<input type="range" id="effortInput" min="1" max="10" value="5" ' +
-                    'oninput="document.getElementById(\'effortVal\').textContent=this.value">' +
-            '</div>' +
-            '<div style="margin-bottom:14px;">' +
-                '<label style="font-weight:600;display:block;margin-bottom:4px;">Notes (optional):</label>' +
-                '<textarea id="postNotes" rows="2" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;"></textarea>' +
-            '</div>' +
-            '<button onclick="completeSession()" style="width:100%;padding:14px;font-size:1.05rem;font-weight:700;' +
-                'border:none;border-radius:10px;background:linear-gradient(135deg,#007bff,#0056d2);color:#fff;cursor:pointer;">' +
-                'Save & View Summary</button>' +
-            '</div>';
-        document.body.appendChild(overlay);
-    }
-
-    async function completeSession() {
-        const painAfter = parseInt(document.getElementById('painAfterInput').value);
-        const effort = parseInt(document.getElementById('effortInput').value);
-        const notes = document.getElementById('postNotes').value;
-        try {
-            const resp = await fetch('/api/session/complete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    session_id: sessionId,
-                    pain_after: painAfter,
-                    effort_level: effort,
-                    notes: notes
-                })
-            });
-            const result = await resp.json();
-            if (result.ok) {
-                window.location.href = '/patient/summary/' + sessionId;
-            } else {
-                alert('Error: ' + (result.error || 'Unknown'));
-            }
-        } catch (err) {
-            console.error(err);
-            alert('Network error saving session.');
-        }
-    }
-
-    // ===================== MISC CONTROLS =====================
-    function addFeedback(type, message) {
-        const list = document.getElementById('feedbackList');
-        const item = document.createElement('div');
-        item.className = 'feedback-item ' + type;
-        item.textContent = message;
-        list.insertBefore(item, list.firstChild);
-        while (list.children.length > 10) list.removeChild(list.lastChild);
-        if (audioEnabled && (type === 'warning' || type === 'error'))
-            speakFeedback(message);
-    }
-
-    function toggleAudio() {
-        audioEnabled = !audioEnabled;
-        document.getElementById('audioStatus').textContent = audioEnabled ? 'ON' : 'OFF';
-        addFeedback('info', audioEnabled ? 'Voice feedback enabled' : 'Voice feedback disabled');
-    }
-
-    function speakFeedback(text) {
-        if ('speechSynthesis' in window) {
-            const u = new SpeechSynthesisUtterance(text);
-            u.rate = 1.0; u.pitch = 1.0;
-            window.speechSynthesis.speak(u);
-        }
-    }
-
-    function togglePause() {
-        isPaused = !isPaused;
-        document.getElementById('pauseBtn').innerHTML = isPaused
-            ? '<i class="fa-solid fa-play"></i> Resume'
-            : '<i class="fa-solid fa-pause"></i> Pause';
-        addFeedback('info', isPaused ? 'Session paused' : 'Session resumed');
-    }
-
-    window.addEventListener('beforeunload', () => {
-        if (webcamStream) webcamStream.getTracks().forEach(t => t.stop());
+  try {
+    const res = await fetch(`${API_BASE}/api/tts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, language })
     });
+
+    if (!res.ok) {
+      console.error("TTS HTTP error", res.status);
+      isSpeaking = false;
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    ttsAudio = new Audio(url);
+
+    // 🔥 Faster playback
+    ttsAudio.playbackRate = 1.25;
+
+    ttsAudio.onended = () => {
+      URL.revokeObjectURL(url);
+      playNextTTS();
+    };
+
+    await ttsAudio.play();
+
+  } catch (e) {
+    console.error("TTS error:", e);
+    isSpeaking = false;
+  }
+}
+
+function queueSpeech(text) {
+  if (!text) return;
+  if (voiceToggle && !voiceToggle.checked) return;
+
+  ttsQueue.push(text);
+
+  if (!isSpeaking) {
+    playNextTTS();
+  }
+}
+
+async function speakText(text) {
+  if (!text) return;
+  queueSpeech(text);
+}
+
+async function speakFeedbackList(items) {
+  if (!items || items.length === 0) return;
+
+  const now = Date.now();
+  if (now - lastSpokenAt < SPEAK_COOLDOWN_MS) return;
+
+  const hash = items.join("|");
+  if (hash === lastSpokenHash) return;
+
+  const short = items.slice(0, 2).join(". ");
+  queueSpeech(short);
+
+  lastSpokenHash = hash;
+  lastSpokenAt = now;
+}
+
+if (voiceToggle) {
+  setVoiceUI(voiceToggle.checked);
+
+  voiceToggle.addEventListener("change", () => {
+    setVoiceUI(voiceToggle.checked);
+    if (!voiceToggle.checked) stopSpeaking();
+  });
+}
+
+if (languageSelect) {
+  languageSelect.addEventListener("change", async () => {
+    stopSpeaking();
+    await startSession();
+  });
+}
+
+/* ===================== WEBCAM ===================== */
+
+async function startWebcam() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (camErrorOverlay) camErrorOverlay.style.display = "flex";
+    return false;
+  }
+
+  try {
+    const constraints = { video: { facingMode: "user" }, audio: false };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    VIDEO.srcObject = stream;
+    await new Promise((resolve) => { VIDEO.onloadedmetadata = () => resolve(); });
+    await VIDEO.play();
+
+    if (camErrorOverlay) camErrorOverlay.style.display = "none";
+    return true;
+  } catch (err) {
+    console.error("Camera error:", err);
+    if (camErrorOverlay) camErrorOverlay.style.display = "flex";
+    return false;
+  }
+}
+
+function stopCamera() {
+  try {
+    if (VIDEO && VIDEO.srcObject) {
+      VIDEO.srcObject.getTracks().forEach(t => t.stop());
+      VIDEO.srcObject = null;
+    }
+  } catch (e) {
+    console.warn("stopCamera failed:", e);
+  }
+}
+
+function pauseCameraPreview() {
+  try { VIDEO.pause(); } catch(e) {}
+}
+
+async function resumeCameraPreview() {
+  try { await VIDEO.play(); } catch(e) {}
+}
+
+/* ===================== BACKEND ===================== */
+
+async function startSession() {
+  try {
+    await fetch(`${API_BASE}/api/session/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threshold: THRESHOLD,
+        cooldown_seconds: COOLDOWN_SECONDS,
+        language: getLanguageName(),
+      })
+    });
+  } catch (e) {
+    console.error("startSession failed:", e);
+    setStatus("ERROR", 0);
+    renderFeedback(["Network error: failed to reach backend (session start)"]);
+  }
+}
+
+function grabFrameDataURL() {
+  const w = VIDEO.videoWidth, h = VIDEO.videoHeight;
+  if (!w || !h) return null;
+
+  const targetW = 640;
+  const targetH = Math.round((h / w) * targetW);
+
+  canvas.width = targetW;
+  canvas.height = targetH;
+  ctx.drawImage(VIDEO, 0, 0, targetW, targetH);
+  return canvas.toDataURL("image/jpeg", 0.65);
+}
+
+function updateRepUIFromOut(out) {
+  // ✅ preferred: rep_info object from backend
+  if (out && out.rep_info && typeof out.rep_info === "object") {
+    const r = out.rep_info;
+    if (repCountText && r.rep_now != null) repCountText.textContent = r.rep_now;
+    if (repTargetText && r.rep_target != null) repTargetText.textContent = r.rep_target;
+    if (setIndexText && r.set_now != null) setIndexText.textContent = r.set_now;
+    if (setsTotalText && r.set_target != null) setsTotalText.textContent = r.set_target;
+    return;
+  }
+
+  // fallback: if you ever return flat keys
+  if (repCountText && out.rep_count != null) repCountText.textContent = out.rep_count;
+  if (repTargetText && out.rep_target != null) repTargetText.textContent = out.rep_target;
+  if (setIndexText && out.set_index != null) setIndexText.textContent = out.set_index;
+  if (setsTotalText && out.sets_total != null) setsTotalText.textContent = out.sets_total;
+}
+
+async function pollFeedback() {
+  if (inflight) return;
+  inflight = true;
+
+  const frame_b64 = grabFrameDataURL();
+  if (!frame_b64) {
+    inflight = false;
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/live_feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      //body: JSON.stringify({ frame_b64, language: getLanguageName() })
+      body: JSON.stringify({
+            frame_b64,
+            language: getLanguageName(),
+            mode: exerciseMode,
+            manual_exercise: manualExercise
+          })
+    });
+
+    const out = await res.json().catch(() => ({}));
+
+    // ✅ always update rep UI if present
+    updateRepUIFromOut(out);
+
+    // ✅ detected exercise + meta
+    if (out.exercise_name) updateExerciseUI(out.exercise_name);
+
+    if (!res.ok) {
+      setStatus("ERROR", 0);
+      renderFeedback([out.error || `Backend error (HTTP ${res.status})`]);
+      return;
+    }
+
+    setStatus(out.form_status, out.frame_score);
+
+    let fb = out.llm_feedback;
+    if (typeof fb === "string") fb = [fb];
+    renderFeedback(fb);
+
+    if (out.form_status === "WRONG" && fb && fb.length > 0) {
+      await speakFeedbackList(fb);
+    }
+
+  } catch (e) {
+    console.error("pollFeedback failed:", e);
+    setStatus("ERROR", 0);
+    renderFeedback(["Network error: failed to reach backend"]);
+  } finally {
+    inflight = false;
+  }
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(() => {
+    if (!isPaused) pollFeedback();
+  }, POLL_MS);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+/* ===================== BUTTONS ===================== */
+
+if (pauseBtn) {
+  pauseBtn.addEventListener("click", async () => {
+    isPaused = !isPaused;
+    if (isPaused) {
+      pauseBtn.textContent = "▶️ Resume";
+      pauseCameraPreview();
+      stopSpeaking();
+    } else {
+      pauseBtn.textContent = "⏸️ Pause";
+      await resumeCameraPreview();
+      await pollFeedback();
+    }
+  });
+}
+
+if (stopBtn) {
+  stopBtn.addEventListener("click", async () => {
+    isPaused = true;
+    stopPolling();
+    stopCamera();
+    stopSpeaking();
+
+    if (pauseBtn) pauseBtn.disabled = true;
+    stopBtn.disabled = true;
+    stopBtn.textContent = "✅ Session Stopped";
+
+    setStatus("NO_FRAME", 0);
+    renderFeedback(["Session stopped."]);
+  });
+}
+
+/* ===================== INIT ===================== */
+
+(async function init() {
+    const camOk = await startWebcam();
+    if (!camOk) return;
+
+    await startSession();
+    await pollFeedback();
+    startPolling();
+})();
 </script>
 {% endblock %}

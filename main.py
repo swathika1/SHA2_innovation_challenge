@@ -1,40 +1,100 @@
-"""
-main.py - Home Rehab Coach Flask Application
-With SQLite database integration, Video Call features, and CV/ML Pipeline
-"""
-
-import sys
 import os
-# Ensure current directory is in sys.path for local imports
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+os.environ["TRANSFORMERS_NO_TF"] = "1"
+os.environ["USE_TF"] = "0"
 
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
-from werkzeug.security import generate_password_hash, check_password_hash
-from database import get_db, close_db, query_db, execute_db, load_optimization_data, load_patient_optimization_data
-from functools import wraps
-from datetime import datetime, date
-import uuid
-import traceback
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session
+from flask_sqlalchemy import SQLAlchemy
+from flask_session import Session
+from flask import request, jsonify
+from flask import request, jsonify
+from Rehab_Scorer_Coach.src.web_pipeline import WebRehabPipeline
+from flask_cors import CORS # type: ignore
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from datetime import datetime
+import os
+from optim import get_top3_recommendations, optimize_all_patients, build_demo_data, load_dataset
 
-# Import MeriLion chatbot modules
-try:
-    from merilion_client import query_merilion_sync
-    from risk_engine import calculate_risk_score, REFERRAL_MESSAGES
-    from exercise_advisor import get_exercise_modification
-    from langdetect import detect as detect_language
-    CHATBOT_AVAILABLE = True
-except ImportError as e:
-    CHATBOT_AVAILABLE = False
-    print(f"[WARNING] Chatbot modules not fully available: {e}")
+# main.py (top-level)
+import os
+import sys
+import time
+import socket
+import subprocess
+from pathlib import Path
+import subprocess, sys, os, time, requests
+import hashlib
+import tempfile
+import os
+import asyncio
+from flask import request, jsonify, send_file
+import edge_tts
 
-# Import optimization module (from computer_vision branch)
-try:
-    from optim import get_top3_recommendations, optimize_all_patients, GUROBI_AVAILABLE
-    OPTIM_AVAILABLE = True
-except ImportError as e:
-    OPTIM_AVAILABLE = False
-    GUROBI_AVAILABLE = False
-    print(f"[WARNING] optim module not found - optimization features disabled: {e}")
+
+OPENPOSE_PORT = 9001
+OPENPOSE_URL = f"http://127.0.0.1:{OPENPOSE_PORT}"
+OPENPOSE_LOG = Path(__file__).resolve().parent / "openpose_server.log"
+OPENPOSE_PROC = None
+
+def _port_open(host: str, port: int, timeout: float = 0.2) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def start_openpose_server():
+    host = "127.0.0.1"
+    port = 9001
+    url = f"http://{host}:{port}/health"
+
+    # If already running, do nothing
+    try:
+        r = requests.get(url, timeout=1.0)
+        if r.status_code == 200:
+            print("[OPENPOSE] already running")
+            return
+    except Exception:
+        pass
+
+    log_path = Path(__file__).resolve().parent / "openpose_server.log"
+    server_py = Path(__file__).resolve().parent / "openpose_http_server.py"
+
+    if not server_py.exists():
+        raise RuntimeError(f"openpose_http_server.py not found at {server_py}")
+
+    print("[OPENPOSE] starting server...")
+
+    with open(log_path, "w") as f:
+        subprocess.Popen(
+            [sys.executable, str(server_py)],
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            cwd=str(Path(__file__).resolve().parent),
+        )
+
+    # Wait until server becomes healthy
+    timeout = 20  # seconds
+    start = time.time()
+
+    while time.time() - start < timeout:
+        try:
+            r = requests.get(url, timeout=1.0)
+            if r.status_code == 200:
+                print("[OPENPOSE] ready")
+                return
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    raise RuntimeError(f"OpenPose server not healthy. Check {log_path}")
+#from Rehab_Scorer_Coach.src.meralion_client import MeralionClient
+
+#MERALION_API_KEY = os.environ.get("MERALION_API_KEY", "oyNXaKPBnylXWVMxINztmNBfEBHqVZmTpKzz2HE")
+#MERALION = MeralionClient(MERALION_API_KEY) if MERALION_API_KEY else None
+
+# Create instance folder if it doesn't exist
+os.makedirs('instance', exist_ok=True)
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'  # Required for sessions
@@ -78,11 +138,67 @@ def get_current_user():
         return query_db('SELECT * FROM users WHERE id = ?', (session['user_id'],), one=True)
     return None
 
+VOICE_MAP = {
+    "English": "en-US-JennyNeural",
+    "Tamil":   "ta-IN-ValluvarNeural",
+    "Chinese": "zh-CN-XiaoxiaoNeural",
+    "Malay":   "ms-MY-YasminNeural",
+    "Thai":    "th-TH-PremwadeeNeural",
+}
 
-@app.context_processor
-def inject_user():
-    """Make current user available in all templates as 'user'."""
-    return {'user': get_current_user()}
+def _tts_cache_path(text: str, language: str) -> str:
+    h = hashlib.md5(f"{language}|{text}".encode("utf-8")).hexdigest()
+    cache_dir = os.path.join(tempfile.gettempdir(), "rehab_tts_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, f"{h}.mp3")
+
+async def _synth_to_file(text: str, voice: str, out_path: str):
+    communicate = edge_tts.Communicate(text=text, voice=voice)
+    await communicate.save(out_path)
+
+@app.route("/api/tts", methods=["POST"])
+def api_tts():
+    data = request.get_json(force=True) or {}
+
+    text = (data.get("text") or "").strip()
+    language = (data.get("language") or "English").strip()
+
+    if isinstance(text, list):
+        text = ". ".join(text)
+
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+
+    voice = VOICE_MAP.get(language, VOICE_MAP["English"])
+    out_path = _tts_cache_path(text, language)
+
+    try:
+        if not os.path.exists(out_path):
+            print("🔊 Generating new TTS file")
+
+            # SAFE asyncio call inside Flask
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(_synth_to_file(text, voice, out_path))
+            loop.close()
+
+        else:
+            print("♻️ Using cached TTS")
+
+        return send_file(out_path, mimetype="audio/mpeg", as_attachment=False)
+
+    except Exception as e:
+        print("❌ TTS ERROR:", e)
+        return jsonify({"error": f"TTS failed: {type(e).__name__}: {e}"}), 500
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+# ==================== FLASK-LOGIN USER LOADER ====================
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 
 # ==================== AUTH ROUTES ====================
@@ -188,6 +304,49 @@ def api_logout():
     session.clear()
     return jsonify({'success': True}), 200
 
+old_code = """
+@app.route("/api/tts", methods=["POST"])
+def api_tts():
+    data = request.get_json(force=True) or {}
+    text = (data.get("text") or "").strip()
+    lang = (data.get("lang") or "en").strip()
+
+    if not text:
+        return jsonify({"error": "text missing"}), 400
+
+    # Map your UI language names to Google TTS codes
+    lang_map = {
+        "English": "en",
+        "Tamil": "ta",
+        "Chinese": "zh-CN",
+        "Malay": "ms",
+        "Thai": "th",
+    }
+    glang = lang_map.get(lang, "en")
+
+    # Google translate TTS endpoint
+    q = urllib.parse.quote(text)
+    url = (
+        "https://translate.google.com/translate_tts"
+        f"?ie=UTF-8&client=tw-ob&tl={glang}&q={q}"
+    )
+
+    headers = {
+        "User-Agent": "Mozilla/5.0"  # needed or Google blocks
+    }
+
+    r = requests.get(url, headers=headers, timeout=15)
+    if not r.ok:
+        return jsonify({"error": f"TTS failed HTTP {r.status_code}: {r.text[:200]}"}), 500
+
+    # Return MP3 bytes
+    return send_file(
+        io.BytesIO(r.content),
+        mimetype="audio/mpeg",
+        as_attachment=False,
+        download_name="tts.mp3",
+    )
+"""
 
 @app.route('/api/current-user', methods=['GET'])
 def api_current_user():
@@ -2105,351 +2264,114 @@ SESSION_STATE = {
     "cooldown_until": 0
 }
 
-@app.route("/api/session/create", methods=["POST"])
-@login_required
-def api_session_create():
-    """Create a new session record with pain_before. Returns session_id."""
-    try:
-        data = request.get_json(force=True) or {}
-        pain_before = data.get("pain_before", 0)
-        group_id = data.get("session_group_id", f"SG-{uuid.uuid4().hex[:12]}")
+old_route = """
+@app.route("/api/session/start", methods=["POST"])
+def api_session_start():
+    data = request.get_json(force=True) or {}
+    threshold = float(data.get("threshold", 30.0))
+    exercise_name = data.get("exercise_name", "exercise")
+    cooldown_seconds = float(data.get("cooldown_seconds", 10.0))
 
-        session_id = execute_db('''
-            INSERT INTO sessions (patient_id, session_group_id, started_at, pain_before)
-            VALUES (?, ?, CURRENT_TIMESTAMP, ?)
-        ''', (session['user_id'], group_id, pain_before))
+    PIPELINE.reset(threshold=threshold, exercise_name=exercise_name, cooldown_seconds=cooldown_seconds)
+    return jsonify({"ok": True, "threshold": threshold, "exercise_name": exercise_name})
+"""
 
-        SESSION_STATE["scores"] = []
-        SESSION_STATE["threshold"] = 30.0
-        SESSION_STATE["cooldown_until"] = 0
+@app.route("/api/session/start_v1", methods=["POST"])
+def api_session_start_v1():
+    data = request.get_json(force=True) or {}
 
-        return jsonify({"ok": True, "session_id": session_id, "session_group_id": group_id})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # Normalize language (frontend can send "English", "en", etc.)
+    lang = (data.get("language") or "en").strip()
+    if lang.lower() in ["english", "en-us", "en-gb"]:
+        lang = "en"
 
+    threshold = float(data.get("threshold", 30.0))
+    cooldown = float(data.get("cooldown_seconds", 10.0))
 
-@app.route("/api/session/exercise/save", methods=["POST"])
-@login_required
-def api_session_exercise_save():
-    """
-    Save one exercise's data within a session.
-    Payload: { session_id, workout_id, exercise_start_time, exercise_end_time,
-               quality_score, sets_required: {}, sets_completed: {} }
-    """
-    try:
-        data = request.get_json(force=True) or {}
-        session_id = data.get("session_id")
-        workout_id = data.get("workout_id")
-        if not session_id or not workout_id:
-            return jsonify({"error": "session_id and workout_id are required"}), 400
+    # If you still want to keep session info for UI/debug
+    SESSION_STATE["language"] = lang
+    SESSION_STATE["exercise_name"] = "AUTO"   # server will detect per-frame
 
-        import json
-        sets_required = json.dumps(data.get("sets_required", {}))
-        sets_completed = json.dumps(data.get("sets_completed", {}))
-
-        ex_id = execute_db('''
-            INSERT INTO session_exercises
-            (session_id, patient_id, workout_id, exercise_start_time, exercise_end_time,
-             quality_score, sets_required, sets_completed)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            session_id,
-            session['user_id'],
-            workout_id,
-            data.get("exercise_start_time"),
-            data.get("exercise_end_time"),
-            data.get("quality_score", 0),
-            sets_required,
-            sets_completed
-        ))
-
-        return jsonify({"ok": True, "exercise_record_id": ex_id})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/session/complete", methods=["POST"])
-@login_required
-def api_session_complete():
-    """
-    Finalise a session with pain_after, effort_level, overall quality & completion %.
-    Payload: { session_id, pain_after, effort_level, notes }
-    """
-    try:
-        data = request.get_json(force=True) or {}
-        session_id = data.get("session_id")
-        if not session_id:
-            return jsonify({"error": "session_id is required"}), 400
-
-        import json
-
-        # Get all active workouts for this patient — these define the FULL session requirement
-        all_workouts = query_db('''
-            SELECT w.id, w.sets, w.reps
-            FROM workouts w
-            WHERE w.patient_id = ? AND w.is_active = 1
-        ''', (session['user_id'],))
-
-        # Total reps required = sum across ALL active workouts (not just saved ones)
-        total_reps_required = 0
-        for w in (all_workouts or []):
-            total_reps_required += w['sets'] * w['reps']
-
-        # Compute completed reps and quality from saved session_exercises only
-        exercises = query_db('''
-            SELECT quality_score, sets_required, sets_completed
-            FROM session_exercises WHERE session_id = ?
-        ''', (session_id,))
-
-        total_reps_completed = 0
-        quality_scores = []
-
-        for ex in (exercises or []):
-            comp = json.loads(ex['sets_completed']) if ex['sets_completed'] else {}
-            total_reps_completed += sum(int(v) for v in comp.values())
-            if ex['quality_score']:
-                quality_scores.append(ex['quality_score'])
-
-        completed_perc = round((total_reps_completed / total_reps_required * 100), 1) if total_reps_required > 0 else 0
-        avg_quality = round(sum(quality_scores) / len(quality_scores), 1) if quality_scores else 0
-
-        execute_db('''
-            UPDATE sessions
-            SET completed_at = CURRENT_TIMESTAMP,
-                pain_after = ?,
-                effort_level = ?,
-                quality_score = ?,
-                completed_perc = ?,
-                notes = ?
-            WHERE id = ?
-        ''', (
-            data.get("pain_after", 0),
-            data.get("effort_level", 5),
-            avg_quality,
-            completed_perc,
-            data.get("notes", ""),
-            session_id
-        ))
-
-        update_patient_metrics(session['user_id'])
-
-        return jsonify({
-            "ok": True,
-            "session_id": session_id,
-            "completed_perc": completed_perc,
-            "quality_score": avg_quality
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/session/summary/<int:session_id>")
-@login_required
-def api_session_summary(session_id):
-    """Return full session summary data as JSON for the summary page."""
-    import json
-    sess = query_db('SELECT * FROM sessions WHERE id = ? AND patient_id = ?',
-                     (session_id, session['user_id']), one=True)
-    if not sess:
-        return jsonify({"error": "Session not found"}), 404
-
-    exercises = query_db('''
-        SELECT se.*, e.name as exercise_name, w.sets as target_sets, w.reps as target_reps
-        FROM session_exercises se
-        JOIN workouts w ON se.workout_id = w.id
-        JOIN exercises e ON w.exercise_id = e.id
-        WHERE se.session_id = ?
-        ORDER BY se.exercise_start_time
-    ''', (session_id,))
-
-    ex_list = []
-    for ex in (exercises or []):
-        req = json.loads(ex['sets_required']) if ex['sets_required'] else {}
-        comp = json.loads(ex['sets_completed']) if ex['sets_completed'] else {}
-        total_req = sum(int(v) for v in req.values())
-        total_comp = sum(int(v) for v in comp.values())
-        ex_perc = round(total_comp / total_req * 100, 1) if total_req > 0 else 0
-
-        # Calculate exercise duration
-        ex_duration = None
-        if ex['exercise_start_time'] and ex['exercise_end_time']:
-            try:
-                start = datetime.fromisoformat(ex['exercise_start_time'])
-                end = datetime.fromisoformat(ex['exercise_end_time'])
-                ex_duration = int((end - start).total_seconds())
-            except:
-                pass
-
-        ex_list.append({
-            "exercise_name": ex['exercise_name'],
-            "quality_score": ex['quality_score'],
-            "sets_required": req,
-            "sets_completed": comp,
-            "completion_perc": ex_perc,
-            "duration_seconds": ex_duration
-        })
-
-    # Overall duration
-    overall_duration = None
-    if sess['started_at'] and sess['completed_at']:
-        try:
-            s = datetime.fromisoformat(sess['started_at'])
-            e = datetime.fromisoformat(sess['completed_at'])
-            overall_duration = int((e - s).total_seconds())
-        except:
-            pass
+    # IMPORTANT: reset without exercise_name
+    PIPELINE.reset(
+        threshold=threshold,
+        cooldown_seconds=cooldown,
+        language=lang,
+    )
 
     return jsonify({
-        "session_id": sess['id'],
-        "started_at": sess['started_at'],
-        "completed_at": sess['completed_at'],
-        "pain_before": sess['pain_before'],
-        "pain_after": sess['pain_after'],
-        "effort_level": sess['effort_level'],
-        "quality_score": sess['quality_score'],
-        "completed_perc": sess['completed_perc'],
-        "overall_duration_seconds": overall_duration,
-        "exercises": ex_list
+        "ok": True,
+        "threshold": threshold,
+        "cooldown_seconds": cooldown,
+        "language": lang,
+        "exercise_name": "AUTO"
     })
+
 
 
 @app.route("/api/session/start", methods=["POST"])
 def api_session_start():
-    """Start CV tracking for a specific exercise within a session"""
     data = request.get_json(force=True) or {}
-    SESSION_STATE["scores"] = []
-    SESSION_STATE["threshold"] = float(data.get("threshold", 30.0))
-    SESSION_STATE["cooldown_until"] = 0
-    SESSION_STATE["workout_id"] = data.get("workout_id")
-    return jsonify({"ok": True, "threshold": SESSION_STATE["threshold"]})
+    PIPELINE.reset(
+        threshold=data.get("threshold", 30.0),
+        cooldown_seconds=data.get("cooldown_seconds", 10.0),
+        language=data.get("language", "English"),
+    )
+    return jsonify({"ok": True})
 
+@app.route("/api/session/start_old", methods=["POST"])
+def api_session_start_old():
+    #data = request.get_json(force=True) or {}
+    #threshold = float(data.get("threshold", 25.0))
 
-def update_patient_metrics(patient_id):
-    """
-    Update patient's aggregate metrics based on completed sessions.
-    Calculates: adherence_rate, avg_quality_score, avg_pain_level, streak_days
-    """
-    try:
-        # Calculate average quality score from recent sessions
-        quality_result = query_db('''
-            SELECT AVG(quality_score) as avg_quality
-            FROM sessions
-            WHERE patient_id = ?
-            AND completed_at >= date('now', '-30 days')
-        ''', (patient_id,), one=True)
-        
-        avg_quality = quality_result['avg_quality'] if quality_result['avg_quality'] else 70.0
-        
-        # Calculate average pain level (after exercise)
-        pain_result = query_db('''
-            SELECT AVG(pain_after) as avg_pain
-            FROM sessions
-            WHERE patient_id = ?
-            AND completed_at >= date('now', '-30 days')
-        ''', (patient_id,), one=True)
-        
-        avg_pain = pain_result['avg_pain'] if pain_result['avg_pain'] else 3.0
-        
-        # Calculate adherence rate (sessions completed vs expected)
-        # Expected: count of active workouts * 30 days (if daily)
-        workouts_count = query_db('''
-            SELECT COUNT(*) as count
-            FROM workouts
-            WHERE patient_id = ? AND is_active = 1
-        ''', (patient_id,), one=True)
-        
-        sessions_count = query_db('''
-            SELECT COUNT(DISTINCT COALESCE(session_group_id, id)) as count
-            FROM sessions
-            WHERE patient_id = ?
-            AND completed_at >= date('now', '-30 days')
-        ''', (patient_id,), one=True)
-        
-        expected_sessions = workouts_count['count'] * 30  # Assuming daily frequency
-        actual_sessions = sessions_count['count']
-        adherence = min(100, (actual_sessions / expected_sessions * 100) if expected_sessions > 0 else 0)
-        
-        # Calculate streak (consecutive days with at least one session)
-        streak = calculate_streak(patient_id)
-        
-        # Update patient record
-        execute_db('''
-            UPDATE patients
-            SET adherence_rate = ?,
-                avg_quality_score = ?,
-                avg_pain_level = ?,
-                streak_days = ?
-            WHERE user_id = ?
-        ''', (adherence, avg_quality, avg_pain, streak, patient_id))
-        
-    except Exception as e:
-        print(f"Error updating patient metrics: {e}")
+    #exercise_name = data.get("exercise_name", "exercise")
+    #cooldown_seconds = float(data.get("cooldown_seconds", 10.0))
+    #language = data.get("language", "en")
+    #exercise_name = data.get("exercise_name", "squat")
+    
+    #PIPELINE.start_session(threshold=threshold, exercise_name=exercise_name, cooldown_seconds=cooldown_seconds, language=language)
 
+    #PIPELINE.reset(threshold=threshold, exercise_name=exercise_name, cooldown_seconds=cooldown_seconds)
+    #return jsonify({"ok": True, "threshold": threshold, "exercise_name": exercise_name, "cooldown_seconds": cooldown_seconds})
+    data = request.get_json(force=True) or {}
+    SESSION_STATE["language"] = data.get("language", "English")
+    SESSION_STATE["exercise_name"] = data.get("exercise_name", "idle")
 
-def calculate_streak(patient_id):
-    """Calculate consecutive days with at least one completed session."""
-    try:
-        # Get all session dates, ordered from most recent
-        sessions = query_db('''
-            SELECT DISTINCT date(completed_at) as session_date
-            FROM sessions
-            WHERE patient_id = ?
-            ORDER BY session_date DESC
-        ''', (patient_id,))
-        
-        if not sessions:
-            return 0
-        
-        # Check if there's a session today or yesterday
-        from datetime import datetime, timedelta
-        today = datetime.now().date()
-        
-        # Convert to list of dates
-        session_dates = [datetime.strptime(s['session_date'], '%Y-%m-%d').date() for s in sessions]
-        
-        # If no session today or yesterday, streak is broken
-        if session_dates[0] < today - timedelta(days=1):
-            return 0
-        
-        # Count consecutive days
-        streak = 1
-        expected_date = session_dates[0] - timedelta(days=1)
-        
-        for session_date in session_dates[1:]:
-            if session_date == expected_date:
-                streak += 1
-                expected_date -= timedelta(days=1)
-            else:
-                break
-        
-        return streak
-        
-    except Exception as e:
-        print(f"Error calculating streak: {e}")
-        return 0
+    PIPELINE.reset(
+        threshold=data.get("threshold", 30.0),
+        #exercise_name=data.get("exercise_name", "exercise"),
+        cooldown_seconds=data.get("cooldown_seconds", 10.0),
+        language=data.get("language", "english")
+    )
+    return jsonify({"ok": True})
 
-
+old_routes = """
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():
-    """
-    Live feedback endpoint for CV/ML exercise analysis.
-    Input: { "frame_b64": "data:image/jpeg;base64,...." }
-    Output: score + form status + feedback list
-    
-    Note: Requires CV modules to be installed and configured.
-    """
-    try:
-        # Try to import CV modules
-        from cv_utils import decode_dataurl_to_bgr, pose_to_kimore_like_features, model_predict_score, get_llm_feedback
-        
-        data = request.get_json(force=True)
-        frame_b64 = data.get("frame_b64")
-        
-        if not frame_b64:
-            return jsonify({"error": "Missing frame_b64"}), 400
+    data = request.get_json(force=True) or {}
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"error": "frame_b64 missing"}), 400
 
-        # 1) decode frame -> np array (BGR)
-        frame = decode_dataurl_to_bgr(frame_b64)
+    out = PIPELINE.process_frame_dataurl(frame_b64)
+    return jsonify(out)
+"""
+
+old_code = """
+@app.route("/api/live_feedback", methods=["POST"])
+def api_live_feedback():
+    #Input: { "frame_b64": "data:image/jpeg;base64,...." }
+    #Output: score + form status + feedback list
+    
+    data = request.get_json(force=True)
+    frame_b64 = data["frame_b64"]
+
+    # 1) decode frame -> np array (BGR)
+    # Extract base64 string from data URL
+    header, encoded = frame_b64.split(',', 1)
+    frame_data = base64.b64decode(encoded)
+    frame_array = np.frombuffer(frame_data, np.uint8)
+    frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
 
         # 2) extract pose -> features
         X = pose_to_kimore_like_features(frame)
@@ -3003,15 +2925,195 @@ def ensure_tables_exist():
 # Ensure tables exist on startup
 ensure_tables_exist()
 
+    return jsonify({
+        "frame_score": round(score, 2),
+        "form_status": status,
+        "llm_feedback": feedback
+    })
+    """
+
+@app.route("/api/live_feedback_old", methods=["POST"])
+def api_live_feedback_old():
+    data = request.get_json(force=True) or {}
+    language = data.get("language", "en")
+    exercise_name = data.get("exercise_name", "squat")
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    #out = PIPELINE.process_frame_dataurl(frame_b64)
+    out = PIPELINE.process_frame_dataurl(frame_b64, language=language, exercise_name=exercise_name)
+    return jsonify(out)
+
+@app.route("/api/live_feedback_v1", methods=["POST"])
+def api_live_feedback_v1():  # sourcery skip: use-contextlib-suppress
+    data = request.get_json(force=True, silent=True) or {}
+
+    # ---- 1) Inputs (body overrides server/session defaults) ----
+    # If you have a SESSION_STATE dict from /api/session/start, use it.
+    # Otherwise these fallbacks are fine.
+    language = (data.get("language") or "").strip()
+    exercise = (data.get("exercise") or "").strip()
+    frame_b64 = data.get("frame_b64") or ""
+
+    # Optional: fall back to session state if you maintain it
+    try:
+        if not language and "SESSION_STATE" in globals():
+            language = (SESSION_STATE.get("language") or "").strip()
+        if not exercise_name and "SESSION_STATE" in globals():
+            exercise = (SESSION_STATE.get("exercise") or "").strip()
+    except Exception:
+        pass
+
+    # Defaults
+    if not exercise:
+        exercise_name = "squat"
+    if not language:
+        language = "English"
+
+    # ---- 2) Normalize language ----
+    lang_map = {
+        "en": "English",
+        "english": "English",
+        "ta": "Tamil",
+        "tamil": "Tamil",
+        "hi": "Hindi",
+        "hindi": "Hindi",
+        "ms": "Malay",
+        "malay": "Malay",
+        "zh": "Chinese",
+        "chinese": "Chinese",
+    }
+    lang_key = language.lower()
+    language = lang_map.get(lang_key, language)  # keep custom names too
+
+    # ---- 3) Validate frame payload ----
+    if not frame_b64 or not isinstance(frame_b64, str):
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    # Must look like: data:image/jpeg;base64,....
+    if not frame_b64.startswith("data:image/"):
+        return jsonify({"error": "frame_b64 must be a data URL like data:image/jpeg;base64,..."}), 400
+
+    # ---- 4) Run pipeline safely ----
+    try:
+        # Your pipeline should accept these args (as you already changed)
+        out = PIPELINE.process_frame_dataurl(
+            frame_b64,
+            language=language,
+            exercise=exercise
+        )
+
+        # Ensure response always contains these keys so frontend doesn't break
+        if "llm_feedback" not in out:
+            out["llm_feedback"] = []
+        if "form_status" not in out:
+            out["form_status"] = "PROCESSING"
+        if "frame_score" not in out:
+            out["frame_score"] = 0
+
+        out["language"] = language
+        out["exercise"] = exercise
+        return jsonify(out)
+
+    except Exception as e:
+        # Return 200 so UI polling doesn't die; surface error in feedback panel
+        return jsonify({
+            "form_status": "ERROR",
+            "frame_score": 0,
+            "llm_feedback": [f"Backend error: {type(e).__name__}: {str(e)}"],
+            "language": language,
+            "exercise": exercise
+        })
+
+@app.route("/api/live_feedback_v2", methods=["POST"])
+def api_live_feedback_v2():
+    data = request.get_json(force=True, silent=True) or {}
+
+    language = (data.get("language") or "English").strip()
+    frame_b64 = data.get("frame_b64") or ""
+
+    if not frame_b64 or not isinstance(frame_b64, str):
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    if not frame_b64.startswith("data:image/"):
+        return jsonify({"error": "frame_b64 must be a data URL like data:image/jpeg;base64,..."}), 400
+
+    # normalize language
+    lang_map = {
+        "en": "English", "english": "English",
+        "ta": "Tamil", "tamil": "Tamil",
+        "hi": "Hindi", "hindi": "Hindi",
+        "ms": "Malay", "malay": "Malay",
+        "zh": "Chinese", "chinese": "Chinese",
+    }
+    language = lang_map.get(language.lower(), language)
+
+    try:
+        # ✅ exercise is auto-detected inside pipeline
+        out = PIPELINE.process_frame_dataurl(frame_b64, language=language)
+
+        # make response stable for UI
+        out.setdefault("llm_feedback", [])
+        out.setdefault("form_status", "PROCESSING")
+        out.setdefault("frame_score", 0)
+        out["language"] = language
+
+        # IMPORTANT: pipeline should set this
+        out.setdefault("exercise_name", "idle")
+
+        return jsonify(out)
+
+    except Exception as e:
+        return jsonify({
+            "form_status": "ERROR",
+            "frame_score": 0,
+            "llm_feedback": [f"Backend error: {type(e).__name__}: {str(e)}"],
+            "language": language,
+            "exercise_name": "idle",
+        })
+
+@app.route("/api/live_feedback_v3", methods=["POST"])
+def api_live_feedback_v3():
+    data = request.get_json(force=True) or {}
+    language = data.get("language", "en")
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    # Pipeline should infer exercise_name internally and return it in output
+    out = PIPELINE.process_frame_dataurl(frame_b64, language=language)
+
+    return jsonify(out)
+
+@app.route("/api/live_feedback", methods=["POST"])
+def api_live_feedback():
+    data = request.get_json(force=True) or {}
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    # language comes from frontend/session
+    language = data.get("language", "English")
+    PIPELINE.language = language  # keep it simple
+    
+    out = PIPELINE.process_frame_dataurl(frame_b64)
+    return jsonify(out)
+
+@app.post("/api/session/stop")
+def api_session_stop():  # sourcery skip: use-contextlib-suppress
+    global PIPELINE
+    try:
+        PIPELINE.reset()  # if you have it
+    except Exception:
+        pass
+    return jsonify({"ok": True})
 
 if __name__ == '__main__':
-    port = 8000
-    # Allow port override via command line argument: python main.py --port 5050
-    if '--port' in sys.argv:
-        idx = sys.argv.index('--port')
-        if idx + 1 < len(sys.argv):
-            try:
-                port = int(sys.argv[idx + 1])
-            except ValueError:
-                pass
-    app.run(debug=True, host='0.0.0.0', port=port, ssl_context=("cert.pem", "key.pem"))
+    #start_openpose_server()
+    with app.app_context():
+        db.create_all()
+        print("Database tables created successfully!")
+        print(f"Database location: {os.path.join(basedir, 'instance', 'rehab_app.db')}")
+    
+    app.run(host="127.0.0.1", port=5050, debug=True)

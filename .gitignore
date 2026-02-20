@@ -34,3 +34,8 @@ Thumbs.db
 # Vector store
 chroma_db/
 vector_store/
+.DS_Store
+
+pose_env/
+__pycache__/
+*.pyc
