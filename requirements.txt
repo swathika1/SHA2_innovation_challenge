@@ -21,12 +21,9 @@ SQLAlchemy
 
 # --- Optimization (Gurobi is optional; omitted from deploy deps) ---
 
-# --- ML / CV core ---
+# --- ML / CV core (optional runtime feature) ---
 numpy
 opencv-python
-mediapipe==0.10.14; python_version < 3.12
-tensorflow==2.16.1; python_version < 3.12
-keras
 joblib
 
 # --- RAG / Embeddings ---
