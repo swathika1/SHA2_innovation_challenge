@@ -1,12 +1,10 @@
 # ============================================================
 # SHA2 Rehab Innovation Challenge - Python Dependencies
-# Requires: Python 3.11 (mediapipe/tensorflow not compatible with 3.12+)
-# Install:  pip install -r requirements.txt
 # ============================================================
 
 # --- Web framework (Flask) ---
-Flask==2.3.2
-Werkzeug==2.3.6
+Flask>=3.1.0,<3.2
+Werkzeug>=3.1.0,<3.2
 Flask-SQLAlchemy==3.0.5
 Flask-Login==0.6.3
 Flask-Session==0.5.0
@@ -26,8 +24,8 @@ SQLAlchemy
 # --- ML / CV core ---
 numpy
 opencv-python
-mediapipe==0.10.14; python_version < "3.12"
-tensorflow==2.16.1; python_version < "3.12"
+mediapipe==0.10.14; python_version < 3.12
+tensorflow==2.16.1; python_version < 3.12
 keras
 joblib
 
