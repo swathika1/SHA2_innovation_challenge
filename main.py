@@ -3340,4 +3340,7 @@ def api_session_stop():  # sourcery skip: use-contextlib-suppress
 if __name__ == '__main__':
     #start_openpose_server()
     print("Database tables verified via ensure_tables_exist().")
-    app.run(host="127.0.0.1", port=5050, debug=True)
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", "5050"))
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(host=host, port=port, debug=debug)
