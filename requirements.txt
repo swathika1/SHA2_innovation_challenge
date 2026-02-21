@@ -21,14 +21,13 @@ httpx
 # --- Database ---
 SQLAlchemy
 
-# --- Optimization (Gurobi - optional, mock solver used if missing) ---
-# gurobipy>=12.0.0,<13.0.0
+# --- Optimization (Gurobi is optional; omitted from deploy deps) ---
 
 # --- ML / CV core ---
 numpy
 opencv-python
-mediapipe
-tensorflow
+mediapipe==0.10.14; python_version < "3.12"
+tensorflow==2.16.1; python_version < "3.12"
 keras
 joblib
 
