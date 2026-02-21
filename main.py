@@ -6,7 +6,12 @@ from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
-from Rehab_Scorer_Coach.src.web_pipeline import WebRehabPipeline
+try:
+    from Rehab_Scorer_Coach.src.web_pipeline import WebRehabPipeline
+    WEB_PIPELINE_IMPORT_ERROR = None
+except Exception as e:
+    WebRehabPipeline = None
+    WEB_PIPELINE_IMPORT_ERROR = e
 from flask_cors import CORS # type: ignore
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
@@ -2292,6 +2297,8 @@ SESSION_STATE = {
 
 # Initialize the CV pipeline
 try:
+    if WebRehabPipeline is None:
+        raise RuntimeError(f"WebRehabPipeline import failed: {WEB_PIPELINE_IMPORT_ERROR}")
     PIPELINE = WebRehabPipeline()
     print("[INIT] WebRehabPipeline initialized successfully")
 except Exception as e:
