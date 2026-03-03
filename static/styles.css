@@ -29,12 +29,100 @@ html {
     scroll-behavior: smooth;
 }
 
+/* ==================== ENERGETIC ANIMATED BACKGROUND ==================== */
+@keyframes bgGradientShift {
+    0%   { background-position: 0% 50%; }
+    25%  { background-position: 50% 0%; }
+    50%  { background-position: 100% 50%; }
+    75%  { background-position: 50% 100%; }
+    100% { background-position: 0% 50%; }
+}
+@keyframes auraFloat1 {
+    0%,100% { transform: translate(0,0) scale(1); opacity: 0.55; }
+    30%     { transform: translate(80px,-100px) scale(1.3); opacity: 0.7; }
+    60%     { transform: translate(-60px, 60px) scale(0.85); opacity: 0.4; }
+}
+@keyframes auraFloat2 {
+    0%,100% { transform: translate(0,0) scale(1); opacity: 0.45; }
+    35%     { transform: translate(-90px, 70px) scale(1.25); opacity: 0.65; }
+    70%     { transform: translate(50px,-80px) scale(0.9); opacity: 0.35; }
+}
+@keyframes auraFloat3 {
+    0%,100% { transform: translate(0,0) scale(1); opacity: 0.5; }
+    50%     { transform: translate(60px, 50px) scale(1.4); opacity: 0.7; }
+}
+
 body {
     font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+    background: linear-gradient(-45deg,
+        #0f0c29, #302b63, #24243e,
+        #1a1a2e, #16213e, #0f3460,
+        #1a0533, #2d1b69, #150050);
+    background-size: 600% 600%;
+    animation: bgGradientShift 10s ease infinite;
     color: var(--dark);
     line-height: 1.7;
     font-size: 15px;
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* Large vivid glowing auras */
+body::before {
+    content: '';
+    position: fixed;
+    width: 800px;
+    height: 800px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(90px);
+    background: radial-gradient(circle, rgba(99,102,241,0.65), rgba(139,92,246,0.4), transparent 70%);
+    top: -250px;
+    left: -250px;
+    animation: auraFloat1 12s ease-in-out infinite;
+}
+body::after {
+    content: '';
+    position: fixed;
+    width: 700px;
+    height: 700px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(80px);
+    background: radial-gradient(circle, rgba(236,72,153,0.6), rgba(248,113,113,0.4), transparent 70%);
+    bottom: -200px;
+    right: -200px;
+    animation: auraFloat2 14s ease-in-out infinite;
+}
+
+/* Third vivid aura — teal/cyan */
+.bg-aura3 {
+    position: fixed;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(70px);
+    background: radial-gradient(circle, rgba(6,182,212,0.55), rgba(16,185,129,0.35), transparent 70%);
+    top: 40%;
+    right: -100px;
+    animation: auraFloat3 16s ease-in-out infinite;
+}
+
+.page-wrapper {
+    position: relative;
+    z-index: 1;
+}
+
+/* Cards need white/light bg to stay readable on dark body */
+.card, .panel, .session-card, .exercise-card,
+.alert, .form-control, .btn-group, input, select, textarea,
+.nav-header, .sidebar {
+    position: relative;
+    z-index: 2;
 }
 
 /* ==================== TYPOGRAPHY ==================== */
@@ -75,6 +163,8 @@ a:hover {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    position: relative;
+    z-index: 1;
 }
 
 main {
@@ -84,11 +174,11 @@ main {
 /* ==================== HEADER / NAVIGATION ==================== */
 .header {
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-    padding: 0 26px;
+    padding: 0 18px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    height: 72px;
+    height: 50px;
     box-shadow: var(--shadow);
     position: sticky;
     top: 0;
@@ -96,30 +186,30 @@ main {
 }
 
 .header h1 {
-    font-size: 1.5rem;
+    font-size: 1.1rem;
     color: #fff;
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 10px;
     margin: 0;
 }
 
 .header h1 i {
-    font-size: 1.7rem;
+    font-size: 1.2rem;
     animation: float 3s ease-in-out infinite;
 }
 
 .header h1 .brand-logo {
-    width: 40px;
-    height: 40px;
+    width: 28px;
+    height: 28px;
     object-fit: contain;
     animation: float 3s ease-in-out infinite;
-    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.2));
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
 }
 
 @keyframes float {
     0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
+    50% { transform: translateY(-4px); }
 }
 
 .header h1 a {

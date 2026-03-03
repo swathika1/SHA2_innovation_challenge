@@ -1,0 +1,41 @@
+<svg width="400" height="500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="500" fill="#f8f9fa"/>
+  
+  <!-- Title -->
+  <text x="200" y="30" font-size="24" font-weight="bold" text-anchor="middle" fill="#333">Trunk Rotation</text>
+  
+  <!-- Rotation left -->
+  <g>
+    <text x="100" y="80" font-size="14" font-weight="bold" fill="#666">1. Rotate Left</text>
+    <!-- Head -->
+    <circle cx="100" cy="110" r="12" fill="#667eea"/>
+    <!-- Body rotated -->
+    <line x1="100" y1="125" x2="100" y2="170" stroke="#667eea" stroke-width="4"/>
+    <!-- Rotated arms -->
+    <line x1="100" y1="135" x2="50" y2="140" stroke="#667eea" stroke-width="2"/>
+    <line x1="100" y1="135" x2="130" y2="125" stroke="#667eea" stroke-width="2"/>
+    <!-- Legs -->
+    <line x1="100" y1="170" x2="85" y2="220" stroke="#28a745" stroke-width="3"/>
+    <line x1="100" y1="170" x2="115" y2="220" stroke="#28a745" stroke-width="3"/>
+  </g>
+  
+  <!-- Rotation right -->
+  <g>
+    <text x="300" y="80" font-size="14" font-weight="bold" fill="#666">2. Rotate Right</text>
+    <!-- Head -->
+    <circle cx="300" cy="110" r="12" fill="#667eea"/>
+    <!-- Body rotated -->
+    <line x1="300" y1="125" x2="300" y2="170" stroke="#667eea" stroke-width="4"/>
+    <!-- Rotated arms -->
+    <line x1="300" y1="135" x2="270" y2="125" stroke="#667eea" stroke-width="2"/>
+    <line x1="300" y1="135" x2="350" y2="140" stroke="#667eea" stroke-width="2"/>
+    <!-- Legs -->
+    <line x1="300" y1="170" x2="285" y2="220" stroke="#28a745" stroke-width="3"/>
+    <line x1="300" y1="170" x2="315" y2="220" stroke="#28a745" stroke-width="3"/>
+  </g>
+  
+  <!-- Instructions -->
+  <text x="200" y="450" font-size="12" text-anchor="middle" fill="#888">Rotate torso side to side, keeping hips still</text>
+  <text x="200" y="475" font-size="12" text-anchor="middle" fill="#888">Feel the stretch in oblique muscles</text>
+</svg>

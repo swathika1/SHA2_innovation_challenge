@@ -26,6 +26,7 @@ LANGUAGE_INSTRUCTIONS = {
 
 
 def _build_chat_payload(messages: list, patient_context: str, rag_context: str = "", lang_key: str = "en") -> dict:
+    # sourcery skip: merge-list-appends-into-extend, use-named-expression
     """Build payload for MERaLiON /chat endpoint.
 
     MERaLiON responds best when the full prompt is in the 'instruction' field.

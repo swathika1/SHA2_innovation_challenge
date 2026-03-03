@@ -9,6 +9,9 @@
 {% endblock %}
 
 {% block content %}
+<!-- CSS for gamification features -->
+<link rel="stylesheet" href="{{ url_for('static', filename='gamified_ui.css') }}">
+
 <div class="video-call-container">
     <!-- Call Info Header -->
     <div class="card" style="margin-bottom: 20px; padding: 15px;">
@@ -31,9 +34,40 @@
         </div>
     </div>
     
-    <!-- Video Call Section - Embedded Iframe -->
-    <div id="jitsi-container" style="width: 100%; height: 600px; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-        <!-- Jitsi will load here -->
+    <!-- Three-Column Layout: Video | Skeleton | GIF -->
+    <div class="session-grid" style="grid-template-columns: 1.5fr 1fr 1fr; gap: 15px;">
+        
+        <!-- Video Call Section -->
+        <div>
+            <div id="jitsi-container" style="width: 100%; height: 600px; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <!-- Jitsi will load here -->
+            </div>
+        </div>
+        
+        <!-- Skeleton Visualization -->
+        <div class="skeleton-section">
+            <div class="gamified-card">
+                <h3 style="margin-top: 0;">👥 Your Posture</h3>
+                <div class="exercise-gif-container">
+                    <canvas id="skeletonCanvas" class="skeleton-canvas" width="250" height="350"></canvas>
+                    <div style="font-size: 12px; color: var(--text-light); text-align: center; margin-top: 10px;">
+                        <p style="margin: 8px 0;">Real-time pose detection</p>
+                        <div id="skeleton-status" style="color: var(--success-color);">✓ Detecting</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Exercise Animation Section -->
+        <div class="gif-section">
+            <div class="gamified-card">
+                <h3 style="margin-top: 0; font-size: .85rem; color: #555;">&#127381; Correct Form</h3>
+                <div class="exercise-gif-container" style="position:relative; overflow:hidden; border-radius:8px; height:300px; background:#1a1a2e;">
+                    <canvas id="vcExerciseCanvas" style="width:100%; height:100%;"></canvas>
+                    <img id="exerciseGif" src="" alt="" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; border-radius:8px; z-index:4;">
+                </div>
+            </div>
+        </div>
     </div>
     
     <!-- Call Instructions -->
@@ -46,7 +80,111 @@
 </div>
 
 <script>
-    // Jitsi configuration
+    // ===== EXERCISE ANIMATION (canvas-based, always renders) =====
+    const VC_EXERCISE_INFO = {
+        squat:             { label: 'Squat',               color: '#667eea', tip: 'Feet shoulder-width. Lower until thighs parallel.' },
+        lifting_of_arms:   { label: 'Arm Raise',           color: '#28a745', tip: 'Arms forward and up to shoulder height.' },
+        lateral_trunk_tilt:{ label: 'Lateral Trunk Tilt',  color: '#fd7e14', tip: 'Side-bend keeping hips square.' },
+        trunk_rotation:    { label: 'Trunk Rotation',      color: '#e83e8c', tip: 'Twist torso. Keep hips facing forward.' },
+        pelvis_rotation:   { label: 'Pelvis Rotation',     color: '#6f42c1', tip: 'Draw slow hip circles. Engage core.' },
+        forward_flexion:   { label: 'Forward Flexion',     color: '#20c997', tip: 'Bend forward from hips. Back straight.' },
+        flank_stretch:     { label: 'Flank Stretch',       color: '#fd7e14', tip: 'Reach overhead and lean. Hold 5s each side.' },
+        torso_rotation:    { label: 'Torso Rotation',      color: '#e83e8c', tip: 'Rotate upper body. Keep lower body still.' },
+        idle:              { label: 'Ready',               color: '#007bff', tip: 'Stand tall, shoulders relaxed.' }
+    };
+
+    let _vcAnimFrame = null, _vcAnimT = 0, _vcExercise = 'idle';
+
+    function initVcCanvas() {
+        const c = document.getElementById('vcExerciseCanvas');
+        if (!c) return;
+        c.width  = c.offsetWidth  || 280;
+        c.height = c.offsetHeight || 300;
+        _vcLoop(c);
+    }
+
+    function _vcLoop(c) {
+        if (_vcAnimFrame) cancelAnimationFrame(_vcAnimFrame);
+        function step() { _vcAnimT += 0.025; _drawVcFrame(c, _vcExercise, _vcAnimT); _vcAnimFrame = requestAnimationFrame(step); }
+        _vcAnimFrame = requestAnimationFrame(step);
+    }
+
+    function _drawVcFrame(canvas, exercise, t) {
+        const ctx = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
+        const info = VC_EXERCISE_INFO[exercise] || VC_EXERCISE_INFO['idle'];
+        const bg = ctx.createLinearGradient(0,0,0,H);
+        bg.addColorStop(0,'#0f0f1a'); bg.addColorStop(1,'#1a1a2e');
+        ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+        ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.lineWidth=1;
+        for(let x=0;x<W;x+=25){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+        for(let y=0;y<H;y+=25){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+        ctx.fillStyle=info.color; ctx.font='bold 11px system-ui'; ctx.textAlign='center';
+        ctx.fillText(info.label.toUpperCase(), W/2, 22);
+        const cx=W/2, base=H*0.84, bob=Math.sin(t)*0.5+0.5, wave=Math.sin(t);
+        const headR=W*0.07, torsoH=H*0.2, legH=H*0.22;
+        let headY,shoulderY,hipY,kL,kR,fL,fR,hL,hR;
+        switch(exercise){
+          case 'squat':{ const sq=bob*0.38; headY=base-torsoH-legH*(1-sq)-headR*2+sq*legH*0.5; shoulderY=headY+headR*2; hipY=shoulderY+torsoH; const ks=(W*0.13)+sq*W*0.05; kL={x:cx-ks,y:hipY+legH*(1-sq*0.6)}; kR={x:cx+ks,y:hipY+legH*(1-sq*0.6)}; fL={x:cx-W*0.17,y:base}; fR={x:cx+W*0.17,y:base}; hL={x:cx-W*0.22,y:shoulderY+H*0.07*0.5}; hR={x:cx+W*0.22,y:shoulderY+H*0.07*0.5}; break;}
+          case 'lifting_of_arms':{ headY=base-torsoH-legH-headR*2; shoulderY=headY+headR*2; hipY=shoulderY+torsoH; kL={x:cx-W*0.06,y:hipY+legH*0.55}; kR={x:cx+W*0.06,y:hipY+legH*0.55}; fL={x:cx-W*0.09,y:base}; fR={x:cx+W*0.09,y:base}; const ang=-Math.PI/2*bob; hL={x:cx-W*0.26*Math.cos(ang+0.3),y:shoulderY-W*0.26*Math.sin(ang+0.3)}; hR={x:cx+W*0.26*Math.cos(ang+0.3),y:shoulderY-W*0.26*Math.sin(ang+0.3)}; break;}
+          case 'trunk_rotation': case 'torso_rotation':{ headY=base-torsoH-legH-headR*2; shoulderY=headY+headR*2; hipY=shoulderY+torsoH; kL={x:cx-W*0.07,y:hipY+legH*0.55}; kR={x:cx+W*0.07,y:hipY+legH*0.55}; fL={x:cx-W*0.1,y:base}; fR={x:cx+W*0.1,y:base}; hL={x:cx-W*0.24+wave*W*0.28,y:shoulderY+H*0.03}; hR={x:cx+W*0.24+wave*W*0.28,y:shoulderY+H*0.03}; break;}
+          default:{ headY=base-torsoH-legH-headR*2; shoulderY=headY+headR*2; hipY=shoulderY+torsoH; kL={x:cx-W*0.07,y:hipY+legH*0.55}; kR={x:cx+W*0.07,y:hipY+legH*0.55}; fL={x:cx-W*0.1,y:base}; fR={x:cx+W*0.1,y:base}; hL={x:cx-W*0.22,y:shoulderY+H*0.07*0.7}; hR={x:cx+W*0.22,y:shoulderY+H*0.07*0.7};}
+        }
+        ctx.strokeStyle=info.color; ctx.lineWidth=Math.max(2.5,W*0.011); ctx.lineCap='round'; ctx.shadowColor=info.color; ctx.shadowBlur=6;
+        ctx.strokeStyle='rgba(255,255,255,0.1)'; ctx.lineWidth=1; ctx.shadowBlur=0;
+        ctx.beginPath(); ctx.moveTo(cx-W*0.35,base+2); ctx.lineTo(cx+W*0.35,base+2); ctx.stroke();
+        ctx.strokeStyle=info.color; ctx.lineWidth=Math.max(2.5,W*0.011); ctx.shadowBlur=6;
+        function ln(a,b){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+        const sh={x:cx,y:shoulderY}, hp={x:cx,y:hipY};
+        ln(hp,kL); ln(hp,kR); ln(kL,fL); ln(kR,fR); ln(sh,hp); ln(sh,hL); ln(sh,hR);
+        ctx.beginPath(); ctx.arc(cx, headY-headR, headR, 0, Math.PI*2); ctx.stroke();
+        ctx.shadowBlur=0; ctx.font='10px system-ui'; ctx.fillStyle='rgba(255,255,255,0.45)';
+        ctx.fillText(info.tip.substring(0,38), W/2, H-8);
+    }
+
+    function setExerciseGif(exerciseName) {
+        const n = (exerciseName||'').toLowerCase().replace(/\s+/g,'_');
+        _vcExercise = VC_EXERCISE_INFO[n] ? n : 'idle';
+        const c = document.getElementById('vcExerciseCanvas');
+        if(c){ c.width=c.offsetWidth||280; c.height=c.offsetHeight||300; }
+        /* Also try real GIF overlay */
+        const imgEl = document.getElementById('exerciseGif');
+        const wikimediaGifs = {
+            squat: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Squats_2014-12-12.gif',
+            lifting_of_arms: 'https://upload.wikimedia.org/wikipedia/commons/a/aa/Lat-Pulldown.gif'
+        };
+        if(imgEl && wikimediaGifs[n]){
+            imgEl.style.display='none';
+            imgEl.onload = ()=>{ imgEl.style.display='block'; };
+            imgEl.onerror = ()=>{ imgEl.style.display='none'; };
+            imgEl.src = wikimediaGifs[n];
+        }
+    }
+
+    let skeletonVisualizer;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        skeletonVisualizer = new SkeletonVisualizer('skeletonCanvas');
+        initVcCanvas();
+        setExerciseGif('squat');
+        startLandmarkPolling();
+    });
+
+    function startLandmarkPolling() {
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/session/landmarks');
+                const data = await response.json();
+                if (data.landmarks && data.landmarks.length > 0) {
+                    skeletonVisualizer.draw(data.landmarks);
+                    if (data.exercise_name) setExerciseGif(data.exercise_name);
+                    const statusEl = document.getElementById('skeleton-status');
+                    if (statusEl) { statusEl.textContent = '✓ Detecting'; statusEl.style.color = 'var(--success-color)'; }
+                }
+            } catch (error) { console.log('Polling landmark data:', error); }
+        }, 200);
+    }
+    
+    // ===== JITSI CONFIGURATION =====
     const jitsiDomain = "meet.ffmuc.net";
     const roomId = "{{ room_id }}";
     const userName = "{{ user_name }}";
@@ -115,10 +253,13 @@
     }, 2 * 60 * 60 * 1000); // 2 hours
 </script>
 
+<!-- Skeleton Visualization Script -->
+<script src="{{ url_for('static', filename='skeleton_visualization.js') }}"></script>
+
 <style>
 .video-call-container {
     width: 100%;
-    max-width: 1200px;
+    max-width: 1600px;
     margin: 0 auto;
 }
 
@@ -128,6 +269,24 @@
     justify-content: center;
     background: #f0f0f0;
     min-height: 600px;
+    border-radius: 8px;
+}
+
+/* Responsive layout for mobile */
+@media (max-width: 1024px) {
+    .session-grid {
+        grid-template-columns: 1fr 1fr !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .session-grid {
+        grid-template-columns: 1fr !important;
+    }
+    
+    #jitsi-container {
+        min-height: 400px;
+    }
 }
 </style>
 {% endblock %}

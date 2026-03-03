@@ -9,7 +9,7 @@ class GroqRehabLLM:
     """
 
     def __init__(self):
-        self.api_key = os.getenv("GROQ_API_KEY", "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")
+        self.api_key = os.getenv("GROQ_API_KEY", "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")
         self.base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
         self.model = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
 

@@ -10,7 +10,7 @@ import mediapipe as mp
 from Rehab_Scorer_Coach.src.config import AppConfig
 from Rehab_Scorer_Coach.src.rag_store import RAGStore
 from Rehab_Scorer_Coach.src.llm_groq import GroqLLM
-from Rehab_Scorer_Coach.src.rep_counter_kimore import KimoreRepCounter
+from Rehab_Scorer_Coach.src.rep_counter_mediapipe import RepCounterMediaPipe
 
 # 🔥 MODEL LOADER (50D + 100-frame scoring)
 from Rehab_Scorer_Coach.src.models_loader import (
@@ -31,7 +31,7 @@ class WebRehabPipeline:
         self.threshold = 35.0
         self.cooldown_seconds = 6.0
 
-        self.rep_counter = KimoreRepCounter()
+        self.rep_counter = RepCounterMediaPipe()
 
         self._prev_feat = None
         self.language = "English"
@@ -58,8 +58,20 @@ class WebRehabPipeline:
         )
 
         # LLM state
-        self.rag = RAGStore(persist_dir=Path(self.cfg.repo_root) / "rag_db")
-        self.llm = GroqLLM()
+        try:
+            self.rag = RAGStore(persist_dir=Path(self.cfg.repo_root) / "rag_db")
+            print("  ✅ RAG Store initialized")
+        except Exception as e:
+            print(f"  ⚠️  RAG Store failed to initialize: {e}")
+            self.rag = None
+        
+        try:
+            self.llm = GroqLLM()
+            print("  ✅ Groq LLM initialized with API key")
+        except Exception as e:
+            print(f"  ⚠️  Groq LLM failed to initialize: {e}")
+            print(f"     Please ensure GROQ_API_KEY is set: export GROQ_API_KEY='your-key'")
+            self.llm = None
 
         self.last_llm_time = 0.0
         self.last_feedback_list: List[str] = []
@@ -69,38 +81,62 @@ class WebRehabPipeline:
     # -----------------------------------------------------
     # Automatic Rep Detection
     # -----------------------------------------------------
-    def _detect_and_count_reps(self, score: float, delta: float) -> Dict[str, Any]:
+    def _detect_and_count_reps(self, score: float, delta: float, landmarks: np.ndarray = None, exercise_name: str = "") -> Dict[str, Any]:
         """
-        Simple rep counter: Just count frames and increment reps at regular intervals.
-        Completely independent of score/threshold.
+        Rep detection using MediaPipe rule-based system.
+        Uses joint angles and positions for accurate, stable rep counting.
+        Falls back to frame-counting if landmarks unavailable.
         """
         rep_incremented = False
         set_completed = False
         exercise_completed = False
         
-        # Every 20 frames = approximately 1 rep (assuming 30 fps)
-        # This gives us a simple, predictable rep counting mechanism
-        self.frames_above_threshold += 1
-        
-        # Count 1 rep every 20 frames
-        if self.frames_above_threshold >= 20:
-            self.frames_above_threshold = 0
-            self.current_rep_count += 1
-            rep_incremented = True
-            print(f"   ✅ REP COUNTED: Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets}")
-            
-            # Check if set is complete
-            if self.current_rep_count >= self.target_reps:
-                set_completed = True
-                self.current_set_count += 1
-                self.current_rep_count = 0
-                print(f"   🎯 SET COMPLETE: Moving to Set {self.current_set_count}")
+        # Use MediaPipe rep counter if landmarks available
+        if landmarks is not None and self.rep_counter is not None:
+            try:
+                # Pass landmarks to MediaPipe rep counter
+                rep_detected = self.rep_counter.process(landmarks, exercise_name)
                 
-                # Check if all sets complete
-                if self.current_set_count > self.target_sets:
-                    exercise_completed = True
-                    print(f"   🏆 EXERCISE COMPLETE: All {self.target_sets} sets finished!")
-                    self.current_set_count = self.target_sets  # Cap it
+                if rep_detected:
+                    self.current_rep_count += 1
+                    rep_incremented = True
+                    print(f"   ✅ REP COUNTED (MediaPipe): Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets}")
+                    
+                    # Check if set is complete
+                    if self.current_rep_count >= self.target_reps:
+                        set_completed = True
+                        self.current_set_count += 1
+                        self.current_rep_count = 0
+                        print(f"   🎯 SET COMPLETE: Moving to Set {self.current_set_count}")
+                        
+                        # Check if all sets complete
+                        if self.current_set_count > self.target_sets:
+                            exercise_completed = True
+                            print(f"   🏆 EXERCISE COMPLETE: All {self.target_sets} sets finished!")
+                            self.current_set_count = self.target_sets  # Cap it
+            except Exception as e:
+                print(f"   ⚠️  MediaPipe rep counter error: {e}")
+                # Fall through to frame-counting fallback
+        
+        # Fallback to frame-counting (for backwards compatibility)
+        if not rep_incremented:
+            self.frames_above_threshold += 1
+            if self.frames_above_threshold >= 20:
+                self.frames_above_threshold = 0
+                self.current_rep_count += 1
+                rep_incremented = True
+                print(f"   ✅ REP COUNTED (Fallback): Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets}")
+                
+                if self.current_rep_count >= self.target_reps:
+                    set_completed = True
+                    self.current_set_count += 1
+                    self.current_rep_count = 0
+                    print(f"   🎯 SET COMPLETE: Moving to Set {self.current_set_count}")
+                    
+                    if self.current_set_count > self.target_sets:
+                        exercise_completed = True
+                        print(f"   🏆 EXERCISE COMPLETE: All {self.target_sets} sets finished!")
+                        self.current_set_count = self.target_sets
         
         rep_info = {
             "rep_now": self.current_rep_count,
@@ -202,6 +238,7 @@ class WebRehabPipeline:
                     "set_target": self.target_sets,
                     "rep_incremented": False,
                 },
+                "landmarks": [],
             }
 
         # 2️⃣ FEATURE (50D PIPELINE)
@@ -239,6 +276,7 @@ class WebRehabPipeline:
                     "llm_feedback": ["Please select an exercise"],
                     "exercise_name": "none",
                     "exercise_confidence": 1.0,
+                    "landmarks": landmarks.tolist() if landmarks is not None else [],
                 }
 
             exercise_name = manual_exercise
@@ -257,6 +295,7 @@ class WebRehabPipeline:
                     "llm_feedback": ["Invalid frame"],
                     "exercise_name": "no_frame",
                     "exercise_confidence": 0.0,
+                    "landmarks": landmarks.tolist() if landmarks is not None else [],
                 }
 
             print("➡️ Step 1: Exercise Model (RAW FRAME)")
@@ -289,6 +328,7 @@ class WebRehabPipeline:
                 "llm_feedback": [],
                 "exercise_name": exercise_name,
                 "exercise_confidence": confidence,
+                "landmarks": landmarks.tolist() if landmarks is not None else [],
             }
 
         status = "CORRECT" if score >= self.threshold else "WRONG"
@@ -296,7 +336,7 @@ class WebRehabPipeline:
 
         # 4️⃣.5 REP DETECTION
         print("➡️ Step 4.5: Rep Detection")
-        rep_info = self._detect_and_count_reps(score, delta)
+        rep_info = self._detect_and_count_reps(score, delta, landmarks, exercise_name)
         print(f"   Rep: {rep_info['rep_now']}/{rep_info['rep_target']} | Set: {rep_info['set_now']}/{rep_info['set_target']}")
 
         # 5️⃣ LLM FEEDBACK
@@ -310,34 +350,102 @@ class WebRehabPipeline:
 
             try:
                 numeric_summary = f"score={score:.2f}/50 status={status}"
-                pose_summary = f"delta_motion={delta:.4f}"
+                
+                # Enhanced pose summary from landmarks
+                pose_parts = [f"delta_motion={delta:.4f}"]
+                if landmarks is not None and len(landmarks) >= 33:
+                    try:
+                        # Key landmark indices (MediaPipe 33-point model)
+                        left_shoulder = landmarks[11]
+                        right_shoulder = landmarks[12]
+                        left_hip = landmarks[23]
+                        right_hip = landmarks[24]
+                        left_knee = landmarks[25]
+                        right_knee = landmarks[26]
+                        nose = landmarks[0]
+                        
+                        # Calculate some meaningful angles/positions
+                        if all([left_shoulder[2] > 0.5, right_shoulder[2] > 0.5]):
+                            shoulder_gap = abs(left_shoulder[0] - right_shoulder[0])
+                            pose_parts.append(f"shoulder_alignment={shoulder_gap:.2f}")
+                        
+                        if all([left_hip[2] > 0.5, right_hip[2] > 0.5]):
+                            hip_gap = abs(left_hip[0] - right_hip[0])
+                            pose_parts.append(f"hip_alignment={hip_gap:.2f}")
+                        
+                        # Vertical alignment (check if torso is upright)
+                        if nose[2] > 0.5 and left_hip[2] > 0.5:
+                            torso_lean = abs(nose[0] - left_hip[0])
+                            pose_parts.append(f"torso_lean={torso_lean:.2f}")
+                    except Exception as e:
+                        print(f"   ⚠️  Error calculating pose summary: {e}")
+                
+                pose_summary = " | ".join(pose_parts)
 
+                # ⭐ FIX #4: Improve RAG context retrieval with better queries
+                rag_context = ""
                 try:
-                    chunks = self.rag.query(
-                        query_text=f"How to perform {exercise_name}. cues",
-                        exercise=exercise_name,
-                        k=3,
-                    )
-                    rag_context = "\n".join([c.text[:200] for c in chunks])
+                    if self.rag:
+                        # Query with multiple strategies to get best results
+                        queries = [
+                            f"{exercise_name} proper form technique",
+                            f"how to do {exercise_name}",
+                            f"{exercise_name} common mistakes",
+                            exercise_name
+                        ]
+                        
+                        all_chunks = []
+                        for query_text in queries:
+                            try:
+                                chunks = self.rag.query(
+                                    query_text=query_text,
+                                    exercise=exercise_name,
+                                    k=2,
+                                )
+                                all_chunks.extend(chunks)
+                                if len(all_chunks) >= 4:  # Get enough context
+                                    break
+                            except:
+                                continue
+                        
+                        if all_chunks:
+                            # Remove duplicates and combine
+                            seen = set()
+                            unique_chunks = []
+                            for chunk in all_chunks:
+                                text = chunk.text[:150]
+                                if text not in seen:
+                                    seen.add(text)
+                                    unique_chunks.append(text)
+                            
+                            rag_context = "\n".join(unique_chunks[:3])
+                            print(f"   ✅ RAG retrieved {len(unique_chunks)} relevant context items")
+                        else:
+                            rag_context = f"Standard form guidance for {exercise_name}"
+                            print(f"   ⚠️  RAG returned no results, using fallback")
                 except Exception as e:
-                    print("   ⚠️ RAG failed:", e)
-                    rag_context = ""
+                    print(f"   ⚠️ RAG failed: {e}")
+                    rag_context = f"Standard form guidance for {exercise_name}"
 
-                feedback_list = self.llm.generate_feedback(
-                    exercise_name=exercise_name,
-                    language=self.language,
-                    rag_context=rag_context,
-                    numeric_summary=numeric_summary,
-                    pose_summary=pose_summary,
-                )
-
-                self.last_feedback_list = feedback_list
-                self.last_llm_time = now
-
-                print("   ✅ LLM feedback generated")
+                if self.llm:
+                    feedback_list = self.llm.generate_feedback(
+                        exercise_name=exercise_name,
+                        language=self.language,
+                        rag_context=rag_context,
+                        numeric_summary=numeric_summary,
+                        pose_summary=pose_summary,
+                    )
+                    self.last_feedback_list = feedback_list
+                    self.last_llm_time = now
+                    print(f"   ✅ LLM feedback generated in {self.language}: {feedback_list}")
+                else:
+                    print("   ⚠️  LLM not available, using fallback feedback")
+                    feedback_list = ["Keep posture controlled and stable."]
 
             except Exception as e:
-                print("   ❌ LLM crashed:", e)
+                print(f"   ❌ LLM crashed: {e}")
+                import traceback
+                traceback.print_exc()
                 feedback_list = ["Keep posture controlled and stable."]
 
         print("➡️ Returning response")
@@ -349,6 +457,7 @@ class WebRehabPipeline:
             "exercise_name": exercise_name,
             "exercise_confidence": confidence,
             "rep_info": rep_info,
+            "landmarks": landmarks.tolist() if landmarks is not None else [],
         }
 
     # -----------------------------------------------------

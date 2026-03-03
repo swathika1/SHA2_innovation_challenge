@@ -1,0 +1,356 @@
+<!-- Rehab Type Selection Modal -->
+<!-- Include this in the video call or patient session templates -->
+
+<div id="rehab-type-modal" class="rehab-type-modal" style="display: none;">
+    <div class="modal-overlay" id="modal-overlay"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Select Rehabilitation Type</h2>
+            <button class="modal-close" id="modal-close-btn">&times;</button>
+        </div>
+        
+        <div class="modal-body">
+            <p class="modal-subtitle">Choose which rehabilitation program you'd like to perform:</p>
+            
+            <div class="rehab-options">
+                <!-- General Rehab Option -->
+                <div class="rehab-option-card" id="rehab-general" data-type="general">
+                    <div class="option-icon">
+                        <i class="fa-solid fa-person-walking"></i>
+                    </div>
+                    <h3>General Rehabilitation</h3>
+                    <p class="option-description">
+                        Standard exercise program with comprehensive exercise detection
+                    </p>
+                    <ul class="option-features">
+                        <li>Multiple exercise types</li>
+                        <li>Real-time form feedback</li>
+                        <li>LLM-based coaching</li>
+                        <li>Frame-level analysis</li>
+                    </ul>
+                    <button class="option-btn btn-primary">
+                        Start General <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+                
+                <!-- Low Back Pain Option -->
+                <div class="rehab-option-card" id="rehab-keraal" data-type="keraal">
+                    <div class="option-icon">
+                        <i class="fa-solid fa-spine"></i>
+                    </div>
+                    <h3>Low Back Pain Program</h3>
+                    <p class="option-description">
+                        Specialized program for lower back pain rehabilitation
+                    </p>
+                    <ul class="option-features">
+                        <li>Forward Flexion</li>
+                        <li>Flank Stretch</li>
+                        <li>Torso Rotation</li>
+                        <li>Window-level scoring</li>
+                    </ul>
+                    <button class="option-btn btn-accent">
+                        Start Low Back Pain <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .rehab-type-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .modal-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(3px);
+        z-index: 1;
+    }
+    
+    .modal-content {
+        position: relative;
+        z-index: 2;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 900px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        animation: slideUp 0.3s ease;
+    }
+    
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .modal-header {
+        padding: 30px;
+        border-bottom: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-header h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        color: #1a1a2e;
+    }
+    
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 2rem;
+        color: #999;
+        cursor: pointer;
+        padding: 0;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 0.2s;
+    }
+    
+    .modal-close:hover {
+        color: #333;
+    }
+    
+    .modal-body {
+        padding: 40px 30px;
+    }
+    
+    .modal-subtitle {
+        text-align: center;
+        color: #666;
+        font-size: 1.1rem;
+        margin: 0 0 40px 0;
+    }
+    
+    .rehab-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+    }
+    
+    @media (max-width: 700px) {
+        .rehab-options {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .rehab-option-card {
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        padding: 30px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .rehab-option-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, rgba(0,123,255,0.05), rgba(0,91,187,0.05));
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: -1;
+    }
+    
+    .rehab-option-card:hover {
+        border-color: #007bff;
+        box-shadow: 0 8px 24px rgba(0,123,255,0.15);
+        transform: translateY(-4px);
+    }
+    
+    .rehab-option-card:hover::before {
+        opacity: 1;
+    }
+    
+    #rehab-keraal {
+        border-color: #20c997;
+    }
+    
+    #rehab-keraal:hover {
+        border-color: #198754;
+        box-shadow: 0 8px 24px rgba(32,201,151,0.15);
+    }
+    
+    #rehab-keraal:hover::before {
+        background: linear-gradient(135deg, rgba(32,201,151,0.05), rgba(25,135,84,0.05));
+    }
+    
+    .option-icon {
+        font-size: 3.5rem;
+        color: #007bff;
+        margin-bottom: 20px;
+    }
+    
+    #rehab-keraal .option-icon {
+        color: #20c997;
+    }
+    
+    .rehab-option-card h3 {
+        margin: 0 0 10px 0;
+        font-size: 1.3rem;
+        color: #1a1a2e;
+    }
+    
+    .option-description {
+        color: #666;
+        margin: 0 0 20px 0;
+        font-size: 0.95rem;
+    }
+    
+    .option-features {
+        list-style: none;
+        padding: 0;
+        margin: 20px 0;
+        text-align: left;
+    }
+    
+    .option-features li {
+        padding: 8px 0;
+        color: #555;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+    
+    .option-features li::before {
+        content: '✓';
+        color: #007bff;
+        font-weight: bold;
+        font-size: 1.2rem;
+    }
+    
+    #rehab-keraal .option-features li::before {
+        color: #20c997;
+    }
+    
+    .option-btn {
+        width: 100%;
+        padding: 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+    
+    .btn-primary {
+        background: linear-gradient(135deg, #007bff, #0056d2);
+        color: white;
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,91,187,0.3);
+    }
+    
+    .btn-accent {
+        background: linear-gradient(135deg, #20c997, #198754);
+        color: white;
+    }
+    
+    .btn-accent:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(25,135,84,0.3);
+    }
+</style>
+
+<script>
+    // Rehab type selection modal handler
+    (function() {
+        let selectedRehabType = null;
+        
+        const modal = document.getElementById('rehab-type-modal');
+        const overlay = document.getElementById('modal-overlay');
+        const closeBtn = document.getElementById('modal-close-btn');
+        const options = document.querySelectorAll('.rehab-option-card');
+        
+        if (!modal) return; // Exit if modal not in DOM
+        
+        // Close modal handlers
+        const closeModal = () => {
+            modal.style.display = 'none';
+            selectedRehabType = null;
+        };
+        
+        overlay?.addEventListener('click', closeModal);
+        closeBtn?.addEventListener('click', closeModal);
+        
+        // Option card handlers
+        options.forEach(option => {
+            option.addEventListener('click', () => {
+                selectedRehabType = option.dataset.type;
+                console.log('Selected rehab type:', selectedRehabType);
+                
+                // Trigger custom event for parent to handle
+                const event = new CustomEvent('rehabTypeSelected', {
+                    detail: { type: selectedRehabType }
+                });
+                window.dispatchEvent(event);
+                
+                closeModal();
+            });
+            
+            // Button click also works
+            option.querySelector('.option-btn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectedRehabType = option.dataset.type;
+                console.log('Selected rehab type:', selectedRehabType);
+                
+                const event = new CustomEvent('rehabTypeSelected', {
+                    detail: { type: selectedRehabType }
+                });
+                window.dispatchEvent(event);
+                
+                closeModal();
+            });
+        });
+        
+        // Expose show function
+        window.showRehabTypeModal = () => {
+            modal.style.display = 'flex';
+        };
+        
+        // Expose get selected type
+        window.getSelectedRehabType = () => selectedRehabType;
+    })();
+</script>

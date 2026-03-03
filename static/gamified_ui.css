@@ -1,0 +1,561 @@
+/**
+ * Gamified UI Styles for Rehabilitation Platform
+ * Makes the interface more engaging and visually appealing
+ */
+
+/* ===================== GLOBAL STYLES ===================== */
+:root {
+    --primary-color: #007bff;
+    --success-color: #28a745;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+    --info-color: #17a2b8;
+    --dark-bg: #1a1a2e;
+    --light-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-dark: #333333;
+    --text-light: #666666;
+    --border-radius: 12px;
+    --transition: all 0.3s ease;
+}
+
+/* ===================== GRADIENTS ===================== */
+.gradient-bg-green {
+    background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+}
+
+.gradient-bg-blue {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.gradient-bg-orange {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.gradient-text {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* ===================== GAMIFIED CARDS ===================== */
+.gamified-card {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 24px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    transition: var(--transition);
+    border: 2px solid transparent;
+}
+
+.gamified-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+}
+
+.gamified-card.success {
+    border-color: var(--success-color);
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.05), rgba(40, 167, 69, 0.02));
+}
+
+.gamified-card.warning {
+    border-color: var(--warning-color);
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.05), rgba(255, 193, 7, 0.02));
+}
+
+/* ===================== REP COUNTER ===================== */
+.rep-counter-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.rep-number {
+    font-size: 48px;
+    font-weight: bold;
+    color: var(--primary-color);
+    font-family: 'Courier New', monospace;
+    text-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    transition: var(--transition);
+}
+
+.rep-number.pulse {
+    animation: pulse-scale 0.6s ease-out;
+}
+
+@keyframes pulse-scale {
+    0% {
+        transform: scale(1);
+        color: var(--success-color);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+        color: var(--primary-color);
+    }
+}
+
+.rep-label {
+    font-size: 14px;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 600;
+}
+
+/* ===================== PROGRESS RING ===================== */
+.progress-ring-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    width: 180px;
+    height: 180px;
+    margin: 20px auto;
+}
+
+.progress-ring {
+    transform: rotate(-90deg);
+}
+
+.progress-ring-circle {
+    stroke: url(#gradient);
+    fill: transparent;
+    stroke-linecap: round;
+    stroke-width: 8;
+    transition: var(--transition);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.progress-ring-bg {
+    stroke: #e9ecef;
+    fill: transparent;
+    stroke-width: 8;
+}
+
+.progress-ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.progress-ring-label {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: var(--text-light);
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* ===================== ACHIEVEMENT BADGES ===================== */
+.badge-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.achievement-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    background: var(--light-bg);
+    border-radius: 10px;
+    border: 2px solid #e9ecef;
+    transition: var(--transition);
+    cursor: pointer;
+}
+
+.achievement-badge:hover {
+    transform: scale(1.1);
+    border-color: var(--warning-color);
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
+}
+
+.achievement-badge.unlocked {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.1), rgba(255, 193, 7, 0.05));
+    border-color: var(--warning-color);
+    animation: badge-unlock 0.6s ease-out;
+}
+
+@keyframes badge-unlock {
+    0% {
+        transform: scale(0.8) rotate(-10deg);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+    }
+}
+
+.badge-icon {
+    font-size: 32px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.badge-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dark);
+    text-align: center;
+}
+
+.badge-locked .badge-icon {
+    opacity: 0.3;
+    filter: grayscale(100%);
+}
+
+.badge-locked .badge-name {
+    color: var(--text-light);
+}
+
+/* ===================== STREAK COUNTER ===================== */
+.streak-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+    color: white;
+    padding: 16px 24px;
+    border-radius: var(--border-radius);
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+}
+
+.streak-icon {
+    font-size: 28px;
+    animation: flame-flicker 1.5s infinite;
+}
+
+@keyframes flame-flicker {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.streak-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.streak-number {
+    font-size: 24px;
+    line-height: 1;
+}
+
+.streak-label {
+    font-size: 12px;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* ===================== FORM STATUS INDICATOR ===================== */
+.form-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.form-status-indicator.correct {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.1), rgba(40, 167, 69, 0.05));
+    color: var(--success-color);
+    border-left: 4px solid var(--success-color);
+}
+
+.form-status-indicator.incorrect {
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.1), rgba(220, 53, 69, 0.05));
+    color: var(--danger-color);
+    border-left: 4px solid var(--danger-color);
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+.form-status-icon {
+    font-size: 20px;
+}
+
+/* ===================== STATS DISPLAY ===================== */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+}
+
+.stat-item {
+    background: var(--light-bg);
+    padding: 16px;
+    border-radius: 10px;
+    text-align: center;
+    border: 2px solid transparent;
+    transition: var(--transition);
+}
+
+.stat-item:hover {
+    border-color: var(--primary-color);
+    background: var(--card-bg);
+}
+
+.stat-value {
+    font-size: 32px;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin: 8px 0;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* ===================== ANIMATED COUNTER ===================== */
+.animated-counter {
+    display: inline-block;
+    font-weight: bold;
+    font-size: 24px;
+    font-family: 'Courier New', monospace;
+    color: var(--primary-color);
+}
+
+.animated-counter.inc {
+    animation: counter-inc 0.6s ease-out;
+}
+
+@keyframes counter-inc {
+    0% {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    100% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* ===================== EXERCISE GIF SECTION ===================== */
+.exercise-gif-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 20px;
+    background: var(--light-bg);
+    border-radius: var(--border-radius);
+    min-height: 300px;
+    justify-content: center;
+}
+
+.exercise-gif-label {
+    font-size: 14px;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+}
+
+.exercise-gif {
+    max-width: 100%;
+    max-height: 250px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: var(--transition);
+}
+
+.exercise-gif:hover {
+    transform: scale(1.05);
+}
+
+.gif-loading {
+    text-align: center;
+    color: var(--text-light);
+}
+
+.gif-loading-spinner {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 10px 0;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ===================== SKELETON VISUALIZATION ===================== */
+.skeleton-canvas {
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    background: #000;
+    width: 100%;
+    max-width: 300px;
+    aspect-ratio: 3/4;
+    display: block;
+}
+
+/* ===================== RESPONSIVE LAYOUT ===================== */
+.session-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.skeleton-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.gif-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.stats-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Mobile responsive */
+@media (max-width: 1024px) {
+    .session-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .session-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ===================== ANIMATIONS ===================== */
+@keyframes slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-in {
+    animation: slide-in 0.5s ease-out;
+}
+
+/* ===================== SOUND EFFECT INDICATOR ===================== */
+.sound-effect-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background: var(--success-color);
+    border-radius: 50%;
+    animation: sound-pulse 0.6s ease-out;
+}
+
+@keyframes sound-pulse {
+    0% {
+        box-shadow: 0 0 0 0 var(--success-color);
+        transform: scale(1);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+        transform: scale(1);
+    }
+}
+
+/* ===================== DAILY CHALLENGE ===================== */
+.daily-challenge-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: var(--border-radius);
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+}
+
+.daily-challenge-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.9;
+}
+
+.daily-challenge-goal {
+    font-size: 24px;
+    font-weight: bold;
+    margin: 8px 0;
+}
+
+.daily-challenge-progress {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 12px;
+}
+
+.daily-challenge-progress-bar {
+    height: 100%;
+    background: white;
+    transition: var(--transition);
+}
+
+/* ===================== PRINT STYLES ===================== */
+@media print {
+    .gamified-card {
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+    
+    .session-grid {
+        grid-template-columns: 1fr;
+    }
+}

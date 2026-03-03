@@ -1,0 +1,41 @@
+<svg width="400" height="500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="500" fill="#f8f9fa"/>
+  
+  <!-- Title -->
+  <text x="200" y="30" font-size="24" font-weight="bold" text-anchor="middle" fill="#333">Forward Flexion</text>
+  
+  <!-- Standing position -->
+  <g>
+    <text x="100" y="80" font-size="14" font-weight="bold" fill="#666">1. Stand</text>
+    <!-- Head -->
+    <circle cx="100" cy="110" r="12" fill="#667eea"/>
+    <!-- Body upright -->
+    <line x1="100" y1="125" x2="100" y2="170" stroke="#667eea" stroke-width="3"/>
+    <!-- Arms -->
+    <line x1="100" y1="135" x2="70" y2="120" stroke="#667eea" stroke-width="2"/>
+    <line x1="100" y1="135" x2="130" y2="120" stroke="#667eea" stroke-width="2"/>
+    <!-- Legs -->
+    <line x1="100" y1="170" x2="85" y2="220" stroke="#28a745" stroke-width="3"/>
+    <line x1="100" y1="170" x2="115" y2="220" stroke="#28a745" stroke-width="3"/>
+  </g>
+  
+  <!-- Bent forward position -->
+  <g>
+    <text x="300" y="80" font-size="14" font-weight="bold" fill="#666">2. Bend Forward</text>
+    <!-- Head -->
+    <circle cx="300" cy="140" r="12" fill="#667eea"/>
+    <!-- Body bent -->
+    <line x1="300" y1="152" x2="300" y2="190" stroke="#667eea" stroke-width="3"/>
+    <!-- Arms bent -->
+    <line x1="300" y1="160" x2="270" y2="150" stroke="#667eea" stroke-width="2"/>
+    <line x1="300" y1="160" x2="330" y2="150" stroke="#667eea" stroke-width="2"/>
+    <!-- Legs -->
+    <line x1="300" y1="190" x2="285" y2="240" stroke="#28a745" stroke-width="3"/>
+    <line x1="300" y1="190" x2="315" y2="240" stroke="#28a745" stroke-width="3"/>
+  </g>
+  
+  <!-- Instructions -->
+  <text x="200" y="450" font-size="12" text-anchor="middle" fill="#888">Bend forward from waist, keeping knees straight</text>
+  <text x="200" y="475" font-size="12" text-anchor="middle" fill="#888">Feel stretch in hamstrings and lower back</text>
+</svg>

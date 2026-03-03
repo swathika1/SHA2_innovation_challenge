@@ -27,7 +27,7 @@ def _get_model():
     """Lazy-load the sentence transformer model."""
     global _model
     if _model is None:
-        from sentence_transformers import SentenceTransformer
+        from sentence_transformers import SentenceTransformer # type: ignore
         _model = SentenceTransformer(EMBEDDING_MODEL)
     return _model
 
@@ -130,6 +130,7 @@ def ingest_texts(texts: List[str], metadatas: List[dict],
     _index.add(embeddings)
     _metadata.extend(new_metas)
     _save_store()
+
 
 
 def get_stats() -> dict:

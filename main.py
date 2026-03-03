@@ -2,11 +2,16 @@ import os
 os.environ["TRANSFORMERS_NO_TF"] = "1"
 os.environ["USE_TF"] = "0"
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 from Rehab_Scorer_Coach.src.web_pipeline import WebRehabPipeline
+from Rehab_Scorer_Coach.src.keraal_pipeline import KeraalRehabPipeline
 from flask_cors import CORS # type: ignore
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
@@ -118,6 +123,9 @@ from database import close_db, query_db, execute_db, load_optimization_data
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'  # Required for sessions
 
+# Global dict to store latest landmarks for frontend polling
+LATEST_LANDMARKS = {}
+
 # Register database cleanup function
 app.teardown_appcontext(close_db)
 
@@ -205,13 +213,35 @@ def api_tts():
 
     try:
         if not os.path.exists(out_path):
-            print("🔊 Generating new TTS file")
+            print(f"🔊 Generating new TTS: {language}")
 
-            # SAFE asyncio call inside Flask
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(_synth_to_file(text, voice, out_path))
-            loop.close()
+            try:
+                # Try edge_tts with timeout
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Set a timeout for TTS generation (10 seconds)
+                import signal
+                import sys
+                
+                def timeout_handler(signum, frame):
+                    raise TimeoutError(f"TTS generation took too long (>10s)")
+                
+                # Use try-except around the TTS call
+                try:
+                    loop.run_until_complete(_synth_to_file(text, voice, out_path))
+                    print(f"✅ TTS generated for {language}")
+                except Exception as tts_error:
+                    print(f"⚠️ TTS generation failed: {tts_error}")
+                    loop.close()
+                    raise tts_error
+                    
+                loop.close()
+            except Exception as tts_err:
+                print(f"❌ edge_tts failed, will use fallback: {tts_err}")
+                # Fallback: create a silent audio file or use pre-generated sample
+                # For now, just recreate the error but with better messaging
+                raise Exception(f"TTS service unavailable: {str(tts_err)[:100]}")
 
         else:
             print("♻️ Using cached TTS")
@@ -219,8 +249,9 @@ def api_tts():
         return send_file(out_path, mimetype="audio/mpeg", as_attachment=False)
 
     except Exception as e:
-        print("❌ TTS ERROR:", e)
-        return jsonify({"error": f"TTS failed: {type(e).__name__}: {e}"}), 500
+        print(f"❌ TTS ERROR: {e}")
+        # Return 503 Service Unavailable instead of 500 to indicate temporary failure
+        return jsonify({"error": f"TTS service temporarily unavailable"}), 503
 
 @app.get("/health")
 def health():
@@ -2290,13 +2321,20 @@ SESSION_STATE = {
     "cooldown_until": 0
 }
 
-# Initialize the CV pipeline
+# Initialize the CV pipelines
 try:
     PIPELINE = WebRehabPipeline()
-    print("[INIT] WebRehabPipeline initialized successfully")
+    print("[INIT] WebRehabPipeline (General Rehab) initialized successfully")
 except Exception as e:
     PIPELINE = None
     print(f"[WARNING] WebRehabPipeline failed to initialize: {e}")
+
+try:
+    KERAAL_PIPELINE = KeraalRehabPipeline()
+    print("[INIT] KeraalRehabPipeline (Low Back Pain) initialized successfully")
+except Exception as e:
+    KERAAL_PIPELINE = None
+    print(f"[WARNING] KeraalRehabPipeline failed to initialize: {e}")
 
 
 # ==================== SESSION LIFECYCLE APIs ====================
@@ -3299,6 +3337,16 @@ def api_live_feedback():
             mode=mode,
             manual_exercise=manual_exercise
         )
+        
+        # Store landmarks for frontend polling
+        global LATEST_LANDMARKS
+        if 'landmarks' in out and out['landmarks']:
+            LATEST_LANDMARKS['kimore'] = {
+                'landmarks': out['landmarks'],
+                'exercise_name': out.get('exercise_name', ''),
+                'timestamp': time.time()
+            }
+        
         return jsonify(out)
     except Exception as e:
         print(f"❌ API Error: {e}")
@@ -3318,6 +3366,132 @@ def api_live_feedback():
                 "exercise_completed": False,
             },
         }), 500
+
+
+# ==================== KERAAL LOW BACK PAIN PIPELINE API ====================
+
+@app.route("/api/live_feedback_keraal", methods=["POST"])
+def api_live_feedback_keraal():
+    """KERAAL-specific endpoint for low back pain rehabilitation"""
+    if KERAAL_PIPELINE is None:
+        return jsonify({"error": "KERAAL pipeline not available"}), 503
+
+    data = request.get_json(force=True) or {}
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    language = data.get("language", "English")
+    
+    try:
+        out = KERAAL_PIPELINE.process_frame_dataurl_keraal(
+            frame_b64,
+            language=language
+        )
+        
+        # Store landmarks for frontend polling
+        global LATEST_LANDMARKS
+        if 'landmarks' in out and out['landmarks']:
+            LATEST_LANDMARKS['keraal'] = {
+                'landmarks': out['landmarks'],
+                'exercise_name': out.get('exercise_name', ''),
+                'timestamp': time.time()
+            }
+        
+        return jsonify(out)
+    except Exception as e:
+        print(f"❌ KERAAL API Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "frame_score": 0.0,
+            "form_status": "ERROR",
+            "llm_feedback": [f"KERAAL error: {str(e)}"],
+            "exercise_name": "error",
+            "exercise_confidence": 0.0,
+            "pipeline": "keraal",
+            "rep_info": {
+                "rep_now": 0,
+                "rep_target": 10,
+                "set_now": 1,
+                "set_target": 3,
+                "rep_incremented": False,
+                "set_completed": False,
+                "exercise_completed": False,
+            },
+        }), 500
+
+
+@app.route("/api/session/landmarks", methods=["GET"])
+def get_session_landmarks():
+    """
+    Get latest landmarks for skeleton visualization.
+    Called by frontend for real-time pose rendering (every 200ms).
+    Returns 33 landmarks with [x, y, z] coordinates.
+    """
+    global LATEST_LANDMARKS
+    
+    # Try KIMORE first, then KERAAL
+    landmarks_data = LATEST_LANDMARKS.get('kimore') or LATEST_LANDMARKS.get('keraal')
+    
+    if landmarks_data:
+        return jsonify({
+            "ok": True,
+            "landmarks": landmarks_data['landmarks'],
+            "exercise_name": landmarks_data['exercise_name'],
+            "timestamp": landmarks_data['timestamp']
+        })
+    else:
+        return jsonify({
+            "ok": False,
+            "landmarks": [],
+            "exercise_name": "",
+            "timestamp": 0
+        }), 204  # No Content
+
+
+@app.route("/api/session/start/keraal", methods=["POST"])
+@login_required
+@role_required('patient')
+def api_session_start_keraal():
+    """Start a KERAAL (low back pain) session"""
+    if KERAAL_PIPELINE is None:
+        return jsonify({"ok": False, "error": "KERAAL pipeline not available"}), 503
+    
+    data = request.get_json(force=True) or {}
+    language = data.get("language", "English")
+    
+    try:
+        KERAAL_PIPELINE.reset()
+        KERAAL_PIPELINE.language = language
+        return jsonify({
+            "ok": True,
+            "pipeline": "keraal",
+            "message": "KERAAL session started"
+        })
+    except Exception as e:
+        print(f"❌ KERAAL Session Start Error: {e}")
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route("/api/session/stop/keraal", methods=["POST"])
+@login_required
+@role_required('patient')
+def api_session_stop_keraal():
+    """Stop a KERAAL session"""
+    if KERAAL_PIPELINE is None:
+        return jsonify({"ok": True, "warning": "KERAAL pipeline not available"})
+    
+    try:
+        KERAAL_PIPELINE.reset()
+        return jsonify({"ok": True, "pipeline": "keraal"})
+    except Exception as e:
+        print(f"❌ KERAAL Session Stop Error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 @app.post("/api/session/stop")
 def api_session_stop():  # sourcery skip: use-contextlib-suppress
