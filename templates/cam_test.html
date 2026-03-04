@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Camera Test</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; background: #111; color: #eee; }
+        video { width: 100%; border: 3px solid #3b82f6; border-radius: 12px; background: #000; }
+        #log { background: #1a1a2e; padding: 16px; border-radius: 8px; font-size: 13px; line-height: 1.6; max-height: 400px; overflow-y: auto; white-space: pre-wrap; }
+        button { padding: 10px 24px; font-size: 16px; border-radius: 8px; border: none; background: #3b82f6; color: white; cursor: pointer; margin: 8px 4px; }
+        button:hover { background: #2563eb; }
+        .ok { color: #22c55e; }
+        .err { color: #ef4444; }
+        .warn { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <h1>🎥 Camera Diagnostics</h1>
+    <p>This page tests if your browser can access the camera. Open DevTools (Cmd+Option+I / F12) → Console for extra info.</p>
+    <video id="video" autoplay playsinline muted></video>
+    <div style="margin: 12px 0;">
+        <button onclick="testCamera()">▶ Start Camera</button>
+        <button onclick="stopCam()">⏹ Stop Camera</button>
+    </div>
+    <div id="log"></div>
+
+    <script>
+        const logEl = document.getElementById('log');
+        let stream = null;
+
+        function log(msg, cls) {
+            const span = document.createElement('span');
+            span.className = cls || '';
+            span.textContent = msg + '\n';
+            logEl.appendChild(span);
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(msg);
+        }
+
+        // Run basic checks immediately
+        log('=== Environment ===');
+        log('URL: ' + location.href);
+        log('Protocol: ' + location.protocol);
+        log('isSecureContext: ' + window.isSecureContext, window.isSecureContext ? 'ok' : 'err');
+        log('navigator.mediaDevices: ' + !!navigator.mediaDevices, navigator.mediaDevices ? 'ok' : 'err');
+        log('getUserMedia: ' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? 'ok' : 'err');
+
+        // Check camera permission
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({name: 'camera'}).then(r => {
+                log('Camera permission state: ' + r.state, r.state === 'granted' ? 'ok' : (r.state === 'denied' ? 'err' : 'warn'));
+                r.onchange = () => log('Permission changed to: ' + r.state);
+            }).catch(e => log('Permission query error: ' + e.message, 'warn'));
+        }
+
+        // Enumerate devices
+        if (navigator.mediaDevices) {
+            log('\n=== Devices ===');
+            navigator.mediaDevices.enumerateDevices().then(devices => {
+                const video = devices.filter(d => d.kind === 'videoinput');
+                const audio = devices.filter(d => d.kind === 'audioinput');
+                log('Video inputs: ' + video.length, video.length > 0 ? 'ok' : 'err');
+                video.forEach((d, i) => log('  ' + i + ': ' + (d.label || '(label hidden — grant permission first)') + ' [' + d.deviceId.substring(0, 8) + '...]'));
+                log('Audio inputs: ' + audio.length);
+            }).catch(e => log('enumerateDevices error: ' + e.message, 'err'));
+        }
+
+        async function testCamera() {
+            log('\n=== Testing Camera ===');
+            const video = document.getElementById('video');
+
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+                stream = null;
+                video.srcObject = null;
+            }
+
+            try {
+                log('Calling getUserMedia({video: true})...');
+                const t0 = performance.now();
+                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                const elapsed = Math.round(performance.now() - t0);
+                log('✅ Got stream in ' + elapsed + 'ms', 'ok');
+
+                const track = stream.getVideoTracks()[0];
+                log('Track label: ' + track.label);
+                log('Track state: ' + track.readyState, track.readyState === 'live' ? 'ok' : 'err');
+                const settings = track.getSettings();
+                log('Settings: ' + settings.width + 'x' + settings.height + ' @ ' + (settings.frameRate || '?') + 'fps');
+
+                video.srcObject = stream;
+                log('video.srcObject set');
+
+                try {
+                    await video.play();
+                    log('video.play() resolved', 'ok');
+                } catch (e) {
+                    log('video.play() error: ' + e.message, 'warn');
+                }
+
+                // Wait for dimensions
+                let wait = 0;
+                while (video.videoWidth === 0 && wait < 5000) {
+                    await new Promise(r => setTimeout(r, 100));
+                    wait += 100;
+                }
+                log('video.videoWidth: ' + video.videoWidth + ', videoHeight: ' + video.videoHeight);
+                if (video.videoWidth > 0) {
+                    log('🎉 CAMERA IS WORKING!', 'ok');
+                } else {
+                    log('⚠️ Stream exists but video has no dimensions yet', 'warn');
+                }
+
+                // Re-enumerate to get labels now that permission is granted
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cams = devices.filter(d => d.kind === 'videoinput');
+                log('\nAvailable cameras (post-permission):');
+                cams.forEach((d, i) => log('  ' + i + ': ' + d.label));
+
+            } catch (err) {
+                log('❌ getUserMedia ERROR: [' + err.name + '] ' + err.message, 'err');
+                if (err.name === 'NotAllowedError') {
+                    log('→ You denied camera permission. Click the 🔒 icon in the address bar to allow.', 'warn');
+                } else if (err.name === 'NotFoundError') {
+                    log('→ No camera found. Is a webcam connected?', 'warn');
+                } else if (err.name === 'NotReadableError') {
+                    log('→ Camera is in use by another app (Zoom, FaceTime, etc). Close it and retry.', 'warn');
+                } else if (err.name === 'OverconstrainedError') {
+                    log('→ Camera constraints not satisfiable. Trying with no constraints...');
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({video: true});
+                        log('✅ Fallback succeeded', 'ok');
+                    } catch (e2) {
+                        log('❌ Fallback also failed: ' + e2.message, 'err');
+                    }
+                }
+            }
+        }
+
+        function stopCam() {
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+                stream = null;
+                document.getElementById('video').srcObject = null;
+                log('\n⏹ Camera stopped');
+            }
+        }
+    </script>
+</body>
+</html>

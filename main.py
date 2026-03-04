@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 from Rehab_Scorer_Coach.src.web_pipeline import WebRehabPipeline
@@ -50,6 +50,13 @@ import tempfile
 import os
 import asyncio
 import edge_tts
+try:
+    from gtts import gTTS
+    GTTS_AVAILABLE = True
+    print("[INIT] gTTS (Google TTS) loaded successfully")
+except ImportError:
+    GTTS_AVAILABLE = False
+    print("[WARNING] gTTS not installed, only edge_tts available")
 
 
 OPENPOSE_PORT = 9001
@@ -177,7 +184,8 @@ def get_current_user():
         return query_db('SELECT * FROM users WHERE id = ?', (session['user_id'],), one=True)
     return None
 
-VOICE_MAP = {
+# ── Edge-TTS voice map (Microsoft Neural voices) ──
+EDGE_VOICE_MAP = {
     "English": "en-US-JennyNeural",
     "Tamil":   "ta-IN-ValluvarNeural",
     "Chinese": "zh-CN-XiaoxiaoNeural",
@@ -185,15 +193,30 @@ VOICE_MAP = {
     "Thai":    "th-TH-PremwadeeNeural",
 }
 
-def _tts_cache_path(text: str, language: str) -> str:
-    h = hashlib.md5(f"{language}|{text}".encode("utf-8")).hexdigest()
+# ── gTTS language codes (Google TTS) ──
+GTTS_LANG_MAP = {
+    "English": "en",
+    "Tamil":   "ta",
+    "Chinese": "zh-CN",
+    "Malay":   "ms",  # Malay not natively in gTTS, but 'ms' may work; fallback to 'id' (Indonesian) if needed
+    "Thai":    "th",
+}
+
+def _tts_cache_path(text: str, language: str, engine: str = "edge") -> str:
+    h = hashlib.md5(f"{engine}|{language}|{text}".encode("utf-8")).hexdigest()
     cache_dir = os.path.join(tempfile.gettempdir(), "rehab_tts_cache")
     os.makedirs(cache_dir, exist_ok=True)
     return os.path.join(cache_dir, f"{h}.mp3")
 
-async def _synth_to_file(text: str, voice: str, out_path: str):
+async def _edge_synth(text: str, voice: str, out_path: str):
+    """Synthesise with Microsoft Edge neural voice."""
     communicate = edge_tts.Communicate(text=text, voice=voice)
     await communicate.save(out_path)
+
+def _gtts_synth(text: str, lang_code: str, out_path: str):
+    """Synthesise with Google TTS (gTTS). Works offline-ish, very reliable for CJK + Tamil."""
+    tts = gTTS(text=text, lang=lang_code, slow=False)
+    tts.save(out_path)
 
 @app.route("/api/tts", methods=["POST"])
 def api_tts():
@@ -208,50 +231,54 @@ def api_tts():
     if not text:
         return jsonify({"error": "text is required"}), 400
 
-    voice = VOICE_MAP.get(language, VOICE_MAP["English"])
-    out_path = _tts_cache_path(text, language)
+    # ── Strategy: try edge_tts first → gTTS fallback → error ──
+    # Step 1: Try edge_tts (higher quality neural voices)
+    edge_voice = EDGE_VOICE_MAP.get(language, EDGE_VOICE_MAP["English"])
+    edge_path = _tts_cache_path(text, language, "edge")
+
+    if os.path.exists(edge_path):
+        print(f"♻️  Cached edge TTS ({language})")
+        return send_file(edge_path, mimetype="audio/mpeg", as_attachment=False)
 
     try:
-        if not os.path.exists(out_path):
-            print(f"🔊 Generating new TTS: {language}")
+        print(f"🔊 Edge-TTS generating: {language} ({edge_voice})")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(
+            asyncio.wait_for(_edge_synth(text, edge_voice, edge_path), timeout=8.0)
+        )
+        loop.close()
+        print(f"✅ Edge-TTS done for {language}")
+        return send_file(edge_path, mimetype="audio/mpeg", as_attachment=False)
+    except Exception as edge_err:
+        print(f"⚠️  Edge-TTS failed ({language}): {edge_err}")
+        # Clean up partial file if any
+        if os.path.exists(edge_path):
+            try: os.remove(edge_path)
+            except: pass
 
-            try:
-                # Try edge_tts with timeout
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                # Set a timeout for TTS generation (10 seconds)
-                import signal
-                import sys
-                
-                def timeout_handler(signum, frame):
-                    raise TimeoutError(f"TTS generation took too long (>10s)")
-                
-                # Use try-except around the TTS call
-                try:
-                    loop.run_until_complete(_synth_to_file(text, voice, out_path))
-                    print(f"✅ TTS generated for {language}")
-                except Exception as tts_error:
-                    print(f"⚠️ TTS generation failed: {tts_error}")
-                    loop.close()
-                    raise tts_error
-                    
-                loop.close()
-            except Exception as tts_err:
-                print(f"❌ edge_tts failed, will use fallback: {tts_err}")
-                # Fallback: create a silent audio file or use pre-generated sample
-                # For now, just recreate the error but with better messaging
-                raise Exception(f"TTS service unavailable: {str(tts_err)[:100]}")
+    # Step 2: Fallback to gTTS (Google TTS) — especially reliable for non-English
+    if GTTS_AVAILABLE:
+        gtts_lang = GTTS_LANG_MAP.get(language, "en")
+        gtts_path = _tts_cache_path(text, language, "gtts")
 
-        else:
-            print("♻️ Using cached TTS")
+        if os.path.exists(gtts_path):
+            print(f"♻️  Cached gTTS ({language})")
+            return send_file(gtts_path, mimetype="audio/mpeg", as_attachment=False)
 
-        return send_file(out_path, mimetype="audio/mpeg", as_attachment=False)
+        try:
+            print(f"🔊 gTTS generating: {language} (lang={gtts_lang})")
+            _gtts_synth(text, gtts_lang, gtts_path)
+            print(f"✅ gTTS done for {language}")
+            return send_file(gtts_path, mimetype="audio/mpeg", as_attachment=False)
+        except Exception as gtts_err:
+            print(f"❌ gTTS also failed ({language}): {gtts_err}")
+            if os.path.exists(gtts_path):
+                try: os.remove(gtts_path)
+                except: pass
 
-    except Exception as e:
-        print(f"❌ TTS ERROR: {e}")
-        # Return 503 Service Unavailable instead of 500 to indicate temporary failure
-        return jsonify({"error": f"TTS service temporarily unavailable"}), 503
+    print(f"❌ All TTS engines failed for {language}")
+    return jsonify({"error": "TTS service temporarily unavailable"}), 503
 
 @app.get("/health")
 def health():
@@ -810,7 +837,11 @@ def rehab_session():
         WHERE w.patient_id = ? AND w.is_active = 1
     ''', (session['user_id'],))
     
-    return render_template('patient/session.html', workouts=workouts if workouts else [])
+    resp = make_response(render_template('patient/session.html', workouts=workouts if workouts else []))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 @app.route('/patient/checkin', methods=['GET', 'POST'])
@@ -819,6 +850,12 @@ def rehab_session():
 def pain_checkin():
     """Pain & Effort Check-In — now handled via JS API calls. Keep route for direct access."""
     return render_template('patient/checkin.html')
+
+
+@app.route('/cam-test')
+def cam_test():
+    """Standalone camera diagnostic page"""
+    return render_template('cam_test.html')
 
 
 @app.route('/patient/summary')
@@ -3327,6 +3364,7 @@ def api_live_feedback():
     language = data.get("language", "English")
     mode = data.get("mode", "auto")
     manual_exercise = data.get("manual_exercise", None)
+    exercise_hint = data.get("exercise_hint", "")
     
     PIPELINE.language = language  # keep it simple
     
@@ -3335,7 +3373,8 @@ def api_live_feedback():
             frame_b64,
             language=language,
             mode=mode,
-            manual_exercise=manual_exercise
+            manual_exercise=manual_exercise,
+            exercise_hint=exercise_hint
         )
         
         # Store landmarks for frontend polling
@@ -3382,11 +3421,13 @@ def api_live_feedback_keraal():
         return jsonify({"error": "frame_b64 missing"}), 400
 
     language = data.get("language", "English")
+    exercise_hint = data.get("exercise_hint", "")
     
     try:
         out = KERAAL_PIPELINE.process_frame_dataurl_keraal(
             frame_b64,
-            language=language
+            language=language,
+            exercise_hint=exercise_hint
         )
         
         # Store landmarks for frontend polling

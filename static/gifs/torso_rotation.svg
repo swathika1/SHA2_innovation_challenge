@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef2f2"/>
+      <stop offset="100%" stop-color="#fce7f3"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" rx="16" fill="url(#bg)"/>
+  <text x="150" y="32" text-anchor="middle" font-family="system-ui,sans-serif" font-size="15" font-weight="800" fill="#be123c">Torso Rotation (RTK)</text>
+
+  <!-- Rotation arc -->
+  <path d="M100,128 A50,18 0 0,1 200,128" fill="none" stroke="#059669" stroke-width="1" stroke-dasharray="4,3" opacity="0.35"/>
+  <text x="86" y="123" font-family="system-ui,sans-serif" font-size="9" fill="#059669" opacity="0.6">↺</text>
+  <text x="204" y="123" font-family="system-ui,sans-serif" font-size="9" fill="#059669" opacity="0.6">↻</text>
+
+  <!-- Head (follows shoulders slightly) -->
+  <circle cx="150" cy="85" r="20" fill="#fecdd3" stroke="#be123c" stroke-width="3">
+    <animateTransform attributeName="transform" type="translate" values="0,0;-5,0;0,0;5,0;0,0" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+  </circle>
+  <g>
+    <animateTransform attributeName="transform" type="translate" values="0,0;-5,0;0,0;5,0;0,0" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+    <circle cx="143" cy="81" r="2" fill="#be123c"/><circle cx="157" cy="81" r="2" fill="#be123c"/>
+    <path d="M144,90 Q150,95 156,90" fill="none" stroke="#be123c" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Neck -->
+  <line x1="150" y1="105" x2="150" y2="118" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Lower torso (stationary) -->
+  <line x1="150" y1="175" x2="150" y2="230" stroke="#be123c" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- UPPER TORSO + ARMS (rotating) -->
+  <g>
+    <animateTransform attributeName="transform" type="translate" values="0,0;-14,0;0,0;14,0;0,0" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+
+    <!-- Upper torso -->
+    <line x1="150" y1="118" x2="150" y2="175" stroke="#059669" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- Shoulder line with perspective -->
+    <line y1="128" y2="128" stroke="#059669" stroke-width="4" stroke-linecap="round">
+      <animate attributeName="x1" values="112;98;112;126;112" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+      <animate attributeName="x2" values="188;202;188;174;188" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+    </line>
+
+    <!-- Arms held out front for rotation -->
+    <!-- Left arm upper -->
+    <line y1="128" y2="180" stroke="#059669" stroke-width="4" stroke-linecap="round">
+      <animate attributeName="x1" values="112;98;112;126;112" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+      <animate attributeName="x2" values="100;85;100;115;100" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+    </line>
+    <!-- Left arm lower -->
+    <line y1="180" y2="235" stroke="#be123c" stroke-width="3.5" stroke-linecap="round">
+      <animate attributeName="x1" values="100;85;100;115;100" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+      <animate attributeName="x2" values="90;75;90;105;90" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+    </line>
+
+    <!-- Right arm upper -->
+    <line y1="128" y2="180" stroke="#059669" stroke-width="4" stroke-linecap="round">
+      <animate attributeName="x1" values="188;202;188;174;188" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+      <animate attributeName="x2" values="200;215;200;186;200" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+    </line>
+    <!-- Right arm lower -->
+    <line y1="180" y2="235" stroke="#be123c" stroke-width="3.5" stroke-linecap="round">
+      <animate attributeName="x1" values="200;215;200;186;200" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+      <animate attributeName="x2" values="210;225;210;196;210" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+    </line>
+
+    <!-- Shoulder joints -->
+    <circle cy="128" r="5" fill="#059669">
+      <animate attributeName="cx" values="112;98;112;126;112" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+    </circle>
+    <circle cy="128" r="5" fill="#059669">
+      <animate attributeName="cx" values="188;202;188;174;188" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1"/>
+    </circle>
+  </g>
+
+  <!-- Hip -->
+  <circle cx="150" cy="230" r="5" fill="#be123c"/>
+
+  <!-- Left leg -->
+  <line x1="150" y1="230" x2="122" y2="305" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+  <line x1="122" y1="305" x2="118" y2="358" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="122" cy="305" r="4" fill="#be123c"/>
+  <line x1="118" y1="358" x2="106" y2="360" stroke="#be123c" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Right leg -->
+  <line x1="150" y1="230" x2="178" y2="305" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+  <line x1="178" y1="305" x2="182" y2="358" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="178" cy="305" r="4" fill="#be123c"/>
+  <line x1="182" y1="358" x2="194" y2="360" stroke="#be123c" stroke-width="3" stroke-linecap="round"/>
+
+  <rect x="18" y="372" width="264" height="22" rx="11" fill="#059669" opacity="0.12"/>
+  <text x="150" y="387" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10.5" font-weight="600" fill="#059669">Rotate trunk gently 20-30° each side</text>
+</svg>

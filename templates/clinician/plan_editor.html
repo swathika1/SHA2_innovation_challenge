@@ -61,10 +61,17 @@
                  data-exercise-id="{{ exercise.id }}"
                  data-exercise-name="{{ exercise.name }}"
                  data-exercise-category="{{ exercise.category }}"
-                 ondragstart="handleDragStart(event, {{ exercise.id }}, '{{ exercise.name }}', '{{ exercise.category }}')">
-                <strong>{{ exercise.name }}</strong>
-                <span class="pe-cat-pill small">{{ exercise.category }}</span>
-                <p class="pe-lib-desc">{{ exercise.description or 'Rehabilitation exercise' }}</p>
+                 ondragstart="handleDragStart(event, {{ exercise.id }}, '{{ exercise.name }}', '{{ exercise.category }}')"
+                 style="display:flex; align-items:center; gap:10px;">
+                {% set ex_key = exercise.name|lower|replace(' ', '_') %}
+                <img src="{{ url_for('static', filename='gifs/' ~ ex_key ~ '.svg') }}"
+                     alt="" style="width:48px; height:48px; object-fit:contain; border-radius:6px; background:#f0f4ff; flex-shrink:0;"
+                     onerror="this.style.display='none'">
+                <div style="flex:1;">
+                    <strong>{{ exercise.name }}</strong>
+                    <span class="pe-cat-pill small">{{ exercise.category }}</span>
+                    <p class="pe-lib-desc">{{ exercise.description or 'Rehabilitation exercise' }}</p>
+                </div>
             </div>
             {% endfor %}
         </div>

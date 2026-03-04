@@ -1,354 +1,316 @@
 """
-MediaPipe Rule-Based Rep Counter for Rehabilitation Exercises
-Provides accurate, stable rep detection for both KERAAL and KIMORE pipelines
+MediaPipe Angle-Based Rep Counter for Rehabilitation Exercises
+Proven approach from sports-science / AI-fitness literature:
+  1. Calculate joint angles from MediaPipe 33-point landmarks
+  2. Smooth with Exponential Moving Average (EMA)
+  3. Two-threshold state machine with hysteresis
+  4. Minimum rep duration to prevent false counting
+
+Supports:  Kimore  -> squat, lifting_of_arms, lateral_trunk_tilt, trunk_rotation
+           Keraal  -> forward_flexion, flank_stretch, torso_rotation
 """
 
 import numpy as np
-from typing import Dict, Tuple, Optional
-import math
+import time
+from typing import Dict, Optional
+
+
+# MediaPipe BlazePose landmark indices
+L_SHOULDER, R_SHOULDER = 11, 12
+L_ELBOW,    R_ELBOW    = 13, 14
+L_WRIST,    R_WRIST    = 15, 16
+L_HIP,      R_HIP      = 23, 24
+L_KNEE,     R_KNEE     = 25, 26
+L_ANKLE,    R_ANKLE    = 27, 28
+NOSE = 0
+
+
+# Exercise profile definitions
+# direction = "down" means angle decreases to reach peak (e.g. squat, flexion)
+# direction = "up"   means angle increases to reach peak (e.g. arm raise)
+EXERCISE_PROFILES = {
+    # --- Kimore exercises ---
+    # NOTE: Thresholds relaxed so EMA-smoothed values (alpha=0.35) can
+    #       reach them during normal-range-of-motion reps.
+    "squat": {
+        "joints": [
+            ("L", L_HIP, L_KNEE, L_ANKLE),
+            ("R", R_HIP, R_KNEE, R_ANKLE),
+        ],
+        "rest_threshold": 150,   # Standing: knee angle > 150 deg
+        "peak_threshold": 135,   # Squatting: knee angle < 135 deg
+        "direction": "down",
+        "min_rep_sec": 1.0,
+    },
+    "lifting_of_arms": {
+        "joints": [
+            ("L", L_HIP, L_SHOULDER, L_ELBOW),
+            ("R", R_HIP, R_SHOULDER, R_ELBOW),
+        ],
+        "rest_threshold": 45,    # Arms at sides: angle < 45 deg
+        "peak_threshold": 60,    # Arms raised: angle > 60 deg
+        "direction": "up",
+        "min_rep_sec": 1.0,
+    },
+    "lateral_trunk_tilt": {
+        "joints": [
+            ("L", L_SHOULDER, L_HIP, L_KNEE),
+            ("R", R_SHOULDER, R_HIP, R_KNEE),
+        ],
+        "rest_threshold": 162,   # Standing straight: ~170 deg
+        "peak_threshold": 155,   # Tilted: < 155 deg
+        "direction": "down",
+        "min_rep_sec": 0.8,
+        "use_min": True,
+    },
+    "trunk_rotation": {
+        "joints": "rotation",    # Special: shoulder-width / hip-width ratio
+        "rest_threshold": 0.85,
+        "peak_threshold": 0.65,
+        "direction": "down",
+        "min_rep_sec": 1.0,
+    },
+    # --- Keraal exercises ---
+    "forward_flexion": {
+        "joints": [
+            ("L", L_SHOULDER, L_HIP, L_KNEE),
+            ("R", R_SHOULDER, R_HIP, R_KNEE),
+        ],
+        "rest_threshold": 155,
+        "peak_threshold": 110,
+        "direction": "down",
+        "min_rep_sec": 1.5,
+    },
+    "flank_stretch": {
+        "joints": [
+            ("L", L_SHOULDER, L_HIP, L_KNEE),
+            ("R", R_SHOULDER, R_HIP, R_KNEE),
+        ],
+        "rest_threshold": 165,
+        "peak_threshold": 150,
+        "direction": "down",
+        "min_rep_sec": 1.2,
+        "use_min": True,
+    },
+    "torso_rotation": {
+        "joints": "rotation",
+        "rest_threshold": 0.80,
+        "peak_threshold": 0.55,
+        "direction": "down",
+        "min_rep_sec": 1.0,
+    },
+    "trunk_rotation_target": {
+        "joints": "rotation",
+        "rest_threshold": 0.85,
+        "peak_threshold": 0.60,
+        "direction": "down",
+        "min_rep_sec": 1.0,
+    },
+    "pelvis_rotation": {
+        "joints": "rotation",
+        "rest_threshold": 0.85,
+        "peak_threshold": 0.65,
+        "direction": "down",
+        "min_rep_sec": 1.0,
+    },
+}
+
+# Map exercise display names to profile keys
+EXERCISE_NAME_MAP = {
+    "squat": "squat",
+    "lifting of arms": "lifting_of_arms",
+    "lifting_of_arms": "lifting_of_arms",
+    "lateral trunk tilt": "lateral_trunk_tilt",
+    "lateral_trunk_tilt": "lateral_trunk_tilt",
+    "trunk rotation": "trunk_rotation",
+    "trunk_rotation": "trunk_rotation",
+    "forward flexion": "forward_flexion",
+    "forward_flexion": "forward_flexion",
+    "flank stretch": "flank_stretch",
+    "flank_stretch": "flank_stretch",
+    "torso rotation": "torso_rotation",
+    "torso_rotation": "torso_rotation",
+    "pelvis rotation": "pelvis_rotation",
+    "pelvis_rotation": "pelvis_rotation",
+    "trunk_rotation_target": "trunk_rotation_target",
+    "trunk rotation target": "trunk_rotation_target",
+    "trunk rotation and target": "trunk_rotation_target",
+    # Keraal class codes
+    "ctk": "forward_flexion",
+    "elk": "flank_stretch",
+    "rtk": "torso_rotation",
+}
+
+
+def _angle_3pt(p1, p2, p3):
+    """Angle at p2 formed by p1->p2->p3, in degrees [0, 180]."""
+    v1 = p1[:2] - p2[:2]
+    v2 = p3[:2] - p2[:2]
+    m1, m2 = np.linalg.norm(v1), np.linalg.norm(v2)
+    if m1 < 1e-6 or m2 < 1e-6:
+        return 0.0
+    cos_a = np.clip(np.dot(v1, v2) / (m1 * m2), -1, 1)
+    return float(np.degrees(np.arccos(cos_a)))
+
+
+def _shoulder_hip_ratio(landmarks):
+    """Ratio of shoulder width to hip width - drops when torso rotates."""
+    sw = abs(landmarks[L_SHOULDER][0] - landmarks[R_SHOULDER][0])
+    hw = abs(landmarks[L_HIP][0] - landmarks[R_HIP][0])
+    if hw < 1e-6:
+        return 1.0
+    return float(sw / hw)
 
 
 class RepCounterMediaPipe:
     """
-    Rule-based rep counter using MediaPipe pose landmarks (33 points)
-    Detects reps by monitoring joint angles and positions
+    Angle-based rep counter with EMA smoothing and hysteresis.
+
+    Usage:
+        counter = RepCounterMediaPipe()
+        for each frame:
+            rep_done = counter.process(landmarks_33x3, "squat")
     """
-    
+
+    EMA_ALPHA = 0.35  # Smoothing factor (lower = smoother, slower response)
+
     def __init__(self):
-        self.state = "rest"  # States: rest, moving_up, moving_down
-        self.rep_count = 0
-        self.prev_landmarks = None
-        self.movement_threshold = 15  # degrees
-        self.smoothing_factor = 0.7
-        
-    def _calculate_angle(self, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray) -> float:
+        self._smoothed_value = None   # EMA-smoothed angle/ratio
+        self._state = "rest"          # "rest" or "peak"
+        self._last_rep_time = 0       # Timestamp of last rep
+        self._current_exercise = ""
+        self.rep_count = 0            # Kept for backward compat
+
+    # -- public API --
+
+    def process(self, landmarks, exercise_name):
         """
-        Calculate angle at p2 formed by p1, p2, p3
-        Returns angle in degrees (0-180)
-        """
-        try:
-            # Vector from p2 to p1
-            v1 = p1[:2] - p2[:2]
-            # Vector from p2 to p3
-            v2 = p3[:2] - p2[:2]
-            
-            # Calculate angle using dot product
-            dot_product = np.dot(v1, v2)
-            magnitude_v1 = np.linalg.norm(v1)
-            magnitude_v2 = np.linalg.norm(v2)
-            
-            if magnitude_v1 == 0 or magnitude_v2 == 0:
-                return 0
-            
-            cos_angle = dot_product / (magnitude_v1 * magnitude_v2)
-            cos_angle = np.clip(cos_angle, -1, 1)
-            angle = np.arccos(cos_angle)
-            return np.degrees(angle)
-        except:
-            return 0
-    
-    def _get_distance(self, p1: np.ndarray, p2: np.ndarray) -> float:
-        """Calculate Euclidean distance between two points"""
-        return np.linalg.norm(p1[:2] - p2[:2])
-    
-    def _get_vertical_distance(self, p1: np.ndarray, p2: np.ndarray) -> float:
-        """Calculate vertical (y-axis) distance between two points"""
-        return abs(p1[1] - p2[1])
-    
-    def detect_squat(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect squat rep
-        Key joints: hip (23/24), knee (25/26), ankle (27/28)
-        Down: knee angle < 90°, Up: knee angle > 160°
-        """
-        try:
-            # Left side landmarks
-            left_hip = landmarks[23]
-            left_knee = landmarks[25]
-            left_ankle = landmarks[27]
-            
-            # Calculate knee angle
-            knee_angle = self._calculate_angle(left_hip, left_knee, left_ankle)
-            
-            # Detect state change
-            prev_state = self.state
-            
-            if knee_angle < 90:  # Squat down position
-                self.state = "moving_down"
-            elif knee_angle > 160 and self.state == "moving_down":  # Standing back up
-                self.state = "moving_up"
-                return True  # Rep complete
-            elif knee_angle > 150:
-                self.state = "rest"
-            
-            return False
-        except:
-            return False
-    
-    def detect_lifting_of_arms(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect arm lifting (shoulder raise)
-        Key joints: shoulder (11/12), elbow (13/14), wrist (15/16)
-        Down: shoulder-wrist distance low, Up: shoulder-wrist distance high
-        """
-        try:
-            # Use both shoulders and average
-            left_shoulder = landmarks[11]
-            right_shoulder = landmarks[12]
-            left_wrist = landmarks[15]
-            right_wrist = landmarks[16]
-            
-            # Calculate vertical distance (height)
-            left_height = self._get_vertical_distance(left_shoulder, left_wrist)
-            right_height = self._get_vertical_distance(right_shoulder, right_wrist)
-            avg_height = (left_height + right_height) / 2
-            
-            # Threshold for arm raise
-            up_threshold = 0.3  # 30% of body height
-            down_threshold = 0.1  # 10% of body height
-            
-            if avg_height < down_threshold:
-                self.state = "rest"
-            elif avg_height > up_threshold and self.state != "moving_up":
-                self.state = "moving_up"
-                if self.prev_state == "rest" or self.prev_state == "moving_down":
-                    self.rep_count += 1
-                    return True
-            elif avg_height < down_threshold and self.state == "moving_up":
-                self.state = "moving_down"
-            
-            return False
-        except:
-            return False
-    
-    def detect_lateral_trunk_tilt(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect lateral trunk tilt (side bend)
-        Key: hip-shoulder distance changes side to side
-        """
-        try:
-            # Pelvis and shoulders
-            left_hip = landmarks[23]
-            right_hip = landmarks[24]
-            left_shoulder = landmarks[11]
-            right_shoulder = landmarks[12]
-            
-            # Calculate distances
-            left_side_dist = self._get_distance(left_hip, left_shoulder)
-            right_side_dist = self._get_distance(right_hip, right_shoulder)
-            
-            # Side bend detected when one side is significantly compressed
-            compression_ratio = min(left_side_dist, right_side_dist) / max(left_side_dist, right_side_dist)
-            
-            if compression_ratio < 0.85:  # One side compressed
-                self.state = "moving_down"
-            elif compression_ratio > 0.95 and self.state == "moving_down":
-                self.state = "moving_up"
-                return True  # Rep complete
-            
-            return False
-        except:
-            return False
-    
-    def detect_trunk_rotation(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect trunk rotation
-        Key: shoulder angle changes relative to hips
-        """
-        try:
-            # Shoulders and hips
-            left_shoulder = landmarks[11]
-            right_shoulder = landmarks[12]
-            left_hip = landmarks[23]
-            right_hip = landmarks[24]
-            
-            # Calculate angles
-            shoulder_angle = self._calculate_angle(left_shoulder, right_shoulder, landmarks[0])
-            hip_angle = self._calculate_angle(left_hip, right_hip, landmarks[0])
-            
-            # Angle difference indicates rotation
-            angle_diff = abs(shoulder_angle - hip_angle)
-            
-            if angle_diff > 30:  # Significant rotation
-                self.state = "moving_down"
-            elif angle_diff < 10 and self.state == "moving_down":
-                self.state = "moving_up"
-                return True
-            
-            return False
-        except:
-            return False
-    
-    def detect_forward_flexion(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect forward flexion (touching toes)
-        Key: hip to hand distance decreases
-        """
-        try:
-            # Hips and hands
-            left_hip = landmarks[23]
-            right_hip = landmarks[24]
-            left_hand = landmarks[19]
-            right_hand = landmarks[20]
-            
-            hip_center = (left_hip + right_hip) / 2
-            hand_avg = (left_hand + right_hand) / 2
-            
-            # Vertical distance
-            flex_distance = self._get_vertical_distance(hip_center, hand_avg)
-            
-            if flex_distance > 0.4:  # Standing position
-                self.state = "rest"
-            elif flex_distance < 0.2 and self.state == "rest":
-                self.state = "moving_down"
-                self.rep_count += 1
-                return True
-            elif flex_distance > 0.3 and self.state == "moving_down":
-                self.state = "moving_up"
-            
-            return False
-        except:
-            return False
-    
-    def detect_flank_stretch(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect flank stretch (side stretch with overhead arm)
-        Key: torso and arm position changes
-        """
-        try:
-            # Torso and elevated arm
-            left_shoulder = landmarks[11]
-            right_shoulder = landmarks[12]
-            left_hip = landmarks[23]
-            right_hip = landmarks[24]
-            
-            # Calculate lateral flex
-            left_side = self._get_distance(left_shoulder, left_hip)
-            right_side = self._get_distance(right_shoulder, right_hip)
-            
-            # Stretch detected when sides are unequal
-            if left_side > right_side * 1.15:  # Left stretch
-                self.state = "moving_down"
-            elif right_side > left_side * 1.15:  # Right stretch
-                self.state = "moving_down"
-            elif abs(left_side - right_side) < 0.05 and self.state == "moving_down":
-                self.state = "moving_up"
-                return True
-            
-            return False
-        except:
-            return False
-    
-    def detect_torso_rotation(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect torso rotation
-        Key: shoulder position relative to hips
-        """
-        try:
-            # Upper and lower body
-            left_shoulder = landmarks[11]
-            right_shoulder = landmarks[12]
-            left_hip = landmarks[23]
-            right_hip = landmarks[24]
-            
-            # Shoulder angle
-            shoulder_x = (left_shoulder[0] + right_shoulder[0]) / 2
-            hip_x = (left_hip[0] + right_hip[0]) / 2
-            
-            # Rotation detected by x offset
-            rotation_offset = abs(shoulder_x - hip_x)
-            
-            if rotation_offset > 0.1:
-                self.state = "moving_down"
-            elif rotation_offset < 0.05 and self.state == "moving_down":
-                self.state = "moving_up"
-                return True
-            
-            return False
-        except:
-            return False
-    
-    def detect_pelvis_rotation(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect pelvis rotation
-        Key: hip angle changes
-        """
-        try:
-            # Hips and knees
-            left_hip = landmarks[23]
-            right_hip = landmarks[24]
-            left_knee = landmarks[25]
-            right_knee = landmarks[26]
-            
-            # Calculate hip angle
-            hip_angle = self._calculate_angle(left_hip, right_hip, (left_knee + right_knee) / 2)
-            
-            if hip_angle > 160:
-                self.state = "rest"
-            elif hip_angle < 140 and self.state == "rest":
-                self.state = "moving_down"
-                self.rep_count += 1
-                return True
-            elif hip_angle > 160 and self.state == "moving_down":
-                self.state = "moving_up"
-            
-            return False
-        except:
-            return False
-    
-    def count_rep(self, landmarks: np.ndarray, exercise_name: str) -> bool:
-        """
-        Main method to detect a rep for given exercise
-        Returns True if a rep was completed
+        Process one frame. Returns True if a rep was just completed.
+        landmarks: (33, 3) or (33, 4) - MediaPipe pose, values in [0,1].
         """
         if landmarks is None or len(landmarks) < 33:
             return False
-        
-        # Normalize landmarks if needed
-        if landmarks.max() > 1.5:  # Likely in pixel coordinates
-            landmarks = landmarks.copy()
-            landmarks[:, :2] /= 720  # Normalize to 0-1 range
-        
-        # Call appropriate detector
-        rep_detected = False
-        exercise_name = exercise_name.lower().strip()
-        
-        if "squat" in exercise_name:
-            rep_detected = self.detect_squat(landmarks)
-        elif "lifting" in exercise_name or "arm" in exercise_name:
-            rep_detected = self.detect_lifting_of_arms(landmarks)
-        elif "lateral" in exercise_name or "tilt" in exercise_name:
-            rep_detected = self.detect_lateral_trunk_tilt(landmarks)
-        elif "trunk" in exercise_name and "rotation" in exercise_name:
-            rep_detected = self.detect_trunk_rotation(landmarks)
-        elif "forward" in exercise_name or "flexion" in exercise_name:
-            rep_detected = self.detect_forward_flexion(landmarks)
-        elif "flank" in exercise_name or "stretch" in exercise_name:
-            rep_detected = self.detect_flank_stretch(landmarks)
-        elif "pelvis" in exercise_name:
-            rep_detected = self.detect_pelvis_rotation(landmarks)
-        elif "torso" in exercise_name and "rotation" in exercise_name:
-            rep_detected = self.detect_torso_rotation(landmarks)
-        
-        self.prev_landmarks = landmarks.copy()
-        return rep_detected
-    
+
+        # Normalise pixel coords to [0,1] if needed
+        lm = landmarks.copy().astype(float)
+        if lm[:, :2].max() > 1.5:
+            lm[:, 0] /= 640
+            lm[:, 1] /= 480
+
+        # Resolve exercise name to profile
+        key = self._resolve_exercise(exercise_name)
+        if key is None:
+            return False
+
+        # Reset EMA if exercise changed
+        if key != self._current_exercise:
+            self._smoothed_value = None
+            self._state = "rest"
+            self._current_exercise = key
+
+        profile = EXERCISE_PROFILES[key]
+
+        # Compute raw metric for this frame
+        raw = self._compute_metric(lm, profile)
+        if raw is None:
+            return False
+
+        # EMA smoothing
+        if self._smoothed_value is None:
+            self._smoothed_value = raw
+        else:
+            self._smoothed_value = (
+                self.EMA_ALPHA * raw + (1 - self.EMA_ALPHA) * self._smoothed_value
+            )
+        val = self._smoothed_value
+
+        # State machine with hysteresis
+        direction = profile["direction"]
+        rest_th = profile["rest_threshold"]
+        peak_th = profile["peak_threshold"]
+        min_sec = profile.get("min_rep_sec", 1.0)
+
+        rep_completed = False
+
+        if direction == "down":
+            # Angle decreases toward peak
+            if self._state == "rest" and val < peak_th:
+                self._state = "peak"
+            elif self._state == "peak" and val > rest_th:
+                now = time.time()
+                if now - self._last_rep_time >= min_sec:
+                    rep_completed = True
+                    self._last_rep_time = now
+                self._state = "rest"
+        else:  # direction == "up"
+            # Angle increases toward peak
+            if self._state == "rest" and val > peak_th:
+                self._state = "peak"
+            elif self._state == "peak" and val < rest_th:
+                now = time.time()
+                if now - self._last_rep_time >= min_sec:
+                    rep_completed = True
+                    self._last_rep_time = now
+                self._state = "rest"
+
+        return rep_completed
+
+    def count_rep(self, landmarks, exercise_name):
+        """Alias for process()."""
+        return self.process(landmarks, exercise_name)
+
     def reset(self):
-        """Reset counter for new exercise"""
-        self.state = "rest"
+        """Reset for a new exercise / new set."""
+        self._smoothed_value = None
+        self._state = "rest"
+        self._last_rep_time = 0
+        self._current_exercise = ""
         self.rep_count = 0
-        self.prev_landmarks = None
-    
-    def get_state(self) -> Dict:
-        """Get current counter state"""
+
+    def get_state(self):
         return {
             "rep_count": self.rep_count,
-            "state": self.state,
-            "status": "detecting" if self.state != "rest" else "ready"
+            "state": self._state,
+            "smoothed_value": self._smoothed_value,
+            "exercise": self._current_exercise,
+            "status": "peak" if self._state == "peak" else "ready",
         }
 
+    # -- internals --
 
-# Factory function for easy initialization
-def create_rep_counter() -> RepCounterMediaPipe:
-    """Create a new rep counter instance"""
+    @staticmethod
+    def _resolve_exercise(name):
+        """Map various exercise name formats to a profile key."""
+        n = name.lower().strip().replace("-", "_").replace(" ", "_")
+        if n in EXERCISE_PROFILES:
+            return n
+        if n in EXERCISE_NAME_MAP:
+            return EXERCISE_NAME_MAP[n]
+        for keyword, key in EXERCISE_NAME_MAP.items():
+            if keyword in n or n in keyword:
+                return key
+        return None
+
+    @staticmethod
+    def _compute_metric(lm, profile):
+        """Compute the primary metric (angle or ratio) for this exercise."""
+        joints = profile["joints"]
+        use_min = profile.get("use_min", False)
+        if joints == "rotation":
+            return _shoulder_hip_ratio(lm)
+        angles = []
+        for side, i1, i2, i3 in joints:
+            try:
+                a = _angle_3pt(lm[i1], lm[i2], lm[i3])
+                if a > 0:
+                    angles.append(a)
+            except Exception:
+                continue
+        if not angles:
+            return None
+        return float(min(angles)) if use_min else float(np.mean(angles))
+
+
+# Factory function
+def create_rep_counter():
     return RepCounterMediaPipe()

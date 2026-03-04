@@ -1,41 +1,65 @@
-<svg width="400" height="500" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background -->
-  <rect width="400" height="500" fill="#f8f9fa"/>
-  
-  <!-- Title -->
-  <text x="200" y="30" font-size="24" font-weight="bold" text-anchor="middle" fill="#333">Forward Flexion</text>
-  
-  <!-- Standing position -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef2f2"/>
+      <stop offset="100%" stop-color="#fce7f3"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" rx="16" fill="url(#bg)"/>
+  <text x="150" y="32" text-anchor="middle" font-family="system-ui,sans-serif" font-size="15" font-weight="800" fill="#be123c">Forward Flexion (CTK)</text>
+
+  <!-- Bend arc indicator -->
+  <path d="M180,120 A60,60 0 0,1 180,210" fill="none" stroke="#059669" stroke-width="1" stroke-dasharray="4,3" opacity="0.35"/>
+  <polygon points="180,214 176,206 184,206" fill="#059669" opacity="0.35"/>
+
+  <!-- ANIMATED UPPER BODY - bending forward from hips -->
   <g>
-    <text x="100" y="80" font-size="14" font-weight="bold" fill="#666">1. Stand</text>
+    <animateTransform attributeName="transform" type="rotate" values="0 150 230;-45 150 230;0 150 230" dur="4s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1"/>
+
     <!-- Head -->
-    <circle cx="100" cy="110" r="12" fill="#667eea"/>
-    <!-- Body upright -->
-    <line x1="100" y1="125" x2="100" y2="170" stroke="#667eea" stroke-width="3"/>
-    <!-- Arms -->
-    <line x1="100" y1="135" x2="70" y2="120" stroke="#667eea" stroke-width="2"/>
-    <line x1="100" y1="135" x2="130" y2="120" stroke="#667eea" stroke-width="2"/>
-    <!-- Legs -->
-    <line x1="100" y1="170" x2="85" y2="220" stroke="#28a745" stroke-width="3"/>
-    <line x1="100" y1="170" x2="115" y2="220" stroke="#28a745" stroke-width="3"/>
+    <circle cx="150" cy="85" r="20" fill="#fecdd3" stroke="#be123c" stroke-width="3"/>
+    <circle cx="143" cy="81" r="2" fill="#be123c"/><circle cx="157" cy="81" r="2" fill="#be123c"/>
+    <path d="M144,90 Q150,95 156,90" fill="none" stroke="#be123c" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- Neck -->
+    <line x1="150" y1="105" x2="150" y2="118" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Torso (active green) -->
+    <line x1="150" y1="118" x2="150" y2="230" stroke="#059669" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- Shoulder line -->
+    <line x1="112" y1="128" x2="188" y2="128" stroke="#059669" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Left arm (hangs down) -->
+    <line x1="112" y1="128" x2="100" y2="195" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+    <line x1="100" y1="195" x2="95" y2="250" stroke="#be123c" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="100" cy="195" r="3" fill="#be123c"/>
+
+    <!-- Right arm (hangs down) -->
+    <line x1="188" y1="128" x2="200" y2="195" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+    <line x1="200" y1="195" x2="205" y2="250" stroke="#be123c" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="200" cy="195" r="3" fill="#be123c"/>
+
+    <!-- Shoulder joints -->
+    <circle cx="112" cy="128" r="5" fill="#059669"/>
+    <circle cx="188" cy="128" r="5" fill="#059669"/>
   </g>
-  
-  <!-- Bent forward position -->
-  <g>
-    <text x="300" y="80" font-size="14" font-weight="bold" fill="#666">2. Bend Forward</text>
-    <!-- Head -->
-    <circle cx="300" cy="140" r="12" fill="#667eea"/>
-    <!-- Body bent -->
-    <line x1="300" y1="152" x2="300" y2="190" stroke="#667eea" stroke-width="3"/>
-    <!-- Arms bent -->
-    <line x1="300" y1="160" x2="270" y2="150" stroke="#667eea" stroke-width="2"/>
-    <line x1="300" y1="160" x2="330" y2="150" stroke="#667eea" stroke-width="2"/>
-    <!-- Legs -->
-    <line x1="300" y1="190" x2="285" y2="240" stroke="#28a745" stroke-width="3"/>
-    <line x1="300" y1="190" x2="315" y2="240" stroke="#28a745" stroke-width="3"/>
-  </g>
-  
-  <!-- Instructions -->
-  <text x="200" y="450" font-size="12" text-anchor="middle" fill="#888">Bend forward from waist, keeping knees straight</text>
-  <text x="200" y="475" font-size="12" text-anchor="middle" fill="#888">Feel stretch in hamstrings and lower back</text>
+
+  <!-- Hip (pivot point - stationary) -->
+  <circle cx="150" cy="230" r="6" fill="#be123c"/>
+
+  <!-- Left leg (stationary) -->
+  <line x1="150" y1="230" x2="122" y2="305" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+  <line x1="122" y1="305" x2="118" y2="358" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="122" cy="305" r="4" fill="#be123c"/>
+  <line x1="118" y1="358" x2="106" y2="360" stroke="#be123c" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Right leg (stationary) -->
+  <line x1="150" y1="230" x2="178" y2="305" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+  <line x1="178" y1="305" x2="182" y2="358" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="178" cy="305" r="4" fill="#be123c"/>
+  <line x1="182" y1="358" x2="194" y2="360" stroke="#be123c" stroke-width="3" stroke-linecap="round"/>
+
+  <rect x="22" y="372" width="256" height="22" rx="11" fill="#059669" opacity="0.12"/>
+  <text x="150" y="387" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10.5" font-weight="600" fill="#059669">Bend forward from hips, keep back straight</text>
 </svg>

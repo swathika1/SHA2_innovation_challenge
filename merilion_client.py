@@ -61,8 +61,12 @@ def _build_chat_payload(messages: list, patient_context: str, rag_context: str =
     if history_lines:
         instruction_parts.append("\nPrevious conversation:\n" + "\n".join(history_lines[-6:]))
 
+    # RAG context — inject rehabilitation knowledge if available
+    if rag_context and rag_context.strip():
+        instruction_parts.append(f"\nRelevant Rehabilitation Knowledge (use this to inform your answer):\n{rag_context}")
+
     instruction_parts.append(f"\nPatient asks: {question}")
-    instruction_parts.append("\nRespond directly to their question with helpful, specific advice:")
+    instruction_parts.append("\nRespond directly to their question with helpful, specific advice. Reference the rehabilitation knowledge above when relevant:")
 
     return {
         "instruction": "\n".join(instruction_parts),

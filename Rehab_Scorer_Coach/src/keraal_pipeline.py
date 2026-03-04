@@ -257,6 +257,7 @@ class KeraalRehabPipeline:
         self.target_reps = 10
         self.target_sets = 3
         self.frames_above_threshold = 0
+        self.rep_scores_buffer = []  # Accumulate per-frame scores within a rep
         
         # Frame counter for window-level predictions
         self.frame_count = 0
@@ -270,6 +271,30 @@ class KeraalRehabPipeline:
         # Score display gate: only show score every 10-15 seconds (50-75 frames at 5 FPS)
         self.score_display_cooldown = 0
         self.score_display_interval = 60  # frames (12 seconds at 5 FPS = mid-range of 10-15 sec)
+        
+        # RAG Store for exercise reference knowledge
+        self.rag = None
+        try:
+            from Rehab_Scorer_Coach.src.rag_store import RAGStore
+            from pathlib import Path as _Path
+            rag_dir = _Path(self.cfg.repo_root) / "rag_db"
+            if rag_dir.exists():
+                self.rag = RAGStore(persist_dir=rag_dir)
+                print("  ✅ KERAAL RAG Store initialized")
+            else:
+                print(f"  ⚠️  KERAAL RAG: rag_db not found at {rag_dir}")
+        except Exception as e:
+            print(f"  ⚠️  KERAAL RAG Store failed: {e}")
+        
+        # Also try FAISS-based rag_engine as fallback
+        self._rag_engine_available = False
+        try:
+            import rag_engine as _re
+            self._rag_engine = _re
+            self._rag_engine_available = True
+            print("  ✅ KERAAL rag_engine (FAISS) available")
+        except Exception:
+            self._rag_engine = None
         
         print("✅ KeraalRehabPipeline Ready")
     
@@ -475,14 +500,64 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
                 
                 pose_summary = " | ".join(pose_parts) if pose_parts else ""
                 
+                # Retrieve RAG context for this exercise
+                rag_context = ""
+                try:
+                    # Try ChromaDB RAG store first
+                    if self.rag:
+                        queries = [
+                            f"{exercise_name} proper form technique",
+                            f"{exercise_name} common mistakes corrections",
+                            exercise_name
+                        ]
+                        all_chunks = []
+                        for q in queries:
+                            try:
+                                chunks = self.rag.query(query_text=q, exercise=exercise_name, k=2)
+                                all_chunks.extend(chunks)
+                                if len(all_chunks) >= 4:
+                                    break
+                            except Exception:
+                                continue
+                        if all_chunks:
+                            seen = set()
+                            unique = []
+                            for c in all_chunks:
+                                t = c.text[:200]
+                                if t not in seen:
+                                    seen.add(t)
+                                    unique.append(t)
+                            rag_context = "\n".join(unique[:3])
+                            print(f"   ✅ KERAAL RAG (ChromaDB): {len(unique)} chunks for {exercise_name}")
+                    
+                    # Fallback to FAISS rag_engine
+                    if not rag_context and self._rag_engine_available:
+                        rag_context = self._rag_engine.retrieve(
+                            f"{exercise_name} form technique corrections",
+                            top_k=3,
+                            source_filter="keraal"
+                        )
+                        if not rag_context:
+                            # Try without source filter
+                            rag_context = self._rag_engine.retrieve(f"{exercise_name} form", top_k=3)
+                        if rag_context:
+                            print(f"   ✅ KERAAL RAG (FAISS): retrieved context for {exercise_name}")
+                except Exception as rag_err:
+                    print(f"   ⚠️  KERAAL RAG retrieval failed: {rag_err}")
+                    rag_context = ""
+                
+                if not rag_context:
+                    rag_context = f"Standard rehabilitation guidance for {exercise_name}: Maintain proper alignment, move slowly and controlled, avoid compensatory movements."
+                    print(f"   ℹ️  Using fallback RAG context for {exercise_name}")
+                
                 feedback = llm.generate_feedback(
                     exercise_name=exercise_name,
                     language=language,
-                    rag_context="",  # KERAAL uses raw scores, not RAG
+                    rag_context=rag_context,
                     numeric_summary=f"score={aggregated_score:.1f}/50",
                     pose_summary=pose_summary
                 )
-                print(f"✅ LLM feedback in {language}: {feedback}")
+                print(f"✅ LLM feedback in {language} (RAG-enhanced): {feedback}")
             except Exception as e:
                 print(f"⚠️  LLM failed: {e}")
                 # Fallback feedback
@@ -508,60 +583,69 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
     
     def _detect_and_count_reps(self, score: float, landmarks: np.ndarray = None, exercise_name: str = "") -> Dict[str, Any]:
         """
-        Rep detection using MediaPipe rule-based system.
-        Falls back to frame-counting if landmarks unavailable.
+        Rep detection using MediaPipe angle-based state machine.
+        Accumulates per-frame scores and outputs average rep_score on completion.
+        Falls back to frame-counting (with score guard) if landmarks unavailable.
         """
         rep_incremented = False
         set_completed = False
         exercise_completed = False
-        
+        rep_score = None  # Average score for the completed rep
+
+        # Accumulate score for current rep
+        self.rep_scores_buffer.append(score)
+
         # Use MediaPipe rep counter if landmarks available
         if landmarks is not None and self.rep_counter is not None:
             try:
                 rep_detected = self.rep_counter.process(landmarks, exercise_name)
-                
+
                 if rep_detected:
                     self.current_rep_count += 1
                     rep_incremented = True
-                    print(f"   ✅ REP COUNTED (MediaPipe): Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets}")
-                    
+                    rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else score
+                    self.rep_scores_buffer = []  # Reset for next rep
+                    print(f"   ✅ REP COUNTED (MediaPipe): Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Rep Score: {rep_score}")
+
                     if self.current_rep_count >= self.target_reps:
                         set_completed = True
                         self.current_set_count += 1
                         self.current_rep_count = 0
                         print(f"   🎯 SET COMPLETE: Moving to Set {self.current_set_count}")
-                        
+
                         if self.current_set_count > self.target_sets:
                             exercise_completed = True
                             print(f"   🏆 EXERCISE COMPLETE: All {self.target_sets} sets finished!")
                             self.current_set_count = self.target_sets
             except Exception as e:
                 print(f"   ⚠️  MediaPipe rep counter error: {e}")
-        
-        # Fallback to frame-counting
+
+        # Fallback to frame-counting (with score guard)
         if not rep_incremented:
             if score >= self.threshold:
                 self.frames_above_threshold += 1
-                
+
                 if self.frames_above_threshold >= 20:
                     self.frames_above_threshold = 0
                     self.current_rep_count += 1
                     rep_incremented = True
-                    print(f"   ✅ REP COUNTED (Fallback): Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets}")
-                    
+                    rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else score
+                    self.rep_scores_buffer = []
+                    print(f"   ✅ REP COUNTED (Fallback): Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Rep Score: {rep_score}")
+
                     if self.current_rep_count >= self.target_reps:
                         set_completed = True
                         self.current_set_count += 1
                         self.current_rep_count = 0
                         print(f"   🎯 SET COMPLETE: Moving to Set {self.current_set_count}")
-                        
+
                         if self.current_set_count > self.target_sets:
                             exercise_completed = True
                             print(f"   🏆 EXERCISE COMPLETE: All {self.target_sets} sets finished!")
                             self.current_set_count = self.target_sets
             else:
                 self.frames_above_threshold = 0
-        
+
         return {
             "rep_now": self.current_rep_count,
             "rep_target": self.target_reps,
@@ -570,10 +654,11 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
             "rep_incremented": rep_incremented,
             "set_completed": set_completed,
             "exercise_completed": exercise_completed,
+            "rep_score": rep_score,
         }
     
     
-    def process_frame_dataurl_keraal(self, frame_b64: str, language: str = "English") -> Dict[str, Any]:
+    def process_frame_dataurl_keraal(self, frame_b64: str, language: str = "English", exercise_hint: str = "") -> Dict[str, Any]:
         """
         Process single frame through KERAAL pipeline.
         
@@ -588,6 +673,7 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
         Args:
             frame_b64: Base64 encoded frame
             language: Language for feedback
+            exercise_hint: User-selected exercise name (used for feedback when ML detection is uncertain)
         
         Returns:
             Response dict with frame_score, form_status, exercise_name, etc.
@@ -661,6 +747,25 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
         exercise_name, exercise_confidence = self._predict_exercise_detection(exercise_seq)
         exercise_display = KERAAL_EXERCISE_MAP.get(exercise_name, exercise_name)
         
+        # ⭐ USE EXERCISE HINT: If user selected an exercise, prefer it for feedback
+        # The ML model result is still shown as detected, but the HINT drives
+        # RAG queries, LLM feedback, and rep counting for accuracy.
+        feedback_exercise_name = exercise_display  # default: ML-detected display name
+        if exercise_hint:
+            # Normalize hint to a display name
+            hint_lower = exercise_hint.lower().replace('_', ' ').strip()
+            HINT_MAP = {
+                'forward flexion': 'Forward Flexion', 'forward_flexion': 'Forward Flexion', 'ctk': 'Forward Flexion',
+                'flank stretch': 'Flank Stretch', 'flank_stretch': 'Flank Stretch', 'elk': 'Flank Stretch',
+                'torso rotation': 'Torso Rotation', 'torso_rotation': 'Torso Rotation', 'rtk': 'Torso Rotation',
+                'pelvis rotation': 'Torso Rotation', 'pelvis_rotation': 'Torso Rotation',
+            }
+            resolved_hint = HINT_MAP.get(hint_lower, exercise_hint)
+            # Use hint as the feedback exercise when ML confidence is low or doesn't match
+            if exercise_confidence < 0.7 or resolved_hint != exercise_display:
+                feedback_exercise_name = resolved_hint
+                print(f"   ⭐ Using exercise_hint '{resolved_hint}' instead of ML-detected '{exercise_display}' (conf={exercise_confidence:.2f})")
+        
         # ⭐ IDLE DETECTION: If confidence is low, person is likely idle
         if exercise_confidence < 0.4:
             self.idle_frames += 1
@@ -700,16 +805,9 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
         
         # 🔟 Rep detection at window level
         print("➡️ Step 7: Window-level rep detection")
-        # Get latest landmarks from buffer (last frame, 33 landmarks with 3D coordinates)
-        latest_normalized = self.pose_buffer.positions[-1] if len(self.pose_buffer.positions) > 0 else None
-        latest_landmarks = None
-        if latest_normalized is not None:
-            # Convert from (198,) = [x1,y1,z1,x2,y2,z2,...] to (33, 3)
-            try:
-                latest_landmarks = latest_normalized[:99].reshape(33, 3)  # Take position part only
-            except:
-                latest_landmarks = None
-        rep_info = self._detect_and_count_reps(raw_score, latest_landmarks, exercise_name)
+        # Use RAW MediaPipe landmarks (0-1 range) for angle-based rep counter
+        # NOT the normalized (hip-centered, torso-scaled) ones from the scoring buffer
+        rep_info = self._detect_and_count_reps(raw_score, landmarks, feedback_exercise_name)
         
         # 1️⃣1️⃣ Store score for aggregation
         self.score_history.append(raw_score)
@@ -717,7 +815,8 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
         print(f"   Aggregated score (10s window): {aggregated_score:.2f}/50")
         
         # 1️⃣2️⃣ Generate LLM feedback based on aggregated score
-        llm_feedback = self._generate_llm_feedback(form_status, aggregated_score, exercise_name, latest_landmarks)
+        # Use the feedback_exercise_name (from hint or ML) for accurate RAG + LLM queries
+        llm_feedback = self._generate_llm_feedback(form_status, aggregated_score, feedback_exercise_name, landmarks)
         
         # Store window prediction
         self.window_predictions.append({
@@ -727,21 +826,16 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
             "aggregated_score": aggregated_score
         })
         
-        # Score display gate: only display score every 10-15 seconds
-        self.score_display_cooldown -= 1
-        display_score = aggregated_score if self.score_display_cooldown <= 0 else None
-        if self.score_display_cooldown <= 0:
-            self.score_display_cooldown = self.score_display_interval  # Reset for next 10-15 sec window
-            print(f"📊 Score Display Update: {aggregated_score:.2f}/50")
-        
         print("➡️ Returning response")
         
         return {
-            "frame_score": round(display_score, 2) if display_score is not None else 0.0,
+            "frame_score": round(raw_score, 2),
             "form_status": form_status,
             "llm_feedback": llm_feedback,
-            "exercise_name": exercise_display,
+            # Return the feedback_exercise_name (hint-resolved) for correct UI display
+            "exercise_name": feedback_exercise_name,
             "exercise_confidence": round(exercise_confidence, 3),
+            "ml_detected_exercise": exercise_display,  # What ML actually detected
             "pipeline": "keraal",
             "correctness": round(correctness_score, 3),
             "aggregated_score": round(aggregated_score, 2),
@@ -760,10 +854,14 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
         self.current_rep_count = 0
         self.current_set_count = 1
         self.frames_above_threshold = 0
+        self.rep_scores_buffer = []
         self.frame_count = 0
         self.window_predictions.clear()
         self.score_history.clear()
         self.llm_feedback_cooldown = 0
-        self.score_display_cooldown = 0
+        
+        if self.rep_counter:
+            with contextlib.suppress(Exception):
+                self.rep_counter.reset()
         
         print("✅ KERAAL Session reset complete")

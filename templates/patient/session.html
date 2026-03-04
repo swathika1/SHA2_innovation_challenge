@@ -464,13 +464,277 @@
 
     /* Exercise reference panel in live session */
     .exercise-ref-panel { display:flex; align-items:stretch; background:#141428; border-radius:8px; margin-top:10px; overflow:hidden; border:1px solid #2d2d50; }
-    .exercise-ref-panel img  { width:128px; min-height:80px; object-fit:cover; cursor:pointer; flex-shrink:0; opacity:.9; transition:opacity .2s; }
-    .exercise-ref-panel img:hover { opacity:1; }
+    .exercise-ref-panel img, .exercise-ref-panel .ref-gif  { width:128px; min-height:80px; object-fit:contain; cursor:pointer; flex-shrink:0; opacity:.9; transition:opacity .2s; background:#1a1a3a; padding:4px; }
+    .exercise-ref-panel img:hover, .exercise-ref-panel .ref-gif:hover { opacity:1; }
     .exercise-ref-panel .ref-info { padding:10px 14px; color:#fff; flex:1; display:flex; flex-direction:column; justify-content:center; }
     .exercise-ref-panel .ref-label { font-size:.68rem; color:#888; text-transform:uppercase; letter-spacing:.6px; margin-bottom:3px; }
+
+    /* ===== Exercise GIF Thumbnail in cards ===== */
+    .ex-gif-thumb { width:100%; height:120px; object-fit:contain; display:block; background:linear-gradient(135deg,#f0f4ff,#e8ecff); padding:6px; border-bottom:1px solid #e5e7eb; }
+    .keraal-ex .ex-gif-thumb { background:linear-gradient(135deg,#fef2f2,#fce7f3); }
+
+    /* ===== Exercise Demo Modal - Enhanced ===== */
+    .demo-modal-content { display:flex; flex-direction:column; gap:16px; }
+    .demo-guide-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start; }
+    @media(max-width:600px) { .demo-guide-row { grid-template-columns:1fr; } }
+    .demo-guide-svg { width:100%; max-height:320px; object-fit:contain; background:linear-gradient(135deg,#f0f4ff,#dbeafe); border-radius:10px; border:2px solid #e5e7eb; }
+    .demo-video-wrap { position:relative; padding-bottom:56.25%; height:0; border-radius:10px; overflow:hidden; }
+    .demo-video-wrap iframe { position:absolute; top:0; left:0; width:100%; height:100%; border:none; }
+    .demo-section-label { font-size:.78rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+    .demo-instructions { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px; font-size:.85rem; color:#166534; line-height:1.5; }
+    .demo-instructions strong { color:#15803d; }
+
+    /* ===== Floating Exercise Guide (live session) ===== */
+    .exercise-guide-float { background:#fff; border-radius:10px; padding:10px; box-shadow:0 2px 10px rgba(0,0,0,.06); text-align:center; }
+    .exercise-guide-float h4 { margin:0 0 6px; font-size:.85rem; color:#555; }
+    .exercise-guide-float img { width:100%; max-height:200px; object-fit:contain; border-radius:8px; background:#f0f4ff; }
+    .exercise-guide-float .guide-label { font-size:.72rem; color:#059669; font-weight:600; margin-top:4px; }
     .exercise-ref-panel .ref-name  { font-size:.9rem; font-weight:700; color:#e2e8f0; }
     .exercise-ref-panel .ref-btn   { display:inline-block; margin-top:7px; padding:4px 10px; font-size:.75rem; border:1px solid #5eead4; border-radius:5px; background:transparent; color:#5eead4; cursor:pointer; transition:.2s; width:fit-content; }
     .exercise-ref-panel .ref-btn:hover { background:#5eead4; color:#1a1a2e; }
+
+    /* ===== FPS OVERLAY ===== */
+    .fps-overlay {
+        position:absolute; top:10px; right:10px; z-index:5;
+        background:rgba(0,0,0,.7); color:#00ff88; padding:4px 10px;
+        border-radius:6px; font-size:.75rem; font-weight:700;
+        font-family:'Courier New',monospace; letter-spacing:.5px;
+        border:1px solid rgba(0,255,136,.3);
+        text-shadow:0 0 6px rgba(0,255,136,.5);
+    }
+
+    /* ===== ENERGETIC UI — NEON GLOW SYSTEM ===== */
+    @keyframes neonPulse {
+        0%,100% { box-shadow: 0 0 5px rgba(59,130,246,.3), 0 0 15px rgba(59,130,246,.1); }
+        50% { box-shadow: 0 0 12px rgba(59,130,246,.5), 0 0 30px rgba(59,130,246,.2); }
+    }
+    @keyframes neonPulseGreen {
+        0%,100% { box-shadow: 0 0 5px rgba(16,185,129,.3), 0 0 15px rgba(16,185,129,.1); }
+        50% { box-shadow: 0 0 15px rgba(16,185,129,.6), 0 0 35px rgba(16,185,129,.2); }
+    }
+    @keyframes neonPulseOrange {
+        0%,100% { box-shadow: 0 0 5px rgba(249,115,22,.3), 0 0 15px rgba(249,115,22,.1); }
+        50% { box-shadow: 0 0 15px rgba(249,115,22,.6), 0 0 35px rgba(249,115,22,.2); }
+    }
+    @keyframes borderGlow {
+        0%,100% { border-color: rgba(99,102,241,.4); }
+        50% { border-color: rgba(99,102,241,.9); }
+    }
+    @keyframes shimmerSlide {
+        0% { background-position: -200% center; }
+        100% { background-position: 200% center; }
+    }
+    @keyframes scorePopIn {
+        0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+        50% { transform: scale(1.2) rotate(3deg); opacity: 1; }
+        100% { transform: scale(1) rotate(0); opacity: 1; }
+    }
+    @keyframes repExplosion {
+        0% { transform:scale(1); filter:brightness(1); }
+        25% { transform:scale(1.3); filter:brightness(1.5); text-shadow:0 0 20px #00ff88,0 0 40px #00ff88; }
+        50% { transform:scale(1.1); filter:brightness(1.2); }
+        100% { transform:scale(1); filter:brightness(1); text-shadow:none; }
+    }
+    @keyframes energyRipple {
+        0% { box-shadow: 0 0 0 0 rgba(16,185,129,.6); }
+        100% { box-shadow: 0 0 0 20px rgba(16,185,129,0); }
+    }
+    @keyframes correctGlow {
+        0%,100% { background:linear-gradient(135deg,#064e3b,#065f46); border-color:#10b981; box-shadow:0 0 15px rgba(16,185,129,.4); }
+        50% { background:linear-gradient(135deg,#065f46,#047857); border-color:#34d399; box-shadow:0 0 25px rgba(52,211,153,.5); }
+    }
+    @keyframes incorrectShake {
+        0%,100% { transform:translateX(0); }
+        10%,30%,50%,70%,90% { transform:translateX(-3px); }
+        20%,40%,60%,80% { transform:translateX(3px); }
+    }
+
+    /* Energetic timer cards */
+    .timer-card {
+        background: linear-gradient(145deg,#0f172a,#1e293b) !important;
+        border: 1.5px solid rgba(99,102,241,.3) !important;
+        color: #e2e8f0 !important;
+        animation: neonPulse 3s ease-in-out infinite;
+        transition: all .3s;
+    }
+    .timer-card:hover { transform:translateY(-2px); }
+    .timer-card .timer-label { color: #94a3b8 !important; }
+    .timer-card .timer-value {
+        color: #818cf8 !important;
+        text-shadow: 0 0 10px rgba(129,140,248,.4);
+    }
+    .timer-card .pipeline-score {
+        text-shadow: 0 0 8px currentColor;
+    }
+
+    /* Energetic video panel */
+    .video-panel-wrap {
+        border: 2px solid rgba(99,102,241,.3);
+        animation: borderGlow 2.5s ease-in-out infinite;
+        box-shadow: 0 0 20px rgba(99,102,241,.15);
+    }
+
+    /* Energetic form status */
+    .form-status {
+        background: linear-gradient(145deg,#0f172a,#1e293b) !important;
+        border: 1.5px solid rgba(99,102,241,.25);
+        color: #e2e8f0 !important;
+    }
+    .form-status .score {
+        color: #c4b5fd !important;
+        font-size: 1.1rem !important;
+        text-shadow: 0 0 8px rgba(196,181,253,.3);
+    }
+    .form-status .badge.correct {
+        background: linear-gradient(135deg,#064e3b,#065f46) !important;
+        color: #6ee7b7 !important;
+        border: 2px solid #10b981 !important;
+        box-shadow: 0 0 15px rgba(16,185,129,.4), 0 0 30px rgba(16,185,129,.15);
+        animation: correctGlow 2s ease-in-out infinite;
+        font-size: 1rem !important;
+        padding: 10px 22px !important;
+    }
+    .form-status .badge.incorrect {
+        background: linear-gradient(135deg,#450a0a,#7f1d1d) !important;
+        color: #fca5a5 !important;
+        border: 2px solid #ef4444 !important;
+        box-shadow: 0 0 15px rgba(239,68,68,.4), 0 0 30px rgba(239,68,68,.15);
+        animation: pulse-warning .8s infinite, incorrectShake .5s ease-in-out;
+        font-size: 1rem !important;
+        padding: 10px 22px !important;
+    }
+    .form-status .badge.analyzing {
+        background: linear-gradient(135deg,#1c1917,#292524) !important;
+        color: #fbbf24 !important;
+        border: 2px solid #f59e0b !important;
+        box-shadow: 0 0 10px rgba(245,158,11,.3);
+    }
+
+    /* Energetic sidebar cards */
+    .s-card {
+        background: linear-gradient(145deg,#0f172a,#1e293b) !important;
+        border: 1.5px solid rgba(99,102,241,.2);
+        color: #e2e8f0 !important;
+    }
+    .s-card h4 { color: #94a3b8 !important; }
+
+    /* Energetic rep counter */
+    .rep-counter-card {
+        background: linear-gradient(145deg,#0f172a,#1e293b) !important;
+        border: 2px solid rgba(16,185,129,.3) !important;
+        animation: neonPulseGreen 2.5s ease-in-out infinite;
+    }
+    .rep-counter-card .count {
+        color: #00ff88 !important;
+        font-size: 2.4rem !important;
+        text-shadow: 0 0 15px rgba(0,255,136,.5);
+    }
+    .rep-counter-card .label { color: #6ee7b7 !important; }
+    .rep-counter-card.rep-pulse .count {
+        animation: repExplosion 0.8s ease-out !important;
+    }
+    .rep-counter-card.rep-pulse {
+        animation: energyRipple 0.8s ease-out;
+    }
+
+    /* Energetic progress bar */
+    .progress-bar-inner {
+        background: linear-gradient(90deg,#10b981,#06b6d4,#8b5cf6) !important;
+        background-size: 200% 100%;
+        animation: shimmerSlide 3s linear infinite;
+        box-shadow: 0 0 10px rgba(16,185,129,.4);
+    }
+    .progress-perc { color: #10b981 !important; text-shadow: 0 0 6px rgba(16,185,129,.3); }
+    .progress-bar-outer { background: rgba(255,255,255,.08) !important; }
+
+    /* Energetic exercise steps */
+    .exercise-step-list li.completed { background: rgba(16,185,129,.15) !important; color: #6ee7b7 !important; border-left: 3px solid #10b981; }
+    .exercise-step-list li.current { background: rgba(59,130,246,.15) !important; color: #93c5fd !important; border-left: 3px solid #3b82f6; font-weight: 700; }
+    .exercise-step-list li.upcoming { background: rgba(255,255,255,.05) !important; color: #64748b !important; }
+
+    /* Energetic feedback panel */
+    .realtime-feedback {
+        background: linear-gradient(145deg,#0f172a,#1e293b) !important;
+        border: 1.5px solid rgba(99,102,241,.2);
+        color: #e2e8f0 !important;
+    }
+    .realtime-feedback h4 { color: #a5b4fc !important; }
+    .feedback-item.warning { background:rgba(245,158,11,.12) !important; border-left:3px solid #f59e0b; color:#fbbf24 !important; }
+    .feedback-item.error   { background:rgba(239,68,68,.12) !important; border-left:3px solid #ef4444; color:#fca5a5 !important; }
+    .feedback-item.success { background:rgba(16,185,129,.12) !important; border-left:3px solid #10b981; color:#6ee7b7 !important; }
+    .feedback-item.info    { background:rgba(6,182,212,.12) !important; border-left:3px solid #06b6d4; color:#67e8f9 !important; }
+
+    /* Energetic audio indicator */
+    .audio-indicator {
+        background: linear-gradient(145deg,#0f172a,#1e293b) !important;
+        border: 1.5px solid rgba(99,102,241,.2);
+        color: #e2e8f0 !important;
+    }
+
+    /* Energetic skeleton frame */
+    .skeleton-frame-wrap {
+        border: 1.5px solid rgba(94,234,212,.3) !important;
+        box-shadow: 0 0 15px rgba(94,234,212,.1);
+    }
+
+    /* Per-rep score pop animation overlay */
+    .rep-score-pop {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0);
+        z-index: 9998;
+        font-size: 4rem;
+        font-weight: 900;
+        pointer-events: none;
+        text-shadow: 0 0 30px currentColor, 0 0 60px currentColor;
+        animation: scorePopIn 0.8s cubic-bezier(.34,1.56,.64,1) forwards;
+        opacity: 0;
+    }
+    .rep-score-pop.great { color: #00ff88; }
+    .rep-score-pop.good  { color: #fbbf24; }
+    .rep-score-pop.poor  { color: #f87171; }
+
+    /* Live session dark theme for main area */
+    #phaseLiveSession {
+        background: linear-gradient(180deg, #020617 0%, #0f172a 40%, #1e1b4b 100%);
+        min-height: 100vh;
+        margin: -20px -12px;
+        padding: 20px 12px;
+    }
+
+    /* Energetic session controls */
+    .session-controls .btn-pause {
+        background: linear-gradient(135deg,#f59e0b,#d97706) !important;
+        color: #fff !important; font-weight: 700 !important;
+        border: none !important; transition: all .25s;
+        box-shadow: 0 2px 12px rgba(245,158,11,.3);
+    }
+    .session-controls .btn-pause:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(245,158,11,.45); }
+    .session-controls .btn-stop {
+        background: linear-gradient(135deg,#ef4444,#dc2626) !important;
+        font-weight: 700 !important; transition: all .25s;
+        box-shadow: 0 2px 12px rgba(239,68,68,.3);
+    }
+    .session-controls .btn-stop:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(239,68,68,.45); }
+    .btn-next {
+        background: linear-gradient(135deg,#10b981,#059669) !important;
+        box-shadow: 0 4px 18px rgba(16,185,129,.35) !important;
+        border: none !important; transition: all .25s;
+    }
+    .btn-next:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(16,185,129,.5) !important; }
+
+    /* Energetic sidebar card styling */
+    .sidebar-mini-card {
+        background: linear-gradient(145deg,#0f172a,#1e293b) !important;
+        border: 1.5px solid rgba(99,102,241,.2);
+        color: #e2e8f0 !important;
+    }
+    .sidebar-mini-card h4 { color: #94a3b8 !important; }
+    .sidebar-mini-card select {
+        background: #1e293b !important; color: #e2e8f0 !important;
+        border: 1px solid rgba(99,102,241,.3) !important;
+    }
 </style>
 
 <!-- ===================== PHASE 1 — PRE-SESSION ===================== -->
@@ -570,13 +834,30 @@
 
 </div>
 
-<!-- Exercise Demo Modal -->
-<div id="exerciseDemoModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9999;align-items:center;justify-content:center;" onclick="if(event.target===this)closeExerciseDemo()">
-    <div style="background:#fff;border-radius:14px;padding:22px;max-width:660px;width:92%;position:relative;">
-        <button onclick="closeExerciseDemo()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.6rem;cursor:pointer;line-height:1;color:#555;">&times;</button>
-        <h3 id="exerciseDemoTitle" style="margin:0 0 14px;font-size:1.1rem;"></h3>
-        <div style="position:relative;padding-bottom:56.25%;height:0;">
-            <iframe id="exerciseDemoIframe" src="" frameborder="0" allow="autoplay;encrypted-media" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:8px;"></iframe>
+<!-- Exercise Demo Modal (Enhanced with animated guide + video) -->
+<div id="exerciseDemoModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9999;align-items:center;justify-content:center;overflow-y:auto;" onclick="if(event.target===this)closeExerciseDemo()">
+    <div style="background:#fff;border-radius:16px;padding:24px;max-width:780px;width:94%;position:relative;margin:20px auto;">
+        <button onclick="closeExerciseDemo()" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.6rem;cursor:pointer;line-height:1;color:#555;z-index:2;">&times;</button>
+        <h3 id="exerciseDemoTitle" style="margin:0 0 16px;font-size:1.2rem;font-weight:800;color:#1e293b;"></h3>
+        <div class="demo-modal-content">
+            <div class="demo-guide-row">
+                <div>
+                    <div class="demo-section-label">🏃 Animated Exercise Guide</div>
+                    <img id="exerciseDemoGif" class="demo-guide-svg" src="" alt="Exercise demonstration">
+                </div>
+                <div>
+                    <div class="demo-section-label">🎬 Video Demonstration</div>
+                    <div class="demo-video-wrap">
+                        <iframe id="exerciseDemoIframe" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe>
+                        <a id="exerciseDemoSearchFallback" href="#" target="_blank" rel="noopener" style="display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;width:100%;height:100%;min-height:180px;background:linear-gradient(135deg,#ff0000 0%,#cc0000 100%);border-radius:10px;color:#fff;text-decoration:none;font-weight:700;font-size:1.05rem;transition:transform .15s;">
+                            <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="22" fill="rgba(255,255,255,.15)"/><path d="M20 16l12 8-12 8V16z" fill="#fff"/></svg>
+                            <span>🔍 Search on YouTube</span>
+                            <span style="font-size:.75rem;font-weight:400;opacity:.8;">Click to find video tutorials</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div id="exerciseDemoInstructions" class="demo-instructions" style="display:none;"></div>
         </div>
     </div>
 </div>
@@ -621,12 +902,15 @@
         <!-- Left column: video + status + feedback -->
         <div>
             <div class="video-panel-wrap">
+                <div class="fps-overlay" id="fpsOverlay">-- FPS</div>
                 <div class="video-container" id="videoContainer" style="display:none;">
-                    <video id="webcamVideo" autoplay playsinline muted></video>
+                    <video id="webcamVideo" autoplay playsinline muted style="width:100%;display:block;"></video>
                 </div>
                 <div class="video-placeholder" id="videoPlaceholder">
                     <div class="icon"><i class="fa-solid fa-video"></i></div>
-                    <p>Camera will start when session begins</p>
+                    <p id="cameraStatusMsg">Camera will start when session begins</p>
+                    <div id="cameraDebugInfo" style="font-size:.72rem;color:#666;margin-top:8px;text-align:left;max-width:420px;"></div>
+                    <button id="retryCamera" style="display:none;margin-top:10px;padding:8px 20px;border-radius:8px;border:2px solid #3b82f6;background:#3b82f6;color:#fff;cursor:pointer;font-weight:600;font-size:.9rem;" onclick="retryCameraManual()">🔄 Retry Camera</button>
                 </div>
             </div>
 
@@ -636,13 +920,13 @@
                 <canvas id="skeletonCanvas" width="640" height="160"></canvas>
             </div>
 
-            <!-- Exercise form-reference panel -->
+            <!-- Exercise form-reference panel with animated guide -->
             <div class="exercise-ref-panel" id="exerciseRefPanel">
-                <img id="exerciseRefThumb" src="https://img.youtube.com/vi/YaXPRqUwItQ/mqdefault.jpg" alt="Correct form" onclick="openCurrentExerciseDemo()">
+                <img id="exerciseRefGif" class="ref-gif" src="/static/gifs/squat.svg" alt="Exercise guide" onclick="openCurrentExerciseDemo()">
                 <div class="ref-info">
-                    <div class="ref-label">Correct Form Reference</div>
+                    <div class="ref-label">🏃 Correct Form Guide</div>
                     <div class="ref-name" id="exerciseRefName">Select an exercise to begin</div>
-                    <button class="ref-btn" onclick="openCurrentExerciseDemo()">▶ Watch Demo</button>
+                    <button class="ref-btn" onclick="openCurrentExerciseDemo()">▶ Watch Full Demo</button>
                 </div>
             </div>
 
@@ -663,7 +947,7 @@
             <!-- Audio toggle -->
             <div class="audio-indicator" style="margin-top:14px;">
                 <div><i class="fa-solid fa-volume-high"></i></div>
-                <div><strong>Voice Feedback: <span id="audioStatus">OFF</span></strong><br><small>Click to toggle</small></div>
+                <div><strong>Voice Feedback: <span id="audioStatus">ON</span></strong><br><small>Click to toggle</small></div>
                 <button id="audioToggleBtn" style="margin-left:auto;padding:5px 10px;border:1px solid #ccc;border-radius:6px;cursor:pointer;background:#fff;">Toggle</button>
             </div>
         </div>
@@ -767,6 +1051,13 @@
                 </div>
             </div>
 
+            <!-- Exercise Guide (animated SVG) -->
+            <div class="exercise-guide-float" id="sidebarExerciseGuide">
+                <h4><i class="fa-solid fa-person-running"></i> Exercise Guide</h4>
+                <img id="sidebarGuideImg" src="/static/gifs/squat.svg" alt="Exercise guide animation">
+                <div class="guide-label" id="sidebarGuideLabel">Select an exercise</div>
+            </div>
+
             <!-- CV Detected Exercise -->
             <div class="sidebar-mini-card">
                 <h4><i class="fa-solid fa-eye"></i> CV Detected Exercise</h4>
@@ -783,11 +1074,19 @@
                     <label><input type="radio" name="exerciseMode" value="manual"> Manual Select</label>
                 </div>
                 <select id="manualExerciseSelect" disabled>
-                    <option value="squat">Squat</option>
-                    <option value="lifting_of_arms">Lifting of Arms</option>
-                    <option value="lateral_trunk_tilt">Lateral Trunk Tilt</option>
-                    <option value="trunk_rotation">Trunk Rotation</option>
-                    <option value="pelvis_rotation">Pelvis Rotation</option>
+                    <optgroup label="Kimore (General Rehab)">
+                        <option value="squat">Squat</option>
+                        <option value="lifting_of_arms">Lifting of Arms</option>
+                        <option value="lateral_trunk_tilt">Lateral Trunk Tilt</option>
+                        <option value="trunk_rotation">Trunk Rotation</option>
+                        <option value="trunk_rotation_target">Trunk Rotation & Target Touch</option>
+                        <option value="pelvis_rotation">Pelvis Rotation</option>
+                    </optgroup>
+                    <optgroup label="Keraal (Lower Back)">
+                        <option value="forward_flexion">Forward Flexion (CTK)</option>
+                        <option value="flank_stretch">Flank Stretch (ELK)</option>
+                        <option value="torso_rotation">Torso Rotation (RTK)</option>
+                    </optgroup>
                 </select>
             </div>
 
@@ -819,23 +1118,64 @@
 /* ===================== EXERCISE SELECTION ===================== */
 const AVAILABLE_EXERCISES = {
     // --- Kimore exercises (General Rehab) ---
-    "lifting_of_arms":    { name: "Lifting of Arms",    sets: 3, reps: 10, videoId: "IzTFCZv0--E", pipeline: 'kimore' },
-    "lateral_trunk_tilt": { name: "Lateral Trunk Tilt", sets: 3, reps: 10, videoId: "4aR-v_5f-T4", pipeline: 'kimore' },
-    "trunk_rotation":     { name: "Trunk Rotation",     sets: 3, reps: 10, videoId: "IhP0LP-wyxQ", pipeline: 'kimore' },
-    "squat":              { name: "Squat",              sets: 3, reps: 10, videoId: "YaXPRqUwItQ", pipeline: 'kimore' },
+    "lifting_of_arms":      { name: "Lifting of Arms",               sets: 3, reps: 10, videoId: "IzTFCZv0--E", pipeline: 'kimore',  gifUrl: "/static/gifs/lifting_of_arms.svg",        instructions: "Stand upright, raise both arms from your sides to above your head, then slowly lower. Keep elbows slightly bent.", searchQuery: "lifting arms overhead lateral raise rehabilitation exercise" },
+    "lateral_trunk_tilt":    { name: "Lateral Trunk Tilt",            sets: 3, reps: 10, videoId: "4aR-v_5f-T4", pipeline: 'kimore',  gifUrl: "/static/gifs/lateral_trunk_tilt.svg",     instructions: "Stand with feet shoulder-width apart. Slowly tilt your trunk to one side (20-30°), return to center, then tilt to the other side.", searchQuery: "lateral trunk tilt side bend exercise rehabilitation" },
+    "trunk_rotation":        { name: "Trunk Rotation",               sets: 3, reps: 10, videoId: "IhP0LP-wyxQ", pipeline: 'kimore',  gifUrl: "/static/gifs/trunk_rotation.svg",         instructions: "Stand with arms relaxed. Rotate your upper body to the left, return to center, then rotate right. Keep hips facing forward.", searchQuery: "standing trunk rotation exercise rehabilitation" },
+    "squat":                 { name: "Squat",                         sets: 3, reps: 10, videoId: "hscOjLrW60c", pipeline: 'kimore',  gifUrl: "/static/gifs/squat.svg",                  instructions: "Stand with feet shoulder-width apart. Lower your hips to knee level by bending your knees, keeping your back straight. Rise slowly.", searchQuery: "proper squat form rehabilitation exercise" },
+    "trunk_rotation_target": { name: "Trunk Rotation & Target Touch", sets: 3, reps: 10, videoId: "IhP0LP-wyxQ", pipeline: 'kimore',  gifUrl: "/static/gifs/trunk_rotation_target.svg",  instructions: "Stand upright, rotate your trunk and reach toward targets at various positions. Combine trunk rotation with arm extension for coordination.", searchQuery: "trunk rotation reaching target touching exercise rehabilitation" },
     // --- Keraal exercises (Lower Back Pain) ---
-    "forward_flexion":    { name: "Forward Flexion",    sets: 3, reps: 10, videoId: "y0N47Pcfg2Y", pipeline: 'keraal', keraalClass: 'CTK' },
-    "flank_stretch":      { name: "Flank Stretch",      sets: 3, reps: 10, videoId: "ta0jrOqFZOk", pipeline: 'keraal', keraalClass: 'ELK' },
-    "torso_rotation":     { name: "Torso Rotation",     sets: 3, reps: 10, videoId: "9SKuFenm_bM", pipeline: 'keraal', keraalClass: 'RTK' },
+    "forward_flexion":       { name: "Forward Flexion (CTK)",         sets: 3, reps: 10, videoId: "rbT2wkclSxo", pipeline: 'keraal', keraalClass: 'CTK', gifUrl: "/static/gifs/forward_flexion.svg",  instructions: "Stand upright, slowly bend forward from your hips keeping your back straight. Reach towards your toes, then return upright.", searchQuery: "standing forward flexion hip hinge exercise rehabilitation" },
+    "flank_stretch":         { name: "Flank Stretch (ELK)",           sets: 3, reps: 10, videoId: "RfuiraEgKcY", pipeline: 'keraal', keraalClass: 'ELK', gifUrl: "/static/gifs/flank_stretch.svg",    instructions: "Stand upright, raise one arm overhead and slowly stretch to the opposite side (15-25°). Alternate sides.", searchQuery: "standing side bend flank stretch exercise rehabilitation" },
+    "torso_rotation":        { name: "Torso Rotation (RTK)",          sets: 3, reps: 10, videoId: "h6XyzlM8m24", pipeline: 'keraal', keraalClass: 'RTK', gifUrl: "/static/gifs/torso_rotation.svg",   instructions: "Stand with feet apart, rotate your trunk gently 20-30° to each side. Keep your lower body stable throughout.", searchQuery: "standing torso twist rotation exercise rehabilitation" },
+    "pelvis_rotation":       { name: "Pelvis Rotation",               sets: 3, reps: 10, videoId: "T4nbduvEiLg", pipeline: 'kimore', gifUrl: "/static/gifs/pelvis_rotation.svg",  instructions: "Stand upright and gently rotate your pelvis in a controlled circular motion while keeping your upper body stable. This builds hip mobility and core control.", searchQuery: "pelvis rotation hip circle exercise rehabilitation" },
 };
 
-function showExerciseDemo(videoId, title) {
+function showExerciseDemo(videoId, title, gifUrl, instructions, searchQuery) {
     document.getElementById('exerciseDemoTitle').textContent = title;
-    document.getElementById('exerciseDemoIframe').src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+    const iframeEl = document.getElementById('exerciseDemoIframe');
+    const videoWrap = iframeEl.parentElement;
+    const searchFallback = document.getElementById('exerciseDemoSearchFallback');
+    
+    if (videoId && videoId.length >= 8) {
+        // Valid video ID — show YouTube embed
+        iframeEl.src = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0`;
+        iframeEl.style.display = 'block';
+        if (searchFallback) searchFallback.style.display = 'none';
+        // Detect playback error via timeout — if video fails, show the search link after 3s
+        iframeEl.onerror = function() {
+            iframeEl.style.display = 'none';
+            if (searchFallback) {
+                searchFallback.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery || title + ' exercise tutorial')}`;
+                searchFallback.style.display = 'flex';
+            }
+        };
+    } else {
+        // No video ID — show YouTube search fallback
+        iframeEl.style.display = 'none';
+        iframeEl.src = '';
+        if (searchFallback) {
+            searchFallback.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery || title + ' exercise tutorial')}`;
+            searchFallback.style.display = 'flex';
+        }
+    }
+    
+    // Show animated exercise guide SVG
+    const gifEl = document.getElementById('exerciseDemoGif');
+    if (gifEl && gifUrl) { gifEl.src = gifUrl; gifEl.style.display = 'block'; }
+    else if (gifEl) { gifEl.style.display = 'none'; }
+    // Show instructions
+    const instrEl = document.getElementById('exerciseDemoInstructions');
+    if (instrEl && instructions) {
+        instrEl.innerHTML = '<strong>How to perform:</strong> ' + instructions;
+        instrEl.style.display = 'block';
+    } else if (instrEl) { instrEl.style.display = 'none'; }
     document.getElementById('exerciseDemoModal').style.display = 'flex';
 }
 function closeExerciseDemo() {
     document.getElementById('exerciseDemoIframe').src = '';
+    document.getElementById('exerciseDemoIframe').style.display = 'block';
+    const fb = document.getElementById('exerciseDemoSearchFallback');
+    if (fb) fb.style.display = 'none';
     document.getElementById('exerciseDemoModal').style.display = 'none';
 }
 
@@ -848,19 +1188,21 @@ const PROGRAM_DEFINITIONS = {
         name: 'General Rehabilitation',
         badgeClass: 'kimore-bg', badgeIcon: '🏋️', badgeLabel: 'Kimore', exCardClass: 'kimore-ex',
         exercises: [
-            { id: 'lifting_of_arms',    label: 'Lifting of Arms',    videoId: 'IzTFCZv0--E' },
-            { id: 'lateral_trunk_tilt', label: 'Lateral Trunk Tilt', videoId: '4aR-v_5f-T4' },
-            { id: 'trunk_rotation',     label: 'Trunk Rotation',     videoId: 'IhP0LP-wyxQ' },
-            { id: 'squat',              label: 'Squat',              videoId: 'YaXPRqUwItQ' },
+            { id: 'lifting_of_arms',      label: 'Lifting of Arms',               videoId: 'IzTFCZv0--E', gifUrl: '/static/gifs/lifting_of_arms.svg' },
+            { id: 'lateral_trunk_tilt',    label: 'Lateral Trunk Tilt',            videoId: '4aR-v_5f-T4', gifUrl: '/static/gifs/lateral_trunk_tilt.svg' },
+            { id: 'trunk_rotation',        label: 'Trunk Rotation',               videoId: 'IhP0LP-wyxQ', gifUrl: '/static/gifs/trunk_rotation.svg' },
+            { id: 'squat',                 label: 'Squat',                         videoId: 'hscOjLrW60c', gifUrl: '/static/gifs/squat.svg' },
+            { id: 'trunk_rotation_target', label: 'Trunk Rotation & Target Touch', videoId: 'IhP0LP-wyxQ', gifUrl: '/static/gifs/trunk_rotation_target.svg' },
+            { id: 'pelvis_rotation',       label: 'Pelvis Rotation',                  videoId: 'T4nbduvEiLg', gifUrl: '/static/gifs/pelvis_rotation.svg' },
         ]
     },
     keraal: {
         name: 'Lower Back Pain Rehab',
         badgeClass: 'keraal-bg', badgeIcon: '🦴', badgeLabel: 'Keraal', exCardClass: 'keraal-ex',
         exercises: [
-            { id: 'forward_flexion',  label: 'Forward Flexion (CTK)',  videoId: 'y0N47Pcfg2Y' },
-            { id: 'flank_stretch',    label: 'Flank Stretch (ELK)',    videoId: 'ta0jrOqFZOk' },
-            { id: 'torso_rotation',   label: 'Torso Rotation (RTK)',   videoId: '9SKuFenm_bM' },
+            { id: 'forward_flexion',  label: 'Forward Flexion (CTK)',  videoId: 'rbT2wkclSxo', gifUrl: '/static/gifs/forward_flexion.svg' },
+            { id: 'flank_stretch',    label: 'Flank Stretch (ELK)',    videoId: 'RfuiraEgKcY', gifUrl: '/static/gifs/flank_stretch.svg' },
+            { id: 'torso_rotation',   label: 'Torso Rotation (RTK)',   videoId: 'h6XyzlM8m24', gifUrl: '/static/gifs/torso_rotation.svg' },
         ]
     }
 };
@@ -918,15 +1260,18 @@ function renderExerciseCards(def) {
         const card = document.createElement('div');
         card.className = 'ex-card ' + def.exCardClass;
         card.dataset.value = ex.id;
+        const exData = AVAILABLE_EXERCISES[ex.id];
+        const gifSrc = ex.gifUrl || (exData && exData.gifUrl) || '';
+        const instrText = exData ? exData.instructions : '';
         card.innerHTML =
-            `<img class="ex-thumb" src="https://img.youtube.com/vi/${ex.videoId}/mqdefault.jpg" alt="${ex.label}">
+            `<img class="ex-gif-thumb" src="${gifSrc}" alt="${ex.label} demonstration">
              <div class="ex-card-body">
                  <div class="ex-card-check">✓</div>
                  <span class="ex-card-name">${ex.label}</span>
              </div>
              <button class="ex-watch-btn">▶ Watch Demo</button>`;
-        card.querySelector('.ex-thumb').addEventListener('click', e => { e.stopPropagation(); showExerciseDemo(ex.videoId, ex.label); });
-        card.querySelector('.ex-watch-btn').addEventListener('click', e => { e.stopPropagation(); showExerciseDemo(ex.videoId, ex.label); });
+        card.querySelector('.ex-gif-thumb').addEventListener('click', e => { e.stopPropagation(); const exD = AVAILABLE_EXERCISES[ex.id]; showExerciseDemo(ex.videoId, ex.label, gifSrc, instrText, exD && exD.searchQuery); });
+        card.querySelector('.ex-watch-btn').addEventListener('click', e => { e.stopPropagation(); const exD = AVAILABLE_EXERCISES[ex.id]; showExerciseDemo(ex.videoId, ex.label, gifSrc, instrText, exD && exD.searchQuery); });
         card.addEventListener('click', function() {
             this.classList.toggle('checked');
             updateSelectedExercisesList();
@@ -964,11 +1309,51 @@ const LANG_TO_BCP47 = {
     English: "en-US", Tamil: "ta-IN", Chinese: "zh-CN", Malay: "ms-MY", Thai: "th-TH"
 };
 
+/* ===================== REP / SET ALERT TRANSLATIONS ===================== */
+const REP_ALERT = {
+    English: n => `Rep ${n} complete`,
+    Tamil:   n => `உடற்பயிற்சி ${n} முடிந்தது`,
+    Chinese: n => `第${n}次完成`,
+    Malay:   n => `Rep ${n} selesai`,
+    Thai:    n => `ครั้งที่ ${n} เสร็จ`,
+};
+const SET_ALERT = {
+    English: n => `Set ${n} complete`,
+    Tamil:   n => `செட் ${n} முடிந்தது`,
+    Chinese: n => `第${n}组完成`,
+    Malay:   n => `Set ${n} selesai`,
+    Thai:    n => `ชุดที่ ${n} เสร็จ`,
+};
+const EXERCISE_DONE_ALERT = {
+    English: 'Exercise complete! Well done!',
+    Tamil:   'உடற்பயிற்சி முடிந்தது! நன்றாக செய்தீர்கள்!',
+    Chinese: '运动完成！做得好！',
+    Malay:   'Senaman selesai! Bagus!',
+    Thai:    'ออกกำลังกายเสร็จแล้ว! ทำได้ดี!',
+};
+function speakRepSetAlert(repInfo) {
+    if (!audioEnabled || !repInfo) return;
+    const lang = getLanguageName();
+    if (repInfo.rep_incremented) {
+        const repNum = repInfo.rep_now || 1;
+        const fn = REP_ALERT[lang] || REP_ALERT.English;
+        queueSpeech(fn(repNum));
+    }
+    if (repInfo.set_completed) {
+        const setNum = (repInfo.set_now || 2) - 1; // set_now was already incremented by backend
+        const fn = SET_ALERT[lang] || SET_ALERT.English;
+        queueSpeech(fn(setNum));
+    }
+    if (repInfo.exercise_completed) {
+        queueSpeech(EXERCISE_DONE_ALERT[lang] || EXERCISE_DONE_ALERT.English);
+    }
+}
+
 /* ===================== STATE ===================== */
 let sessionId = null;
 let webcamStream = null;
 let isPaused = false;
-let audioEnabled = false;
+let audioEnabled = true;
 let pollTimer = null;
 let inflight = false;
 
@@ -994,7 +1379,7 @@ let isSpeaking = false;
 let ttsQueue = [];
 let lastSpokenHash = "";
 let lastSpokenAt = 0;
-const SPEAK_COOLDOWN_MS = 8000;
+const SPEAK_COOLDOWN_MS = 3000;
 
 // CV feedback persistence
 let LAST_FEEDBACK = null;
@@ -1009,6 +1394,11 @@ let manualExercise = "squat";
 // Canvas for frame capture
 const captureCanvas = document.createElement("canvas");
 const captureCtx = captureCanvas.getContext("2d");
+
+/* ===================== FPS TRACKING ===================== */
+let fpsFrameCount = 0;
+let fpsLastTime = performance.now();
+let currentFPS = 0;
 
 /* ===================== GAMIFICATION STATE ===================== */
 let xp = 0, level = 1, streak = 0, maxStreak = 0, totalRepsDone = 0;
@@ -1142,8 +1532,8 @@ function openCurrentExerciseDemo() {
     const w = WORKOUTS[currentExIndex];
     const exId = w.exercise_id || normalizeExerciseName(w.name);
     const ex = AVAILABLE_EXERCISES[exId];
-    if (!ex || !ex.videoId) return;
-    showExerciseDemo(ex.videoId, ex.name);
+    if (!ex) return;
+    showExerciseDemo(ex.videoId, ex.name, ex.gifUrl, ex.instructions, ex.searchQuery);
 }
 function updateExerciseRefPanel() {
     if (!WORKOUTS.length) return;
@@ -1151,10 +1541,16 @@ function updateExerciseRefPanel() {
     const exId = w.exercise_id || normalizeExerciseName(w.name);
     const ex = AVAILABLE_EXERCISES[exId];
     if (!ex) return;
-    const thumb = document.getElementById('exerciseRefThumb');
+    // Update animated guide image in reference panel
+    const gifEl = document.getElementById('exerciseRefGif');
     const nameEl = document.getElementById('exerciseRefName');
-    if (thumb && ex.videoId) thumb.src = `https://img.youtube.com/vi/${ex.videoId}/mqdefault.jpg`;
+    if (gifEl && ex.gifUrl) gifEl.src = ex.gifUrl;
     if (nameEl) nameEl.textContent = ex.name;
+    // Update sidebar exercise guide
+    const guideImg = document.getElementById('sidebarGuideImg');
+    const guideLabel = document.getElementById('sidebarGuideLabel');
+    if (guideImg && ex.gifUrl) guideImg.src = ex.gifUrl;
+    if (guideLabel) guideLabel.textContent = ex.name;
 }
 
 /* ===================== GAMIFICATION FUNCTIONS ===================== */
@@ -1241,10 +1637,10 @@ function updatePipelineStatus(pipeline, status, score) {
     const badgeEl = document.getElementById(isKimore ? 'kimoreStatusBadge' : 'keraalStatusBadge');
     if (scoreEl) scoreEl.textContent = Number(score || 0).toFixed(1) + ' / 50';
     if (badgeEl) {
-        if      (status === 'CORRECT') { badgeEl.textContent = '✓ Correct Form'; badgeEl.className = 'pipeline-badge correct'; }
-        else if (status === 'WRONG')   { badgeEl.textContent = '✗ Fix Form';     badgeEl.className = 'pipeline-badge wrong';   }
-        else if (status === 'NO_POSE') { badgeEl.textContent = '◌ No Pose';      badgeEl.className = 'pipeline-badge analyzing'; }
-        else                           { badgeEl.textContent = '⌛ Analyzing';    badgeEl.className = 'pipeline-badge analyzing'; }
+        if      (status === 'CORRECT')    { badgeEl.textContent = '✓ Correct Form'; badgeEl.className = 'pipeline-badge correct'; }
+        else if (status === 'WRONG' || status === 'INCORRECT') { badgeEl.textContent = '✗ Fix Form'; badgeEl.className = 'pipeline-badge wrong'; }
+        else if (status === 'NO_POSE')    { badgeEl.textContent = '◌ No Pose';      badgeEl.className = 'pipeline-badge analyzing'; }
+        else                              { badgeEl.textContent = '⌛ Analyzing';    badgeEl.className = 'pipeline-badge analyzing'; }
     }
     if (isKimore) kimorePipelineScore = Number(score || 0);
     else          keraalPipelineScore = Number(score || 0);
@@ -1255,15 +1651,24 @@ function processKimoreResult(out) {
     if (!out) return;
     updateRepUIFromBackend(out);
     if (out.exercise_name) updateExerciseUI(out.exercise_name);
-    // Throttle score display to once every 5 seconds
+
+    // Always track latest non-zero score (for badge display)
     const rawK = out.frame_score != null ? Number(out.frame_score) : 0;
-    if (rawK > 0) lastKimoreScore = rawK; // Track latest non-zero
-    const nowK = Date.now();
-    if (nowK - lastKimoreScoreTime >= SCORE_DISPLAY_INTERVAL_MS) {
-        updatePipelineStatus('kimore', out.form_status, lastKimoreScore);
-        lastKimoreScoreTime = nowK;
+    if (rawK > 0) lastKimoreScore = rawK;
+
+    // Update badge (CORRECT/WRONG) every frame for real-time visual feedback
+    updateFormStatus(out.form_status);
+
+    // Score number updates ONLY when a rep completes (per-rep average)
+    if (out.rep_info && out.rep_info.rep_incremented && out.rep_info.rep_score != null) {
+        const repScore = Number(out.rep_info.rep_score);
+        updatePipelineStatus('kimore', out.form_status, repScore);
+        updateScoreDisplay(repScore);
+        showRepScorePop(repScore);
+        // Speak rep/set alert
+        speakRepSetAlert(out.rep_info);
     }
-    updateFormStatus(out.form_status, lastKimoreScore);
+
     // Gamification
     if (out.rep_info) {
         const r = out.rep_info;
@@ -1285,24 +1690,38 @@ function processKimoreResult(out) {
     }
     const fb = Array.isArray(out.llm_feedback) ? out.llm_feedback : (out.llm_feedback ? [out.llm_feedback] : []);
     renderCVFeedback(fb);
-    if (out.form_status === 'WRONG' && fb.length > 0) speakFeedbackList(fb);
+    if ((out.form_status === 'WRONG' || out.form_status === 'INCORRECT') && fb.length > 0) speakFeedbackList(fb);
 }
 function processKeraalResult(out) {
     if (!out) return;
-    // Keraal raw score = probability * 50 (backend returns frame_score already scaled)
+    // Track latest non-zero score
     const keraalScore = out.frame_score != null ? Number(out.frame_score) : 0;
-    if (keraalScore > 0) lastKeraalScore = keraalScore; // Track latest non-zero
-    // Throttle score display to once every 5 seconds
-    const nowKer = Date.now();
-    if (nowKer - lastKeraalScoreTime >= SCORE_DISPLAY_INTERVAL_MS) {
-        updatePipelineStatus('keraal', out.form_status, lastKeraalScore);
-        lastKeraalScoreTime = nowKer;
+    if (keraalScore > 0) lastKeraalScore = keraalScore;
+
+    // Score number updates ONLY when a rep completes (per-rep average)
+    if (out.rep_info && out.rep_info.rep_incremented && out.rep_info.rep_score != null) {
+        const repScore = Number(out.rep_info.rep_score);
+        updatePipelineStatus('keraal', out.form_status, repScore);
+        showRepScorePop(repScore);
+        // Speak rep/set alert
+        speakRepSetAlert(out.rep_info);
     }
+
+    // Always render + speak Keraal feedback (both solo and dual mode)
+    const fb = Array.isArray(out.llm_feedback) ? out.llm_feedback : (out.llm_feedback ? [out.llm_feedback] : []);
+    if (fb.length) renderCVFeedback(fb);
+    if ((out.form_status === 'WRONG' || out.form_status === 'INCORRECT') && fb.length > 0) speakFeedbackList(fb);
+
     // If Keraal is the only pipeline, also drive rep UI + exercise detect + gamification
     if (selectedPipeline === 'keraal') {
         if (out.exercise_name) updateExerciseUI(out.exercise_name);
         updateRepUIFromBackend(out);
-        updateFormStatus(out.form_status, lastKeraalScore);
+        updateFormStatus(out.form_status);
+        // Score display per rep
+        if (out.rep_info && out.rep_info.rep_incremented && out.rep_info.rep_score != null) {
+            updateScoreDisplay(Number(out.rep_info.rep_score));
+            showRepScorePop(Number(out.rep_info.rep_score));
+        }
         // Gamification from Keraal reps
         if (out.rep_info) {
             const r = out.rep_info;
@@ -1322,9 +1741,6 @@ function processKeraalResult(out) {
             if (r.set_completed)      { addXP(XP_PER_SET,      'Set Done!');   triggerAchievement('set_complete'); }
             if (r.exercise_completed) { addXP(XP_PER_EXERCISE, 'Exercise!');   triggerAchievement('exercise_complete'); }
         }
-        const fb = Array.isArray(out.llm_feedback) ? out.llm_feedback : (out.llm_feedback ? [out.llm_feedback] : []);
-        if (fb.length) renderCVFeedback(fb);
-        if (out.form_status === 'WRONG' && fb.length > 0) speakFeedbackList(fb);
     }
 }
 
@@ -1335,10 +1751,12 @@ const EXERCISE_PLAN = {
     "lateral_trunk_tilt": { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Tilt ~20–30° each side" },
     "trunk_rotation":     { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Rotate comfortably (no pain)" },
     "squat":              { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Hip crease to knee level (as tolerated)" },
+    "trunk_rotation_target": { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Rotate trunk & touch targets alternately" },
     // Keraal exercises
     "forward_flexion":    { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Bend forward from hips, keep back straight" },
     "flank_stretch":      { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Side bend 15–25° each side, slow" },
     "torso_rotation":     { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Rotate trunk gently, 20–30° each side" },
+    "pelvis_rotation":    { reps: 10, sets: 3, target: "3 sets × 10 reps", rom: "Rotate pelvis gently with control" },
     "idle":               { reps: 0,  sets: 0, target: "You are Idle", rom: "--" },
 };
 
@@ -1349,6 +1767,7 @@ function normalizeExerciseName(name) {
     if (n.includes("squat")) return "squat";
     if (n.includes("lifting")) return "lifting_of_arms";
     if (n.includes("lateral")) return "lateral_trunk_tilt";
+    if (n.includes("target") || n.includes("trunk_rotation_target")) return "trunk_rotation_target";
     if (n.includes("trunk rotation") || (n.includes("trunk") && !n.includes("tilt") && !n.includes("torso"))) return "trunk_rotation";
     // Keraal exercises
     if (n.includes("forward") || n.includes("flexion") || n === 'ctk') return "forward_flexion";
@@ -1536,14 +1955,17 @@ function renderCVFeedback(items) {
 
 function updateFormStatus(status, score) {
     const badge = document.getElementById('formStatusBadge');
-    const scoreText = document.getElementById('frameScoreText');
-    if (scoreText) scoreText.textContent = Number(score || 0).toFixed(1);
-    allScores.push(Number(score || 0));
+    // Score text is now updated ONLY per rep via updateScoreDisplay()
+    // Only update badge (CORRECT/WRONG indicator) here
+    if (score !== undefined && score !== null) {
+        // Legacy callers that still pass score — just track it
+        allScores.push(Number(score || 0));
+    }
 
     if (status === 'CORRECT') {
         badge.className = 'badge correct';
         badge.innerHTML = '<i class="fa-solid fa-circle-check"></i> CORRECT FORM';
-    } else if (status === 'WRONG') {
+    } else if (status === 'WRONG' || status === 'INCORRECT') {
         badge.className = 'badge incorrect';
         badge.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> FORM NEEDS WORK';
     } else if (status === 'NO_POSE') {
@@ -1555,6 +1977,15 @@ function updateFormStatus(status, score) {
     } else {
         badge.className = 'badge analyzing';
         badge.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> ANALYZING...';
+    }
+}
+
+/* ── Update score display (called only when a rep completes) ── */
+function updateScoreDisplay(repScore) {
+    const scoreText = document.getElementById('frameScoreText');
+    if (scoreText && repScore != null) {
+        scoreText.textContent = Number(repScore).toFixed(1);
+        allScores.push(Number(repScore));
     }
 }
 
@@ -1695,8 +2126,16 @@ async function playNextTTS() {
         console.error("Server TTS failed, using browser fallback:", e);
         if ('speechSynthesis' in window) {
             const u = new SpeechSynthesisUtterance(text);
+            // Set language so browser picks the right voice for non-English
+            const bcp47 = LANG_TO_BCP47[getLanguageName()] || 'en-US';
+            u.lang = bcp47;
+            // Try to find a matching voice for this language
+            const voices = window.speechSynthesis.getVoices();
+            const match = voices.find(v => v.lang === bcp47 || v.lang.startsWith(bcp47.split('-')[0]));
+            if (match) u.voice = match;
             u.rate = 1.0; u.pitch = 1.0;
             u.onend = function() { playNextTTS(); };
+            u.onerror = function(ev) { console.warn('Browser TTS error:', ev.error); playNextTTS(); };
             window.speechSynthesis.speak(u);
         } else {
             isSpeaking = false;
@@ -1712,13 +2151,23 @@ function queueSpeech(text) {
 
 async function speakFeedbackList(items) {
     if (!items || items.length === 0 || !audioEnabled) return;
-    const now = Date.now();
-    if (now - lastSpokenAt < SPEAK_COOLDOWN_MS) return;
+
+    // Don't interrupt: if TTS is still playing previous feedback, skip
+    if (isSpeaking || ttsQueue.length > 0) return;
+
+    // Duplicate check: skip if same feedback as last time
     const hash = items.join("|");
     if (hash === lastSpokenHash) return;
-    queueSpeech(items.slice(0, 2).join(". "));
+
+    // Queue ALL feedback lines individually so each is spoken fully
+    items.forEach(function(line) {
+        if (line && typeof line === 'string' && line.trim()) {
+            queueSpeech(line.trim());
+        }
+    });
+
     lastSpokenHash = hash;
-    lastSpokenAt = now;
+    lastSpokenAt = Date.now();
 }
 
 /* ===================== AUDIO TOGGLE ===================== */
@@ -1730,22 +2179,126 @@ document.getElementById('audioToggleBtn').addEventListener('click', function() {
 });
 
 /* ===================== WEBCAM ===================== */
+function camLog(msg) {
+    console.log('[CAM] ' + msg);
+    const dbg = document.getElementById('cameraDebugInfo');
+    if (dbg) dbg.innerHTML += msg + '<br>';
+}
+
 async function startWebcam() {
-    try {
-        webcamStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480, facingMode: 'user' }, audio: false
-        });
-        const video = document.getElementById('webcamVideo');
-        video.srcObject = webcamStream;
-        document.getElementById('videoPlaceholder').style.display = 'none';
-        document.getElementById('videoContainer').style.display = 'block';
-        addFeedback('success', 'Camera connected — Begin your exercise');
-        return true;
-    } catch (err) {
-        console.error('Webcam error:', err);
-        addFeedback('error', 'Could not access camera. Check permissions.');
+    const video = document.getElementById('webcamVideo');
+    const placeholder = document.getElementById('videoPlaceholder');
+    const statusMsg = document.getElementById('cameraStatusMsg');
+    const retryBtn = document.getElementById('retryCamera');
+    const dbg = document.getElementById('cameraDebugInfo');
+    if (dbg) dbg.innerHTML = '';
+    if (retryBtn) retryBtn.style.display = 'none';
+
+    camLog('startWebcam() called');
+    camLog('Location: ' + location.protocol + '//' + location.host);
+    camLog('Secure context: ' + window.isSecureContext);
+    camLog('mediaDevices: ' + !!navigator.mediaDevices);
+    camLog('getUserMedia: ' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const msg = 'Camera API not available. Needs HTTPS or localhost.';
+        camLog('❌ ' + msg);
+        if (statusMsg) statusMsg.innerHTML = '<span style="color:#ef4444;">' + msg + '</span>';
+        if (retryBtn) retryBtn.style.display = 'inline-block';
+        addFeedback('error', msg);
         return false;
     }
+
+    // Enumerate devices first to check if cameras exist
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cams = devices.filter(d => d.kind === 'videoinput');
+        camLog('Found ' + cams.length + ' video devices');
+        cams.forEach((c, i) => camLog('  cam' + i + ': ' + (c.label || '(no label — permission needed)')));
+    } catch (e) {
+        camLog('enumerateDevices error: ' + e.message);
+    }
+
+    if (statusMsg) statusMsg.textContent = '⏳ Requesting camera access...';
+
+    // Try the simplest possible constraint first
+    try {
+        camLog('Attempt: {video: true}');
+        webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        camLog('✅ Got stream: ' + webcamStream.getVideoTracks().length + ' video tracks');
+        camLog('Track: ' + (webcamStream.getVideoTracks()[0]?.label || 'unknown'));
+        camLog('Track state: ' + webcamStream.getVideoTracks()[0]?.readyState);
+    } catch (err) {
+        camLog('❌ getUserMedia failed: [' + err.name + '] ' + err.message);
+
+        // Try with more specific constraints
+        try {
+            camLog('Attempt 2: {video: {facingMode: user}}');
+            webcamStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                audio: false
+            });
+            camLog('✅ Got stream on attempt 2');
+        } catch (err2) {
+            camLog('❌ Attempt 2 failed: [' + err2.name + '] ' + err2.message);
+            if (statusMsg) statusMsg.innerHTML = '<span style="color:#ef4444;">Camera access denied or unavailable</span><br><small style="color:#999;">Error: ' + err.name + ' — ' + err.message + '</small>';
+            if (retryBtn) retryBtn.style.display = 'inline-block';
+            addFeedback('error', 'Camera failed: ' + err.name + ': ' + err.message);
+            return false;
+        }
+    }
+
+    // We have a stream — attach it
+    camLog('Attaching stream to video element...');
+    video.srcObject = webcamStream;
+    camLog('video.srcObject set, readyState=' + video.readyState);
+
+    // Force play
+    try {
+        const playResult = video.play();
+        if (playResult && playResult.then) {
+            await playResult;
+        }
+        camLog('video.play() resolved');
+    } catch (playErr) {
+        camLog('video.play() error: ' + playErr.message + ' (usually OK on autoplay)');
+    }
+
+    // Wait a bit for video to have dimensions
+    camLog('Waiting for video dimensions...');
+    let waited = 0;
+    while (video.videoWidth === 0 && waited < 3000) {
+        await new Promise(r => setTimeout(r, 100));
+        waited += 100;
+    }
+    camLog('video dimensions: ' + video.videoWidth + 'x' + video.videoHeight + ' (waited ' + waited + 'ms)');
+
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+        // Success!
+        placeholder.style.display = 'none';
+        document.getElementById('videoContainer').style.display = 'block';
+        camLog('✅ Camera active and visible');
+        addFeedback('success', 'Camera connected (' + video.videoWidth + 'x' + video.videoHeight + ')');
+        return true;
+    } else {
+        // Stream exists but no video data
+        camLog('⚠️ Stream exists but no video dimensions');
+        // Still show the video container — it might just need more time
+        placeholder.style.display = 'none';
+        document.getElementById('videoContainer').style.display = 'block';
+        addFeedback('warning', 'Camera connected but slow to start — video should appear shortly');
+        return true; // Return true so polling starts
+    }
+}
+
+function retryCameraManual() {
+    camLog('Manual retry triggered');
+    startWebcam().then(ok => {
+        if (ok && !pollTimer) {
+            pollFeedback();
+            startPolling();
+        }
+    });
 }
 
 function stopCamera() {
@@ -1768,20 +2321,51 @@ function grabFrameDataURL() {
 }
 
 /* ===================== CV POLLING (DUAL PIPELINE) ===================== */
+function updateFPS() {
+    fpsFrameCount++;
+    const now = performance.now();
+    const elapsed = now - fpsLastTime;
+    if (elapsed >= 1000) {
+        currentFPS = Math.round((fpsFrameCount * 1000) / elapsed);
+        fpsFrameCount = 0;
+        fpsLastTime = now;
+        const fpsEl = document.getElementById('fpsOverlay');
+        if (fpsEl) {
+            fpsEl.textContent = currentFPS + ' FPS';
+            fpsEl.style.color = currentFPS >= 8 ? '#00ff88' : currentFPS >= 4 ? '#fbbf24' : '#f87171';
+        }
+    }
+}
+
+function showRepScorePop(score) {
+    const pop = document.createElement('div');
+    pop.className = 'rep-score-pop ' + (score >= 35 ? 'great' : score >= 20 ? 'good' : 'poor');
+    pop.textContent = Number(score).toFixed(1);
+    document.body.appendChild(pop);
+    setTimeout(() => { pop.style.opacity = '0'; pop.style.transform = 'translate(-50%, -50%) scale(2)'; }, 600);
+    setTimeout(() => pop.remove(), 1200);
+}
+
 async function pollFeedback() {
     if (inflight || isPaused) return;
     inflight = true;
     const frame_b64 = grabFrameDataURL();
     if (!frame_b64) { inflight = false; return; }
     const lang = getLanguageName();
+    // Resolve exercise_hint from the current workout or manual selection
+    let exercise_hint = manualExercise || '';
+    if (WORKOUTS.length && currentExIndex < WORKOUTS.length) {
+        const w = WORKOUTS[currentExIndex];
+        exercise_hint = w.exercise_id || normalizeExerciseName(w.name) || exercise_hint;
+    }
     try {
         const fetchKimore = () => fetch(API_BASE + '/api/live_feedback', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ frame_b64, language: lang, mode: exerciseMode, manual_exercise: manualExercise })
+            body: JSON.stringify({ frame_b64, language: lang, mode: exerciseMode, manual_exercise: manualExercise, exercise_hint })
         }).then(r => r.json()).catch(() => null);
         const fetchKeraal = () => fetch(API_BASE + '/api/live_feedback_keraal', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ frame_b64, language: lang })
+            body: JSON.stringify({ frame_b64, language: lang, exercise_hint })
         }).then(r => r.json()).catch(() => null);
         if (selectedPipeline === 'both') {
             const [kr, kk] = await Promise.allSettled([fetchKimore(), fetchKeraal()]);
@@ -1799,6 +2383,7 @@ async function pollFeedback() {
         updateFormStatus('ERROR', 0);
     } finally {
         inflight = false;
+        updateFPS();
     }
 }
 
@@ -1908,15 +2493,29 @@ async function startSession() {
     updateSessionProgress();
 
     // Start camera + both CV pipelines
-    const camOk = await startWebcam();
+    console.log('📷 About to start webcam...');
+    const cameraStatus = document.getElementById('cameraStatusMsg');
+    if (cameraStatus) cameraStatus.textContent = '⏳ Starting camera...';
+    let camOk = false;
+    try {
+        camOk = await startWebcam();
+    } catch (camErr) {
+        console.error('❌ startWebcam threw:', camErr);
+        addFeedback('error', 'Camera error: ' + camErr.message);
+        if (cameraStatus) cameraStatus.innerHTML = '<span style="color:#ef4444;">Camera error: ' + camErr.message + '</span>';
+        const retryBtn = document.getElementById('retryCamera');
+        if (retryBtn) retryBtn.style.display = 'inline-block';
+    }
+    console.log('📷 Camera result:', camOk);
     await callSessionStart();
     updateExerciseRefPanel();
     startSkeletonPolling();
 
+    // Always start polling — even if camera failed, user can retry
     if (camOk) {
         await pollFeedback();
-        startPolling();
     }
+    startPolling();
 }
 
 /* ===================== EXERCISE NAVIGATION ===================== */
@@ -2114,5 +2713,41 @@ window.addEventListener('beforeunload', function() {
     stopCamera();
     stopPolling();
 });
+
+/* === PAGE LOAD CAMERA DIAGNOSTIC === */
+(function pageLoadCameraCheck() {
+    const dbg = document.getElementById('cameraDebugInfo');
+    if (!dbg) return;
+    const lines = [];
+    lines.push('<b>Page-load camera check:</b>');
+    lines.push('Protocol: ' + location.protocol);
+    lines.push('Host: ' + location.host);
+    lines.push('isSecureContext: ' + window.isSecureContext);
+    lines.push('navigator.mediaDevices: ' + !!navigator.mediaDevices);
+    if (navigator.mediaDevices) {
+        lines.push('getUserMedia: ' + !!navigator.mediaDevices.getUserMedia);
+        // Test permission query
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({name: 'camera'}).then(function(r) {
+                dbg.innerHTML += 'Camera permission: <b>' + r.state + '</b><br>';
+            }).catch(function(e) {
+                dbg.innerHTML += 'Permission query error: ' + e.message + '<br>';
+            });
+        }
+        // Enumerate devices
+        navigator.mediaDevices.enumerateDevices().then(function(devices) {
+            const cams = devices.filter(function(d) { return d.kind === 'videoinput'; });
+            dbg.innerHTML += 'Video devices found: <b>' + cams.length + '</b><br>';
+            cams.forEach(function(c, i) {
+                dbg.innerHTML += '  \u2022 cam' + i + ': ' + (c.label || '(label hidden \u2014 permission not yet granted)') + '<br>';
+            });
+        }).catch(function(e) {
+            dbg.innerHTML += 'enumerateDevices error: ' + e.message + '<br>';
+        });
+    } else {
+        lines.push('<span style="color:red;">mediaDevices NOT available \u2014 camera will not work</span>');
+    }
+    dbg.innerHTML = lines.join('<br>') + '<br>';
+})();
 </script>
 {% endblock %}

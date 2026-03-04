@@ -141,7 +141,13 @@
         <tbody>
             {% for ex in exercises %}
             <tr>
-                <td><strong>{{ ex.exercise_name }}</strong></td>
+                <td style="display:flex; align-items:center; gap:8px;">
+                    {% set ex_key = ex.exercise_name|lower|replace(' ', '_') %}
+                    <img src="{{ url_for('static', filename='gifs/' ~ ex_key ~ '.svg') }}"
+                         alt="" style="width:40px; height:40px; object-fit:contain; border-radius:6px; background:#f0f4ff; flex-shrink:0;"
+                         onerror="this.style.display='none'">
+                    <strong>{{ ex.exercise_name }}</strong>
+                </td>
                 <td>{{ ex.quality_score | default(0) }}</td>
                 <td>
                     {% set perc = ex.completion_perc | default(0) %}
