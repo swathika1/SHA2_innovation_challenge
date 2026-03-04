@@ -1385,6 +1385,7 @@ const SPEAK_COOLDOWN_MS = 3000;
 let LAST_FEEDBACK = null;
 let LAST_FEEDBACK_TIME = 0;
 let LAST_FEEDBACK_RENDER_TIME = 0;
+let LAST_FEEDBACK_RENDERED_KEY = null; // tracks what is currently shown
 const FEEDBACK_RENDER_COOLDOWN_MS = 2000; // Pause 2 seconds between feedback updates
 
 // Exercise mode
@@ -1929,19 +1930,27 @@ function renderCVFeedback(items) {
     }
     const displayItems = (LAST_FEEDBACK && LAST_FEEDBACK.length > 0) ? LAST_FEEDBACK : null;
     const list = document.getElementById('feedbackList');
-    
+
     // Only update the feedback display if enough time has passed
     const now = Date.now();
     if (now - LAST_FEEDBACK_RENDER_TIME < FEEDBACK_RENDER_COOLDOWN_MS) {
         return;
     }
-    
+
+    // Skip DOM update if content hasn't changed
+    const newKey = displayItems ? displayItems.slice(0, 5).join('|') : '';
+    if (newKey === LAST_FEEDBACK_RENDERED_KEY) {
+        return;
+    }
+
     list.innerHTML = '';
     if (!displayItems) {
         const div = document.createElement('div');
         div.className = 'feedback-item info';
         div.textContent = 'Position yourself in frame to begin analysis';
         list.appendChild(div);
+        LAST_FEEDBACK_RENDERED_KEY = '';
+        LAST_FEEDBACK_RENDER_TIME = now;
         return;
     }
     displayItems.slice(0, 5).forEach(function(txt) {
@@ -1950,6 +1959,7 @@ function renderCVFeedback(items) {
         div.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + txt;
         list.appendChild(div);
     });
+    LAST_FEEDBACK_RENDERED_KEY = newKey;
     LAST_FEEDBACK_RENDER_TIME = now;
 }
 
