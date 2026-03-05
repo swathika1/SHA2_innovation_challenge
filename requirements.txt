@@ -53,6 +53,7 @@ gTTS==2.5.4
 # --- PDF processing ---
 PyPDF2>=3.0.0
 pdfplumber==0.11.9
+reportlab>=4.0
 
 # --- Utilities ---
 requests==2.32.5

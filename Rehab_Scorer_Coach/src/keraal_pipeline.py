@@ -23,7 +23,7 @@ from Rehab_Scorer_Coach.src.rep_counter_mediapipe import RepCounterMediaPipe
 WINDOW_SIZE = 48  # Rolling buffer of 48 frames
 NUM_LANDMARKS = 33  # BlazePose
 EXERCISE_DETECTION_THRESHOLD = 0.5
-CORRECTNESS_THRESHOLD = 0.55  # >= 0.55 = correct
+CORRECTNESS_THRESHOLD = 0.22  # >= 0.22 = correct  (score >= 11/50)
 SCORE_MULTIPLIER = 50  # correctness (0-1) * 50 = raw score (0-50)
 
 # Exercise class mapping
@@ -229,7 +229,7 @@ class KeraalRehabPipeline:
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(
             static_image_mode=False,
-            model_complexity=1,
+            model_complexity=0,           # Lite model — ~3x faster
             enable_segmentation=False,
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5,
@@ -244,20 +244,33 @@ class KeraalRehabPipeline:
         # Session state
         self.language = "English"
         self.current_exercise = "idle"
-        self.threshold = 28.0  # Lower threshold = higher bar for "CORRECT"
+        self.threshold = 25.0  # Score threshold for "CORRECT" display
         self.cooldown_seconds = 6.0
         
         # Idle detection
         self.idle_frames = 0
-        self.min_idle_frames = 60  # 12 seconds at 5 FPS before returning "idle"
+        self.min_idle_seconds = 4.0
+        self.min_idle_frames = 20  # updated dynamically from FPS
+        self.idle_motion_threshold = 0.0025
+        self.motion_ema = 0.0
+        self.motion_alpha = 0.2
+        self.last_frame_motion = 0.0
+        self.motion_floor_ema = self.idle_motion_threshold
+        self.dynamic_idle_motion_threshold = self.idle_motion_threshold
+
+        # Live FPS estimation for adaptive thresholds
+        self.frame_fps_ema = 5.0
+        self.fps_alpha = 0.15
+        self.last_frame_time = 0.0
         
-        # Rep tracking
+        # Rep tracking — simple, no quality gates
         self.current_rep_count = 0
         self.current_set_count = 1
         self.target_reps = 10
         self.target_sets = 3
-        self.frames_above_threshold = 0
-        self.rep_scores_buffer = []  # Accumulate per-frame scores within a rep
+        self.rep_scores_buffer = []
+        self.min_motion_for_rep = 0.0030  # used by jitter floor learning
+        self.dynamic_min_motion_for_rep = self.min_motion_for_rep
         
         # Frame counter for window-level predictions
         self.frame_count = 0
@@ -320,8 +333,16 @@ class KeraalRehabPipeline:
                 print("❌ Failed to decode frame")
                 return None, None
             
+            # Downscale to 480p for faster MediaPipe processing
+            h, w = frame.shape[:2]
+            if w > 640:
+                scale = 640.0 / w
+                frame_small = cv2.resize(frame, (640, int(h * scale)))
+            else:
+                frame_small = frame
+
             # Convert BGR to RGB for MediaPipe
-            image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            image_rgb = cv2.cvtColor(frame_small, cv2.COLOR_BGR2RGB)
             results = self.pose.process(image_rgb)
             
             if not results.pose_landmarks:
@@ -418,12 +439,15 @@ class KeraalRehabPipeline:
     
     def _get_aggregated_score(self) -> float:
         """
-        Get average score from last 10 seconds of predictions.
-        Each score in history represents one window prediction.
+        Get score from the most recent ~4 seconds of predictions.
+        Uses the last 20 entries (at ~5 FPS ≈ 4 seconds) so the
+        displayed score actually responds to what the patient is doing
+        *right now* instead of being diluted by old history.
         """
         if not self.score_history:
             return 0.0
-        return float(np.mean(list(self.score_history)))
+        recent = list(self.score_history)[-20:]  # last ~4 seconds
+        return float(np.median(recent))           # median resists outliers
     
     
     def _generate_llm_feedback(self, form_status: str, aggregated_score: float, exercise_name: str, landmarks: np.ndarray = None) -> List[str]:
@@ -581,70 +605,61 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
         return feedback
     
     
-    def _detect_and_count_reps(self, score: float, landmarks: np.ndarray = None, exercise_name: str = "") -> Dict[str, Any]:
+    # Minimum score (out of 50) to allow a rep to count.
+    # Very low so reps still count when the person is genuinely exercising
+    # even if the model underestimates quality for that exercise type.
+    REP_SCORE_GATE = 5.0
+
+    def _detect_and_count_reps(self, score: float, landmarks: np.ndarray = None, exercise_name: str = "", motion_delta: float = 0.0, form_status: str = "INCORRECT") -> Dict[str, Any]:
         """
-        Rep detection using MediaPipe angle-based state machine.
-        Accumulates per-frame scores and outputs average rep_score on completion.
-        Falls back to frame-counting (with score guard) if landmarks unavailable.
+        Rep detection — MediaPipe angle-based state machine.
+
+        CRITICAL: The state machine ALWAYS runs on every frame so it
+        can continuously track the rest→peak→rest angle cycle.
+        The only gate on the final rep-increment is:
+          - Score >= REP_SCORE_GATE  (person is at least trying)
+
+        NO idle guard here — the state machine won't produce false
+        reps when idle because the joint angles don't change.
         """
         rep_incremented = False
         set_completed = False
         exercise_completed = False
-        rep_score = None  # Average score for the completed rep
+        rep_score = None
 
-        # Accumulate score for current rep
+        # Accumulate scores for per-rep average
         self.rep_scores_buffer.append(score)
 
-        # Use MediaPipe rep counter if landmarks available
+        # ── ALWAYS run the MediaPipe angle-based state machine ──
+        # The state machine must see EVERY frame to properly track the
+        # rest→peak→rest cycle.  When idle, angles don't change so no
+        # false reps will fire.  Any gating here breaks cycle tracking
+        # for slow rehab exercises like forward flexion / torso rotation.
         if landmarks is not None and self.rep_counter is not None:
             try:
                 rep_detected = self.rep_counter.process(landmarks, exercise_name)
 
                 if rep_detected:
-                    self.current_rep_count += 1
-                    rep_incremented = True
-                    rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else score
-                    self.rep_scores_buffer = []  # Reset for next rep
-                    print(f"   ✅ REP COUNTED (MediaPipe): Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Rep Score: {rep_score}")
+                    # ── SOFT SCORE GATE: block rep only if score is very low ──
+                    if score < self.REP_SCORE_GATE:
+                        print(f"      [REP] rep detected but score={score:.1f} < {self.REP_SCORE_GATE} — SKIPPED")
+                    else:
+                        self.current_rep_count += 1
+                        rep_incremented = True
+                        rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else round(score, 2)
+                        self.rep_scores_buffer = []
+                        print(f"   REP #{self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Score: {rep_score}")
 
-                    if self.current_rep_count >= self.target_reps:
-                        set_completed = True
-                        self.current_set_count += 1
-                        self.current_rep_count = 0
-                        print(f"   🎯 SET COMPLETE: Moving to Set {self.current_set_count}")
-
-                        if self.current_set_count > self.target_sets:
-                            exercise_completed = True
-                            print(f"   🏆 EXERCISE COMPLETE: All {self.target_sets} sets finished!")
-                            self.current_set_count = self.target_sets
+                        if self.current_rep_count >= self.target_reps:
+                            set_completed = True
+                            self.current_set_count += 1
+                            self.current_rep_count = 0
+                            print(f"   SET COMPLETE -> Set {self.current_set_count}")
+                            if self.current_set_count > self.target_sets:
+                                exercise_completed = True
+                                self.current_set_count = self.target_sets
             except Exception as e:
-                print(f"   ⚠️  MediaPipe rep counter error: {e}")
-
-        # Fallback to frame-counting (with score guard)
-        if not rep_incremented:
-            if score >= self.threshold:
-                self.frames_above_threshold += 1
-
-                if self.frames_above_threshold >= 20:
-                    self.frames_above_threshold = 0
-                    self.current_rep_count += 1
-                    rep_incremented = True
-                    rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else score
-                    self.rep_scores_buffer = []
-                    print(f"   ✅ REP COUNTED (Fallback): Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Rep Score: {rep_score}")
-
-                    if self.current_rep_count >= self.target_reps:
-                        set_completed = True
-                        self.current_set_count += 1
-                        self.current_rep_count = 0
-                        print(f"   🎯 SET COMPLETE: Moving to Set {self.current_set_count}")
-
-                        if self.current_set_count > self.target_sets:
-                            exercise_completed = True
-                            print(f"   🏆 EXERCISE COMPLETE: All {self.target_sets} sets finished!")
-                            self.current_set_count = self.target_sets
-            else:
-                self.frames_above_threshold = 0
+                print(f"   Rep counter error: {e}")
 
         return {
             "rep_now": self.current_rep_count,
@@ -710,6 +725,31 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
         print("➡️ Step 2: Normalize landmarks (dual normalization)")
         scoring_normalized = normalize_landmarks_scoring(landmarks)           # (99,) for scoring model
         exercise_normalized = normalize_landmarks_exercise_detection(landmarks)  # (33,3) for exercise model
+
+        if self.pose_buffer.prev_frame is None:
+            frame_motion_delta = 0.0
+        else:
+            frame_motion_delta = float(np.mean(np.abs(scoring_normalized - self.pose_buffer.prev_frame)))
+
+        now_frame = time.time()
+        if self.last_frame_time > 0.0:
+            dt = max(1e-3, now_frame - self.last_frame_time)
+            inst_fps = float(np.clip(1.0 / dt, 2.0, 30.0))
+            self.frame_fps_ema = (self.fps_alpha * inst_fps) + ((1.0 - self.fps_alpha) * self.frame_fps_ema)
+        self.last_frame_time = now_frame
+
+        self.last_frame_motion = frame_motion_delta
+
+        # Learn camera-specific jitter floor during low-motion segments
+        if frame_motion_delta < (self.min_motion_for_rep * 1.2):
+            self.motion_floor_ema = (0.1 * frame_motion_delta) + (0.9 * self.motion_floor_ema)
+
+        self.dynamic_idle_motion_threshold = max(self.idle_motion_threshold, self.motion_floor_ema * 1.35)
+        self.dynamic_min_motion_for_rep = max(self.min_motion_for_rep, self.motion_floor_ema * 1.8)
+        self.min_idle_frames = max(10, int(self.min_idle_seconds * self.frame_fps_ema))
+
+        self.motion_ema = (self.motion_alpha * frame_motion_delta) + ((1.0 - self.motion_alpha) * self.motion_ema)
+        print(f"   Frame motion delta: {frame_motion_delta:.6f} | motion_ema: {self.motion_ema:.6f} | fps≈{self.frame_fps_ema:.1f} | idle_th={self.dynamic_idle_motion_threshold:.6f} | rep_th={self.dynamic_min_motion_for_rep:.6f}")
         
         # 3️⃣ Add to buffer (both normalizations)
         print("➡️ Step 3: Add to rolling buffer")
@@ -766,13 +806,16 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
                 feedback_exercise_name = resolved_hint
                 print(f"   ⭐ Using exercise_hint '{resolved_hint}' instead of ML-detected '{exercise_display}' (conf={exercise_confidence:.2f})")
         
-        # ⭐ IDLE DETECTION: If confidence is low, person is likely idle
-        if exercise_confidence < 0.4:
+        # ⭐ IDLE DETECTION: only when BOTH confidence is low AND motion is low.
+        # Using AND prevents false IDLE during slow rehab exercises (forward
+        # flexion, torso rotation) where motion_ema can dip below the threshold
+        # while the person is genuinely exercising.
+        if exercise_confidence < 0.4 and self.motion_ema < self.dynamic_idle_motion_threshold:
             self.idle_frames += 1
             if self.idle_frames >= self.min_idle_frames:
-                print(f"   ⏸️  IDLE DETECTED (confidence {exercise_confidence:.2f} < 0.4)")
+                print(f"   ⏸️  IDLE DETECTED (conf={exercise_confidence:.2f}, motion_ema={self.motion_ema:.6f})")
                 return {
-                    "frame_score": None,
+                    "frame_score": 0.0,
                     "form_status": "IDLE",
                     "llm_feedback": ["Please start the exercise"],
                     "exercise_name": "idle",
@@ -807,7 +850,7 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
         print("➡️ Step 7: Window-level rep detection")
         # Use RAW MediaPipe landmarks (0-1 range) for angle-based rep counter
         # NOT the normalized (hip-centered, torso-scaled) ones from the scoring buffer
-        rep_info = self._detect_and_count_reps(raw_score, landmarks, feedback_exercise_name)
+        rep_info = self._detect_and_count_reps(raw_score, landmarks, feedback_exercise_name, motion_delta=frame_motion_delta, form_status=form_status)
         
         # 1️⃣1️⃣ Store score for aggregation
         self.score_history.append(raw_score)
@@ -853,12 +896,18 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
         self.pose_buffer.reset()
         self.current_rep_count = 0
         self.current_set_count = 1
-        self.frames_above_threshold = 0
         self.rep_scores_buffer = []
         self.frame_count = 0
         self.window_predictions.clear()
         self.score_history.clear()
         self.llm_feedback_cooldown = 0
+        self.idle_frames = 0
+        self.motion_ema = 0.0
+        self.last_frame_motion = 0.0
+        self.motion_floor_ema = self.idle_motion_threshold
+        self.dynamic_idle_motion_threshold = self.idle_motion_threshold
+        self.frame_fps_ema = 5.0
+        self.last_frame_time = 0.0
         
         if self.rep_counter:
             with contextlib.suppress(Exception):

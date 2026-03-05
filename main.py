@@ -50,6 +50,15 @@ import tempfile
 import os
 import asyncio
 import edge_tts
+
+try:
+    from report_generator import generate_session_report
+    REPORT_AVAILABLE = True
+    print("[INIT] PDF report generator loaded")
+except Exception as _re:
+    REPORT_AVAILABLE = False
+    print(f"[WARNING] PDF report generator not available: {_re}")
+
 try:
     from gtts import gTTS
     GTTS_AVAILABLE = True
@@ -925,6 +934,110 @@ def session_summary(session_id=None):
                          exercises=exercises_list,
                          overall_duration=overall_duration,
                          session_id=session_id)
+
+
+# ==================== PDF SESSION REPORT DOWNLOAD ====================
+
+@app.route('/api/session/report/<int:session_id>')
+@login_required
+@role_required('patient')
+def api_session_report(session_id):
+    """Generate and return a downloadable PDF report for a completed session."""
+    import json as _json
+
+    if not REPORT_AVAILABLE:
+        return jsonify({"error": "PDF report module not available (install reportlab)"}), 503
+
+    patient_id = session['user_id']
+
+    # ── session metadata ────────────────────────────────────────────────
+    sess = query_db(
+        'SELECT * FROM sessions WHERE id = ? AND patient_id = ?',
+        (session_id, patient_id), one=True,
+    )
+    if not sess:
+        return jsonify({"error": "Session not found"}), 404
+
+    # ── patient info ────────────────────────────────────────────────────
+    user_row = query_db('SELECT name FROM users WHERE id = ?', (patient_id,), one=True)
+    patient_name = user_row['name'] if user_row else 'Patient'
+    pat_row = query_db('SELECT condition FROM patients WHERE user_id = ?', (patient_id,), one=True)
+    patient_condition = pat_row['condition'] if pat_row else 'General'
+
+    # ── exercises ───────────────────────────────────────────────────────
+    exercises_raw = query_db('''
+        SELECT se.*, COALESCE(se.exercise_name, e.name) as exercise_name
+        FROM session_exercises se
+        LEFT JOIN workouts w ON se.workout_id = w.id
+        LEFT JOIN exercises e ON w.exercise_id = e.id
+        WHERE se.session_id = ?
+        ORDER BY se.exercise_start_time
+    ''', (session_id,))
+
+    exercises_list = []
+    for ex in (exercises_raw or []):
+        req = _json.loads(ex['sets_required']) if ex['sets_required'] else {}
+        comp = _json.loads(ex['sets_completed']) if ex['sets_completed'] else {}
+        total_req = sum(int(v) for v in req.values())
+        total_comp = sum(int(v) for v in comp.values())
+        ex_perc = round(total_comp / total_req * 100, 1) if total_req > 0 else 0
+        ex_duration = None
+        if ex['exercise_start_time'] and ex['exercise_end_time']:
+            try:
+                st = datetime.fromisoformat(ex['exercise_start_time'])
+                en = datetime.fromisoformat(ex['exercise_end_time'])
+                ex_duration = int((en - st).total_seconds())
+            except Exception:
+                pass
+        exercises_list.append({
+            "exercise_name": ex['exercise_name'],
+            "quality_score": ex['quality_score'],
+            "completion_perc": ex_perc,
+            "sets_required": req,
+            "sets_completed": comp,
+            "duration_seconds": ex_duration,
+        })
+
+    # ── overall duration ────────────────────────────────────────────────
+    overall_duration = None
+    if sess['started_at'] and sess['completed_at']:
+        try:
+            s = datetime.fromisoformat(sess['started_at'])
+            e = datetime.fromisoformat(sess['completed_at'])
+            overall_duration = int((e - s).total_seconds())
+        except Exception:
+            pass
+
+    # ── frame-level telemetry ──────────────────────────────────────────
+    frames_raw = query_db(
+        'SELECT * FROM session_frames WHERE session_id = ? ORDER BY timestamp',
+        (session_id,),
+    )
+
+    # Only keep frames whose exercise_name matches a selected exercise (case-insensitive)
+    def _norm_name(n):
+        return " ".join((n or "").lower().replace("_", " ").split())
+    selected_norm = {_norm_name(ex['exercise_name']) for ex in exercises_list if ex.get('exercise_name')}
+    frames = [
+        f for f in (frames_raw or [])
+        if _norm_name(f['exercise_name']) in selected_norm
+    ] if selected_norm else (frames_raw or [])
+
+    # ── generate PDF ────────────────────────────────────────────────────
+    pdf_bytes = generate_session_report(
+        patient_name=patient_name,
+        patient_condition=patient_condition,
+        session_data=dict(sess),
+        exercises=exercises_list,
+        frames=frames,
+        overall_duration=overall_duration,
+    )
+
+    response = make_response(pdf_bytes)
+    fname = f"rehab_session_{session_id}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{fname}"'
+    return response
 
 
 @app.route('/patient/profile')
@@ -2400,6 +2513,9 @@ def api_session_create():
     if not row:
         return jsonify({'ok': False, 'error': 'Failed to create session'}), 500
 
+    # Store in Flask session so frame endpoints can log telemetry
+    session['current_session_id'] = row['id']
+
     return jsonify({'ok': True, 'session_id': row['id']})
 
 
@@ -3111,6 +3227,29 @@ def ensure_tables_exist():
             UNIQUE(patient_id, timeslot_id)
         )
     ''')
+
+    # ── Frame-level session telemetry ──────────────────────────────────
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS session_frames (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            timestamp TEXT NOT NULL,
+            program TEXT NOT NULL DEFAULT 'general',
+            exercise_name TEXT NOT NULL DEFAULT '',
+            score REAL NOT NULL DEFAULT 0.0,
+            status TEXT NOT NULL DEFAULT '',
+            rep_count INTEGER NOT NULL DEFAULT 0,
+            set_count INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY (session_id) REFERENCES sessions(id),
+            FOREIGN KEY (patient_id) REFERENCES users(id)
+        )
+    ''')
+    # Index for fast lookup by session
+    try:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_session_frames_session ON session_frames(session_id)')
+    except Exception:
+        pass
     
     # Add optimization columns to patients table if they don't exist
     optimization_columns = [
@@ -3350,6 +3489,41 @@ def api_live_feedback_v3():
 
     return jsonify(out)
 
+
+# ==================== FRAME TELEMETRY HELPER ====================
+
+def _log_frame_telemetry(out: dict, program: str = 'general'):
+    """Insert one row into session_frames for every processed frame.
+    
+    Silently skips if no active session or user is not logged in.
+    """
+    try:
+        patient_id = session.get('user_id')
+        session_id = session.get('current_session_id')
+        if not patient_id or not session_id:
+            return  # not inside a tracked session
+
+        exercise_name = out.get('exercise_name', '') or ''
+        score = float(out.get('frame_score', 0.0))
+        form_status = out.get('form_status', '') or ''
+        rep_info = out.get('rep_info') or {}
+        rep_count = int(rep_info.get('rep_now', 0))
+        set_count = int(rep_info.get('set_now', 1))
+        ts = datetime.utcnow().isoformat()
+
+        execute_db(
+            '''INSERT INTO session_frames
+               (session_id, patient_id, timestamp, program, exercise_name,
+                score, status, rep_count, set_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (session_id, patient_id, ts, program, exercise_name,
+             score, form_status, rep_count, set_count),
+        )
+    except Exception as e:
+        # Never let logging break the real-time pipeline
+        print(f"[FRAME_LOG] Error: {e}")
+
+
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():
     if PIPELINE is None:
@@ -3385,6 +3559,9 @@ def api_live_feedback():
                 'exercise_name': out.get('exercise_name', ''),
                 'timestamp': time.time()
             }
+
+        # ── Log frame telemetry to session_frames ──────────────────
+        _log_frame_telemetry(out, program='general')
         
         return jsonify(out)
     except Exception as e:
@@ -3438,6 +3615,9 @@ def api_live_feedback_keraal():
                 'exercise_name': out.get('exercise_name', ''),
                 'timestamp': time.time()
             }
+
+        # ── Log frame telemetry to session_frames ──────────────────
+        _log_frame_telemetry(out, program='low_back_pain')
         
         return jsonify(out)
     except Exception as e:

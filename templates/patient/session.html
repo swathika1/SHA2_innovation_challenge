@@ -1303,7 +1303,9 @@ function updateSelectedExercisesList() {
 const API_BASE = window.location.origin;
 const THRESHOLD = 30.0;
 const COOLDOWN_SECONDS = 2;
-const POLL_MS = 100; // 200
+const POLL_MS = 40; // target ~25 FPS
+const SCORE_UPDATE_INTERVAL_MS = 3500; // update score display every 3.5 seconds
+let lastScoreUpdateTime = 0; // timestamp of last score display update
 
 const LANG_TO_BCP47 = {
     English: "en-US", Tamil: "ta-IN", Chinese: "zh-CN", Malay: "ms-MY", Thai: "th-TH"
@@ -1659,11 +1661,20 @@ function processKimoreResult(out) {
     // Update badge (CORRECT/WRONG) every frame for real-time visual feedback
     updateFormStatus(out.form_status);
 
-    // Score number updates ONLY when a rep completes (per-rep average)
+    // Score updates every 3-4 seconds, ONLY when form is CORRECT
+    const kimoreDisplayScore = out.aggregated_score != null ? Number(out.aggregated_score) : rawK;
+    const nowK = Date.now();
+    const isCorrectForm = out.form_status === 'CORRECT';
+    if (kimoreDisplayScore > 0 && isCorrectForm && (nowK - lastScoreUpdateTime) >= SCORE_UPDATE_INTERVAL_MS) {
+        // Update BOTH status bar and top bar together, only on CORRECT frames
+        updateScoreDisplay(kimoreDisplayScore);
+        updatePipelineStatus('kimore', out.form_status, kimoreDisplayScore);
+        lastScoreUpdateTime = nowK;
+    }
+
+    // On rep completion: show pop-up and speak alert
     if (out.rep_info && out.rep_info.rep_incremented && out.rep_info.rep_score != null) {
         const repScore = Number(out.rep_info.rep_score);
-        updatePipelineStatus('kimore', out.form_status, repScore);
-        updateScoreDisplay(repScore);
         showRepScorePop(repScore);
         // Speak rep/set alert
         speakRepSetAlert(out.rep_info);
@@ -1698,10 +1709,19 @@ function processKeraalResult(out) {
     const keraalScore = out.frame_score != null ? Number(out.frame_score) : 0;
     if (keraalScore > 0) lastKeraalScore = keraalScore;
 
-    // Score number updates ONLY when a rep completes (per-rep average)
+    // Update score display every 2-3 seconds (not every frame) — TOP BAR only
+    // Use aggregated_score if available (more stable), else raw frame_score
+    const displayScore = out.aggregated_score != null ? Number(out.aggregated_score) : keraalScore;
+    const nowKeraal = Date.now();
+    const shouldUpdateTopBar = displayScore > 0 && (nowKeraal - lastScoreUpdateTime) >= SCORE_UPDATE_INTERVAL_MS;
+    if (shouldUpdateTopBar) {
+        updatePipelineStatus('keraal', out.form_status, displayScore);
+        lastScoreUpdateTime = nowKeraal;
+    }
+
+    // On rep completion: show pop-up and speak alert
     if (out.rep_info && out.rep_info.rep_incremented && out.rep_info.rep_score != null) {
         const repScore = Number(out.rep_info.rep_score);
-        updatePipelineStatus('keraal', out.form_status, repScore);
         showRepScorePop(repScore);
         // Speak rep/set alert
         speakRepSetAlert(out.rep_info);
@@ -1717,10 +1737,9 @@ function processKeraalResult(out) {
         if (out.exercise_name) updateExerciseUI(out.exercise_name);
         updateRepUIFromBackend(out);
         updateFormStatus(out.form_status);
-        // Score display per rep
-        if (out.rep_info && out.rep_info.rep_incremented && out.rep_info.rep_score != null) {
-            updateScoreDisplay(Number(out.rep_info.rep_score));
-            showRepScorePop(Number(out.rep_info.rep_score));
+        // Status bar score updates EVERY frame
+        if (displayScore > 0) {
+            updateScoreDisplay(displayScore);
         }
         // Gamification from Keraal reps
         if (out.rep_info) {
