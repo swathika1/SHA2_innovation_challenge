@@ -1,3 +1,7 @@
+# Environment / secrets — NEVER commit these
+.env
+.env.*
+
 venv/
 .venv/
 
