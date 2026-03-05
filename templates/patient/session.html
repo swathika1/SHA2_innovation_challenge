@@ -1409,6 +1409,7 @@ const API_BASE = window.location.origin;
 const THRESHOLD = 30.0;
 const COOLDOWN_SECONDS = 2;
 const POLL_MS = 40; // target ~25 FPS
+const FETCH_TIMEOUT_MS = 10000; // abort hung requests after 10s
 const SCORE_UPDATE_INTERVAL_MS = 3500; // update score display every 3.5 seconds
 let lastScoreUpdateTime = 0; // timestamp of last score display update
 
@@ -2457,9 +2458,13 @@ function grabFrameDataURL() {
 /* ===================== CV POLLING (DUAL PIPELINE) ===================== */
 function updateFPS() {
     fpsFrameCount++;
+}
+
+// Separate timer updates the FPS display every second, independent of responses
+setInterval(function() {
     const now = performance.now();
     const elapsed = now - fpsLastTime;
-    if (elapsed >= 1000) {
+    if (elapsed >= 900) {
         currentFPS = Math.round((fpsFrameCount * 1000) / elapsed);
         fpsFrameCount = 0;
         fpsLastTime = now;
@@ -2469,7 +2474,7 @@ function updateFPS() {
             fpsEl.style.color = currentFPS >= 8 ? '#00ff88' : currentFPS >= 4 ? '#fbbf24' : '#f87171';
         }
     }
-}
+}, 1000);
 
 function showRepScorePop(score) {
     const pop = document.createElement('div');
@@ -2493,14 +2498,18 @@ async function pollFeedback() {
         exercise_hint = w.exercise_id || normalizeExerciseName(w.name) || exercise_hint;
     }
     try {
-        const fetchKimore = () => fetch(API_BASE + '/api/live_feedback', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ frame_b64, language: lang, mode: exerciseMode, manual_exercise: manualExercise, exercise_hint })
-        }).then(r => r.json()).catch(() => null);
-        const fetchKeraal = () => fetch(API_BASE + '/api/live_feedback_keraal', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ frame_b64, language: lang, exercise_hint })
-        }).then(r => r.json()).catch(() => null);
+        const fetchWithTimeout = (url, body) => {
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+            return fetch(url, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body), signal: ctrl.signal
+            }).then(r => r.json()).catch(() => null).finally(() => clearTimeout(tid));
+        };
+        const fetchKimore = () => fetchWithTimeout(API_BASE + '/api/live_feedback',
+            { frame_b64, language: lang, mode: exerciseMode, manual_exercise: manualExercise, exercise_hint });
+        const fetchKeraal = () => fetchWithTimeout(API_BASE + '/api/live_feedback_keraal',
+            { frame_b64, language: lang, exercise_hint });
         if (selectedPipeline === 'both') {
             const [kr, kk] = await Promise.allSettled([fetchKimore(), fetchKeraal()]);
             if (kr.status === 'fulfilled') processKimoreResult(kr.value);
