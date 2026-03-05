@@ -42,9 +42,6 @@ faiss-cpu>=1.7.0
 google-genai==1.62.0
 groq==1.0.0
 
-# --- Speech-to-Text (Whisper via HuggingFace fal-ai) ---
-huggingface_hub>=0.23.0
-
 # --- Text-to-Speech ---
 pyttsx3>=2.90
 edge-tts==7.2.7
