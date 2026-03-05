@@ -23,7 +23,7 @@ from Rehab_Scorer_Coach.src.rep_counter_mediapipe import RepCounterMediaPipe
 WINDOW_SIZE = 48  # Rolling buffer of 48 frames
 NUM_LANDMARKS = 33  # BlazePose
 EXERCISE_DETECTION_THRESHOLD = 0.5
-CORRECTNESS_THRESHOLD = 0.22  # >= 0.22 = correct  (score >= 11/50)
+CORRECTNESS_THRESHOLD = 0.50  # >= 0.50 = correct  (score >= 25/50)
 SCORE_MULTIPLIER = 50  # correctness (0-1) * 50 = raw score (0-50)
 
 # Exercise class mapping

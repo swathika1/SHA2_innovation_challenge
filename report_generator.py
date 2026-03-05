@@ -483,8 +483,8 @@ def generate_session_report(
     def _is_selected(name):
         return (not selected_norm) or _norm(name) in selected_norm
 
-    # ── aggregate frame stats (only selected exercises) ────────────────
-    SKIP = {"no_pose", "idle", "error", "none", "no_frame", "ideal", ""}
+    # ── aggregate frame stats ──────────────────────────────────────────
+    SKIP = {"no_pose", "idle", "error", "none", "no_frame", "ideal", "warmup", ""}
     ex_agg = OrderedDict()
 
     def _new():
@@ -493,26 +493,88 @@ def generate_session_report(
 
     for f in (frames or []):
         en = _field(f, 'exercise_name', '')
-        if _norm(en) in SKIP:
-            continue
-        if not _is_selected(en):
+        st  = _field(f, 'status', '')
+        if _norm(en) in SKIP or _norm(st) in SKIP:
             continue
         sc  = float(_field(f, 'score', 0))
-        st  = _field(f, 'status', '')
         rep = int(_field(f, 'rep_count', 0))
         se  = int(_field(f, 'set_count', 1))
         pr  = _field(f, 'program', 'general')
+        # If only one exercise was selected and frame has a different CV name,
+        # attribute these frames to the selected exercise (CV mis-classification)
         key = _norm(en)
+        if selected_norm and key not in selected_norm:
+            if len(selected_norm) == 1:
+                key = list(selected_norm)[0]
+            else:
+                continue  # multiple exercises selected — skip unmatched
         if key not in ex_agg:
             ex_agg[key] = _new()
-            ex_agg[key]["display"] = _title(en)
+            ex_agg[key]["display"] = _title(en) if key == _norm(en) else _title(list(selected_norm)[0] if selected_norm else en)
         a = ex_agg[key]
         a["total"] += sc;  a["n"] += 1
         if st == "CORRECT": a["correct"] += 1
-        elif st == "WRONG": a["wrong"] += 1
+        elif st in ("WRONG", "INCORRECT"): a["wrong"] += 1
         a["max_rep"] = max(a["max_rep"], rep)
         a["max_set"] = max(a["max_set"], se)
         a["prog"] = pr
+
+    # ── merge session_exercises data into ex_agg ──────────────────────
+    # session_exercises has the authoritative quality_score, reps (from
+    # sets_completed), and set counts saved by the frontend.  When
+    # frame-level data is missing or all-zero (e.g. warmup frames),
+    # fall back to these values so the report is never blank.
+    import json as _json_m
+    _ex_db_scores = {}          # key -> db_score (for timeline fallback)
+    for ex in (exercises or []):
+        en = ex.get("exercise_name", "")
+        key = _norm(en)
+        if not key or key in SKIP:
+            continue
+        db_score = float(ex.get("quality_score", 0) or 0)
+        # Parse reps & sets from the saved JSON dicts
+        sc_dict = ex.get("sets_completed") or {}
+        sr_dict = ex.get("sets_required") or {}
+        if isinstance(sc_dict, str):
+            try: sc_dict = _json_m.loads(sc_dict)
+            except: sc_dict = {}
+        if isinstance(sr_dict, str):
+            try: sr_dict = _json_m.loads(sr_dict)
+            except: sr_dict = {}
+        db_reps = sum(int(v) for v in sc_dict.values()) if sc_dict else 0
+        db_sets = sum(1 for v in sc_dict.values() if int(v) > 0) if sc_dict else 0
+        if db_score > 0:
+            _ex_db_scores[key] = db_score
+
+        if key not in ex_agg:
+            if db_score <= 0:
+                continue
+            # Exercise has no frames at all — create entry from DB
+            ex_agg[key] = _new()
+            ex_agg[key]["display"] = _title(en)
+            ex_agg[key]["total"] = db_score
+            ex_agg[key]["n"] = 1
+            ex_agg[key]["correct"] = 1 if db_score >= 25 else 0
+            ex_agg[key]["wrong"] = 0 if db_score >= 25 else 1
+            ex_agg[key]["max_rep"] = db_reps
+            ex_agg[key]["max_set"] = max(db_sets, 1)
+        else:
+            a = ex_agg[key]
+            frame_avg = a["total"] / a["n"] if a["n"] else 0
+            # Always prefer DB reps/sets if frame-level is zero
+            if a["max_rep"] == 0 and db_reps > 0:
+                a["max_rep"] = db_reps
+            if a["max_set"] <= 1 and db_sets > 1:
+                a["max_set"] = db_sets
+            if frame_avg < 1.0 and db_score > 1.0:
+                # Frame data is effectively zero — replace with DB score
+                a["total"] = db_score * a["n"] if a["n"] else db_score
+                if db_score >= 25:
+                    a["correct"] = a["n"]
+                    a["wrong"] = 0
+                else:
+                    a["correct"] = 0
+                    a["wrong"] = a["n"]
 
     # ── call Groq LLM ──────────────────────────────────────────────────
     gclient = _get_groq_client()
@@ -892,12 +954,27 @@ def generate_session_report(
         ex_fr = defaultdict(list)
         for i, f in enumerate(frames):
             en = _field(f, 'exercise_name', '')
-            if not _is_selected(en):
-                continue
-            if _norm(en) in SKIP:
+            st = _field(f, 'status', '')
+            if _norm(en) in SKIP or _norm(st) in SKIP:
                 continue
             sc = float(_field(f, 'score', 0))
-            ex_fr[_norm(en)].append((i, sc))
+            # Attribute misclassified frames to the selected exercise
+            key = _norm(en)
+            if selected_norm and key not in selected_norm:
+                if len(selected_norm) == 1:
+                    key = list(selected_norm)[0]
+                else:
+                    continue
+            ex_fr[key].append((i, sc))
+
+        # If all frame scores for an exercise are ~0 but we have a DB score,
+        # replace the flat-zero line with the actual quality score.
+        for nk in list(ex_fr.keys()):
+            pts = ex_fr[nk]
+            total = sum(s for _, s in pts)
+            if total < 1.0 and nk in _ex_db_scores:
+                db_s = _ex_db_scores[nk]
+                ex_fr[nk] = [(idx, db_s) for idx, _ in pts]
 
         line_colors = [PRIMARY, ACCENT, SUCCESS, WARNING, DANGER,
                        colors.HexColor("#17a2b8"), colors.HexColor("#fd7e14")]

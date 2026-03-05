@@ -1014,14 +1014,11 @@ def api_session_report(session_id):
         (session_id,),
     )
 
-    # Only keep frames whose exercise_name matches a selected exercise (case-insensitive)
-    def _norm_name(n):
-        return " ".join((n or "").lower().replace("_", " ").split())
-    selected_norm = {_norm_name(ex['exercise_name']) for ex in exercises_list if ex.get('exercise_name')}
-    frames = [
-        f for f in (frames_raw or [])
-        if _norm_name(f['exercise_name']) in selected_norm
-    ] if selected_norm else (frames_raw or [])
+    # Pass ALL frames to the report generator — the CV model may classify
+    # the exercise differently from the user-selected name (e.g. "squat"
+    # instead of "lifting_of_arms").  The report already handles skipping
+    # idle/no_pose frames and merges DB scores from session_exercises.
+    frames = list(frames_raw or [])
 
     # ── generate PDF ────────────────────────────────────────────────────
     pdf_bytes = generate_session_report(
@@ -3496,6 +3493,7 @@ def _log_frame_telemetry(out: dict, program: str = 'general'):
     """Insert one row into session_frames for every processed frame.
     
     Silently skips if no active session or user is not logged in.
+    Skips warmup / idle / no-pose frames that carry no useful score data.
     """
     try:
         patient_id = session.get('user_id')
@@ -3503,9 +3501,14 @@ def _log_frame_telemetry(out: dict, program: str = 'general'):
         if not patient_id or not session_id:
             return  # not inside a tracked session
 
-        exercise_name = out.get('exercise_name', '') or ''
-        score = float(out.get('frame_score', 0.0))
         form_status = out.get('form_status', '') or ''
+        # Skip frames with no real scoring data
+        if form_status in ('WARMUP', 'NO_POSE', 'IDLE', 'ERROR', ''):
+            return
+
+        exercise_name = out.get('exercise_name', '') or ''
+        # Prefer aggregated_score (stable, matches what user sees) over raw frame_score
+        score = float(out.get('aggregated_score') or out.get('frame_score', 0.0) or 0.0)
         rep_info = out.get('rep_info') or {}
         rep_count = int(rep_info.get('rep_now', 0))
         set_count = int(rep_info.get('set_now', 1))
