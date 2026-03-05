@@ -353,8 +353,11 @@
         Singlish: { recognition: 'en-SG', tts: 'Singlish', synthesis: 'en-SG' }
     };
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+    let recAudioCtx = null;
+    let recProcessor = null;
+    let recSource = null;
+    let pcmChunks = [];
+    let recordStream = null;
 
     const heroAvatarWrap = document.getElementById('heroAvatarWrap');
     const heroAvatarCanvas = document.getElementById('heroAvatarCanvas');
@@ -379,10 +382,10 @@
     let currentMode = 'avatar';
     let avatarState = 'idle';
     let isListening = false;
+    let manualStop = false;
     let isSending = false;
     let textMicActive = false;
     let textSpeakerOn = true;   // auto-speak Jimmy replies in text chat
-    let voiceBuffer = '';
     let history = [];
 
     let speechAudio = null;
@@ -396,15 +399,6 @@
     let avatarRenderer = null;
 
     document.getElementById('introTime').textContent = new Date().toLocaleTimeString();
-
-    if (recognition) {
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.lang = LANG_CONFIG[languageSelect.value].recognition;
-    } else {
-        voiceMicBtn.disabled = true;
-        voiceNote.textContent = 'Speech recognition is not supported in this browser.';
-    }
 
     function setAvatarState(state) {
         avatarState = state;
@@ -981,8 +975,7 @@
     modeAvatarBtn.addEventListener('click', () => setMode('avatar'));
 
     languageSelect.addEventListener('change', () => {
-        const cfg = LANG_CONFIG[languageSelect.value] || LANG_CONFIG.English;
-        if (recognition) recognition.lang = cfg.recognition;
+        // language used at transcription time via the server-side /api/chat/transcribe endpoint
     });
 
     function addMessage(role, text) {
@@ -1245,66 +1238,105 @@
         window.speechSynthesis.speak(utterance);
     }
 
+    function encodeWAV(samples, sampleRate) {
+        const buf = new ArrayBuffer(44 + samples.length * 2);
+        const view = new DataView(buf);
+        function ws(off, s) { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); }
+        ws(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true);
+        ws(8, 'WAVE'); ws(12, 'fmt ');
+        view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+        ws(36, 'data'); view.setUint32(40, samples.length * 2, true);
+        let off = 44;
+        for (let i = 0; i < samples.length; i++, off += 2) {
+            const s = Math.max(-1, Math.min(1, samples[i]));
+            view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        }
+        return new Blob([buf], { type: 'audio/wav' });
+    }
+
+    function stopRecording() {
+        if (recProcessor) { recProcessor.disconnect(); recProcessor = null; }
+        if (recSource) { recSource.disconnect(); recSource = null; }
+        if (recordStream) { recordStream.getTracks().forEach(t => t.stop()); recordStream = null; }
+        const ctx = recAudioCtx;
+        recAudioCtx = null;
+        return ctx;
+    }
+
     function toggleListening() {
-        if (!recognition || currentMode !== 'avatar') return;
+        if (currentMode !== 'avatar') return;
 
         if (isListening) {
-            recognition.abort();
             isListening = false;
             voiceMicBtn.classList.remove('active');
-            voiceNote.textContent = 'Listening stopped. Tap microphone to speak again.';
-            setAvatarState('idle');
+            voiceNote.textContent = 'Processing speech…';
+            setAvatarState('thinking');
+
+            const ctx = stopRecording();
+            const sampleRate = ctx ? ctx.sampleRate : 16000;
+            if (ctx) ctx.close();
+
+            const totalSamples = pcmChunks.reduce((acc, c) => acc + c.length, 0);
+            if (totalSamples < 800) {
+                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
+                setAvatarState('idle');
+                return;
+            }
+            const merged = new Float32Array(totalSamples);
+            let offset = 0;
+            for (const chunk of pcmChunks) { merged.set(chunk, offset); offset += chunk.length; }
+            pcmChunks = [];
+            processVoiceBlob(encodeWAV(merged, sampleRate));
             return;
         }
 
-        voiceBuffer = '';
-        recognition.lang = (LANG_CONFIG[languageSelect.value] || LANG_CONFIG.English).recognition;
-        recognition.start();
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            voiceNote.textContent = 'Microphone not supported in this browser.';
+            return;
+        }
+
+        pcmChunks = [];
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            .then(stream => {
+                recordStream = stream;
+                recAudioCtx = new AudioContext();
+                recSource = recAudioCtx.createMediaStreamSource(stream);
+                recProcessor = recAudioCtx.createScriptProcessor(4096, 1, 1);
+                recProcessor.onaudioprocess = e => {
+                    pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+                };
+                recSource.connect(recProcessor);
+                recProcessor.connect(recAudioCtx.destination);
+
+                isListening = true;
+                voiceMicBtn.classList.add('active');
+                voiceNote.textContent = 'Listening… Tap mic again when done speaking.';
+                setAvatarState('listening');
+            })
+            .catch(err => {
+                console.error('[Jimmy mic] getUserMedia error:', err);
+                voiceNote.textContent = 'Microphone access denied. Please allow mic access and try again.';
+            });
     }
 
-    if (recognition) {
-        recognition.onstart = () => {
-            isListening = true;
-            voiceMicBtn.classList.add('active');
-            voiceNote.textContent = 'Listening… Speak now.';
-            setAvatarState('listening');
-        };
-
-        recognition.onresult = (event) => {
-            let interim = '';
-            let finalText = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const t = event.results[i][0].transcript || '';
-                if (event.results[i].isFinal) finalText += t;
-                else interim += t;
-            }
-            voiceBuffer = (finalText || interim || '').trim();
-            if (voiceBuffer) {
-                voiceNote.textContent = `Heard: "${voiceBuffer}"`;
-            }
-        };
-
-        recognition.onerror = () => {
-            isListening = false;
-            voiceMicBtn.classList.remove('active');
-            voiceNote.textContent = 'Mic error. Tap microphone and try again.';
-            setAvatarState('idle');
-        };
-
-        recognition.onend = async () => {
-            isListening = false;
-            voiceMicBtn.classList.remove('active');
-
-            const spokenText = (voiceBuffer || '').trim();
+    async function processVoiceBlob(blob) {
+        voiceNote.textContent = 'Transcribing…';
+        const formData = new FormData();
+        formData.append('audio', blob, 'voice.wav');
+        try {
+            const res = await fetch('/api/chat/transcribe', { method: 'POST', body: formData });
+            const data = await res.json();
+            const spokenText = (data.transcript || '').trim();
             if (!spokenText) {
                 voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
                 setAvatarState('idle');
                 return;
             }
-
+            voiceNote.textContent = `Heard: "${spokenText}"`;
             voiceNote.textContent = 'Thinking…';
             const answer = await queryJimmy(spokenText, false);
-
             if (answer) {
                 voiceNote.textContent = 'Jimmy is responding…';
                 await speakAuto(answer);
@@ -1313,7 +1345,11 @@
                 voiceNote.textContent = 'I could not get a response. Tap microphone to retry.';
                 setAvatarState('idle');
             }
-        };
+        } catch (err) {
+            console.error('[Jimmy mic] Transcription error:', err);
+            voiceNote.textContent = 'Transcription failed. Tap microphone to try again.';
+            setAvatarState('idle');
+        }
     }
 
     sendBtn.addEventListener('click', sendTextMessage);
@@ -1332,7 +1368,8 @@
     }
 
     window.addEventListener('beforeunload', () => {
-        if (recognition) recognition.abort();
+        stopRecording();
+        if (recAudioCtx) { recAudioCtx.close(); recAudioCtx = null; }
         stopAudioSpeech();
         window.speechSynthesis.cancel();
     });

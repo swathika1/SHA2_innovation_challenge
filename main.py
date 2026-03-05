@@ -3011,8 +3011,11 @@ def api_chat_transcribe():
 
         transcript = ""
         if WHISPER_AVAILABLE:
-            transcript = whisper_transcribe(audio_bytes, filename)
-            print(f"[Whisper] Transcript: '{transcript}'")
+            try:
+                transcript = whisper_transcribe(audio_bytes, filename)
+                print(f"[Whisper] Transcript: '{transcript}'")
+            except Exception as whisper_err:
+                print(f"[Whisper] Failed, falling back to Meralion: {whisper_err}")
 
         # Fallback to Meralion if Whisper unavailable or returned empty
         if not transcript and CHATBOT_AVAILABLE:
