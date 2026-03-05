@@ -48,7 +48,13 @@
     </div>
 
     <div id="chat-input-area">
+        <button id="chat-mic-btn" onclick="toggleChatMic()" title="Hold to speak">
+            <i class="fa-solid fa-microphone"></i>
+        </button>
         <input type="text" id="chat-input" placeholder="Type your message..." onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off">
+        <button id="chat-speaker-btn" onclick="toggleChatSpeaker()" title="Toggle auto-speak">
+            <i class="fa-solid fa-volume-high"></i>
+        </button>
         <button id="chat-send-btn" onclick="sendMessage()">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M22 2L11 13"></path>

@@ -8,6 +8,7 @@
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}" class="active">Dashboard</a>
         <a href="{{ url_for('patient_appointments') }}">Consultations</a>
+        <a href="{{ url_for('avatar_page') }}" style="background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%); color: white; padding: 8px 16px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; text-decoration: none; transition: transform 0.2s; box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);"><i class="fa-solid fa-mask"></i> Speak to Jimmy</a>
         <div class="nav-user">
             <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
             <div class="nav-user-dropdown">
@@ -130,6 +131,48 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Speak to Jimmy Avatar Card -->
+<div class="card" style="background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%); color: white; margin-bottom: 20px; border: none; position: relative; overflow: hidden;">
+    <div style="position: absolute; top: -20px; right: -20px; font-size: 60px; opacity: 0.1; transform: rotate(15deg);">🗣️</div>
+    <div style="padding: 30px; text-align: center; position: relative; z-index: 1;">
+        <div style="font-size: 4rem; margin-bottom: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); animation: avatarFloat 3s ease-in-out infinite;">🗣️</div>
+        <h3 style="margin: 0 0 10px 0; font-size: 1.8rem; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">Meet Jimmy</h3>
+        <p style="margin: 0 0 15px 0; opacity: 0.95; font-size: 1.1rem;"><strong>Your Animated Rehab Coach!</strong></p>
+        <p style="margin: 0 0 20px 0; opacity: 0.9;">Watch Jimmy come to life as he talks and listens to help you with your rehabilitation!</p>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <a href="{{ url_for('avatar_page') }}" class="btn" style="background: white; color: #ff6b35; padding: 12px 28px; font-weight: bold; border: none; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                <i class="fa-solid fa-comments"></i> Speak to Jimmy
+            </a>
+            <button onclick="document.getElementById('jimmyFeatures').scrollIntoView({behavior: 'smooth'})" class="btn" style="background: rgba(255,255,255,0.2); color: white; padding: 12px 28px; font-weight: bold; border: 1px solid white;">
+                Learn More <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Jimmy Features Overview -->
+<div class="card" id="jimmyFeatures" style="margin-bottom: 20px;">
+    <div class="card-header"><i class="fa-solid fa-robot"></i> Jimmy's Amazing Features:</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); padding: 15px; border-radius: 8px; border-left: 4px solid #ff6b35;">
+            <h4 style="margin: 0 0 8px 0; color: #ff6b35;"><i class="fa-solid fa-dumbbell"></i> Exercise Guidance</h4>
+            <p style="margin: 0; font-size: 0.9rem; color: #666;">Watch Jimmy animate as he guides you through perfect exercise form and technique.</p>
+        </div>
+        <div style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); padding: 15px; border-radius: 8px; border-left: 4px solid #ff6b35;">
+            <h4 style="margin: 0 0 8px 0; color: #ff6b35;"><i class="fa-solid fa-brain"></i> Smart Responses</h4>
+            <p style="margin: 0; font-size: 0.9rem; color: #666;">Jimmy comes alive with animated expressions while providing personalized rehabilitation advice.</p>
+        </div>
+        <div style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); padding: 15px; border-radius: 8px; border-left: 4px solid #ff6b35;">
+            <h4 style="margin: 0 0 8px 0; color: #ff6b35;"><i class="fa-solid fa-chart-line"></i> Live Progress</h4>
+            <p style="margin: 0; font-size: 0.9rem; color: #666;">See Jimmy react and celebrate your performance improvements in real-time.</p>
+        </div>
+        <div style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); padding: 15px; border-radius: 8px; border-left: 4px solid #ff6b35;">
+            <h4 style="margin: 0 0 8px 0; color: #ff6b35;"><i class="fa-solid fa-microphone"></i> Voice Animation</h4>
+            <p style="margin: 0; font-size: 0.9rem; color: #666;">Watch Jimmy's mouth move and expressions change as he speaks and listens to you.</p>
+        </div>
+    </div>
+</div>
 
 <div class="grid grid-2">
     <!-- My Exercises -->
