@@ -76,6 +76,11 @@
     .action-primary { background: linear-gradient(135deg,#007bff,#0056d2); color: #fff; }
     .action-secondary { background: #e9ecef; color: #333; }
     .action-success { background: linear-gradient(135deg,#28a745,#20c997); color: #fff; }
+    .action-pdf {
+        background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
+        display: inline-flex; align-items: center; gap: 8px;
+    }
+    .action-pdf:hover { opacity: .92; }
 </style>
 
 <div class="summary-container">
@@ -175,6 +180,11 @@
 
     <!-- Action buttons — conditional on completion -->
     <div class="action-row">
+        {% if session_id %}
+        <a href="/api/session/report/{{ session_id }}" class="action-btn action-pdf" title="Download PDF Report">
+            <i class="fa-solid fa-file-pdf"></i> Download PDF Report
+        </a>
+        {% endif %}
         {% set completion = session_data.completed_perc | default(0) %}
         {% if completion < 100 %}
             <a href="{{ url_for('rehab_session') }}" class="action-btn action-primary"><i class="fa-solid fa-rotate"></i> Restart Session</a>

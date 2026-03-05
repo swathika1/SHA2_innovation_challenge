@@ -38,24 +38,49 @@ class WebRehabPipeline:
         self._prev_feat = None
         self.language = "English"
 
-        # 🔥 Rep detection state
-        self.rep_detection_state = "waiting"  # "waiting" or "in_good_form"
-        self.last_rep_score = 0.0
-        self.frames_above_threshold = 0
-        self.frames_below_threshold = 0
-        self.min_frames_for_rep = 1  # Only 1 frame needed
+        # Rep tracking — time-based for Kimore (every 3-4 seconds)
         self.current_rep_count = 0
         self.current_set_count = 1
         self.target_reps = 10
         self.target_sets = 3
-        self.rep_scores_buffer = []  # Accumulate per-frame scores within a rep
+        self.rep_scores_buffer = []
+        self.min_motion_for_rep = 0.0045  # used by jitter floor learning
+        self.dynamic_min_motion_for_rep = self.min_motion_for_rep
+
+        # Kimore time-based rep interval (3-4 seconds)
+        self.rep_interval_seconds = 3.5   # count a rep every 3.5 seconds
+        self.last_rep_time = 0.0          # timestamp of last counted rep
+        self.active_motion_seconds = 0.0  # accumulated active (non-idle, CORRECT) time
+
+        # Motion + idle stabilization
+        self.motion_ema = 0.0
+        self.motion_alpha = 0.2
+        self.idle_frames = 0
+        self.min_idle_seconds = 3.0
+        self.min_idle_frames = 15  # updated dynamically from FPS
+        self.idle_motion_threshold = 0.0038
+        self.motion_floor_ema = self.idle_motion_threshold
+        self.dynamic_idle_motion_threshold = self.idle_motion_threshold
+
+        # Live FPS estimation for adaptive timing
+        self.frame_fps_ema = 5.0
+        self.fps_alpha = 0.15
+        self.last_frame_time = 0.0
+
+        # Score — simple EMA, no complex buffering
+        self.smoothed_score = 0.0
+        self.score_ema_alpha = 0.5   # responsive: each new score has 50% weight
+
+        # Score aggregation — same as Keraal: median of last 20 entries for stable display
+        from collections import deque
+        self.score_history = deque(maxlen=100)
 
         # 🔥 MediaPipe Pose
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(
             static_image_mode=False,
-            model_complexity=1,
-            enable_segmentation=True,
+            model_complexity=0,           # Lite model — ~3x faster
+            enable_segmentation=False,    # Not needed, saves GPU time
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5,
         )
@@ -81,74 +106,94 @@ class WebRehabPipeline:
 
         print("✅ Pipeline Ready")
 
+    # Minimum score (out of 50) to allow the rep timer to advance.
+    # Lower than the display threshold (35) so reps count when the
+    # person is genuinely exercising even if the model under-scores.
+    REP_SCORE_GATE = 12.0
+
     # -----------------------------------------------------
-    # Automatic Rep Detection
+    # Automatic Rep Detection (Kimore: time-based, every 3-4 seconds)
     # -----------------------------------------------------
-    def _detect_and_count_reps(self, score: float, delta: float, landmarks: np.ndarray = None, exercise_name: str = "") -> Dict[str, Any]:
+    def _detect_and_count_reps(self, score: float, delta: float, landmarks: np.ndarray = None, exercise_name: str = "", form_status: str = "WRONG") -> Dict[str, Any]:
         """
-        Rep detection using MediaPipe angle-based state machine.
-        Accumulates per-frame scores and outputs average rep_score on completion.
-        Falls back to frame-counting (with score guard) if landmarks unavailable.
+        Kimore rep detection — TIME-BASED approach:
+        Increment rep count every 3.5 seconds of ACTIVE exercise time.
+        A rep is only counted when ALL conditions are met:
+          1. At least 3.5 seconds of active time since the last rep
+          2. Person is NOT idle  (sufficient motion detected)
+          3. Score >= REP_SCORE_GATE  (person is at least trying)
+
+        Timer PAUSES (does not reset) when idle or score too low,
+        and resumes from where it left off once conditions are met.
         """
         rep_incremented = False
         set_completed = False
         exercise_completed = False
-        rep_score = None  # Average score for the completed rep
+        rep_score = None
 
-        # Accumulate score for current rep
+        # Accumulate scores for per-rep average
         self.rep_scores_buffer.append(score)
 
-        # Use MediaPipe rep counter if landmarks available
-        if landmarks is not None and self.rep_counter is not None:
-            try:
-                rep_detected = self.rep_counter.process(landmarks, exercise_name)
+        now = time.time()
 
-                if rep_detected:
-                    self.current_rep_count += 1
-                    rep_incremented = True
-                    rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else score
-                    self.rep_scores_buffer = []  # Reset for next rep
-                    print(f"   ✅ REP COUNTED (MediaPipe): Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Rep Score: {rep_score}")
+        # ── IDLE GUARD: don't advance timer when person is not moving ──
+        is_idle = self.motion_ema < self.dynamic_idle_motion_threshold
+        if is_idle:
+            # Pause timer by pushing last_rep_time forward
+            if self.last_rep_time > 0.0:
+                self.last_rep_time = now  # freeze elapsed at 0
+            print(f"      [REP-KIMORE] idle (motion_ema={self.motion_ema:.6f}) — timer paused")
+            return {
+                "rep_now": self.current_rep_count,
+                "rep_target": self.target_reps,
+                "set_now": self.current_set_count,
+                "set_target": self.target_sets,
+                "rep_incremented": False,
+                "set_completed": False,
+                "exercise_completed": False,
+                "rep_score": None,
+            }
 
-                    if self.current_rep_count >= self.target_reps:
-                        set_completed = True
-                        self.current_set_count += 1
-                        self.current_rep_count = 0
-                        print(f"   🎯 SET COMPLETE: Moving to Set {self.current_set_count}")
+        # ── SOFT SCORE GATE: pause timer when score is very low ──
+        if score < self.REP_SCORE_GATE:
+            if self.last_rep_time > 0.0:
+                self.last_rep_time = now  # freeze elapsed at 0
+            print(f"      [REP-KIMORE] score={score:.1f} < {self.REP_SCORE_GATE} — timer paused")
+            return {
+                "rep_now": self.current_rep_count,
+                "rep_target": self.target_reps,
+                "set_now": self.current_set_count,
+                "set_target": self.target_sets,
+                "rep_incremented": False,
+                "set_completed": False,
+                "exercise_completed": False,
+                "rep_score": None,
+            }
 
-                        if self.current_set_count > self.target_sets:
-                            exercise_completed = True
-                            print(f"   🏆 EXERCISE COMPLETE: All {self.target_sets} sets finished!")
-                            self.current_set_count = self.target_sets
-            except Exception as e:
-                print(f"   ⚠️  MediaPipe rep counter error: {e}")
+        # ── TIME-BASED REP: count a rep every 3-4 seconds of active exercise ──
+        # Initialize timer on first active frame
+        if self.last_rep_time == 0.0:
+            self.last_rep_time = now
 
-        # Fallback to frame-counting (with score guard)
-        if not rep_incremented:
-            if score >= self.threshold:
-                self.frames_above_threshold += 1
-                if self.frames_above_threshold >= 12:
-                    self.frames_above_threshold = 0
-                    self.current_rep_count += 1
-                    rep_incremented = True
-                    rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else score
-                    self.rep_scores_buffer = []
-                    print(f"   ✅ REP COUNTED (Fallback): Rep {self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Rep Score: {rep_score}")
+        elapsed = now - self.last_rep_time
+        if elapsed >= self.rep_interval_seconds:
+            self.current_rep_count += 1
+            rep_incremented = True
+            rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else round(score, 2)
+            self.rep_scores_buffer = []
+            self.last_rep_time = now
+            print(f"   REP #{self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Score: {rep_score} (time-based, {elapsed:.1f}s)")
 
-                    if self.current_rep_count >= self.target_reps:
-                        set_completed = True
-                        self.current_set_count += 1
-                        self.current_rep_count = 0
-                        print(f"   🎯 SET COMPLETE: Moving to Set {self.current_set_count}")
+            if self.current_rep_count >= self.target_reps:
+                set_completed = True
+                self.current_set_count += 1
+                self.current_rep_count = 0
+                print(f"   SET COMPLETE -> Set {self.current_set_count}")
+                if self.current_set_count > self.target_sets:
+                    exercise_completed = True
+                    self.current_set_count = self.target_sets
 
-                        if self.current_set_count > self.target_sets:
-                            exercise_completed = True
-                            print(f"   🏆 EXERCISE COMPLETE: All {self.target_sets} sets finished!")
-                            self.current_set_count = self.target_sets
-            else:
-                self.frames_above_threshold = 0  # Reset when score drops
-
-        rep_info = {
+        return {
             "rep_now": self.current_rep_count,
             "rep_target": self.target_reps,
             "set_now": self.current_set_count,
@@ -158,7 +203,16 @@ class WebRehabPipeline:
             "exercise_completed": exercise_completed,
             "rep_score": rep_score,
         }
-        return rep_info
+
+    # -----------------------------------------------------
+    # Score aggregation (same as Keraal)
+    # -----------------------------------------------------
+    def _get_aggregated_score(self) -> float:
+        """Median of last ~20 scores (~4 seconds at 5 FPS). Stable for display."""
+        if not self.score_history:
+            return 0.0
+        recent = list(self.score_history)[-20:]
+        return float(np.median(recent))
 
     # -----------------------------------------------------
     # MediaPipe Pose Extraction
@@ -174,7 +228,15 @@ class WebRehabPipeline:
             if frame is None:
                 return None, None
 
-            image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Downscale to 480p for faster MediaPipe processing
+            h, w = frame.shape[:2]
+            if w > 640:
+                scale = 640.0 / w
+                frame_small = cv2.resize(frame, (640, int(h * scale)))
+            else:
+                frame_small = frame
+
+            image_rgb = cv2.cvtColor(frame_small, cv2.COLOR_BGR2RGB)
             results = self.pose.process(image_rgb)
 
             if not results.pose_landmarks:
@@ -264,8 +326,29 @@ class WebRehabPipeline:
         else:
             delta = float(np.mean(np.abs(feature_50d - self._prev_feat)))
 
+        now_frame = time.time()
+        if self.last_frame_time > 0.0:
+            dt = max(1e-3, now_frame - self.last_frame_time)
+            inst_fps = float(np.clip(1.0 / dt, 2.0, 30.0))
+            self.frame_fps_ema = (self.fps_alpha * inst_fps) + ((1.0 - self.fps_alpha) * self.frame_fps_ema)
+        self.last_frame_time = now_frame
+
         self._prev_feat = feature_50d.copy()
-        print(f"   delta motion = {delta:.6f}")
+
+        # Learn camera-specific jitter floor during low-motion segments
+        if delta < (self.min_motion_for_rep * 1.2):
+            self.motion_floor_ema = (0.1 * delta) + (0.9 * self.motion_floor_ema)
+
+        self.dynamic_idle_motion_threshold = max(self.idle_motion_threshold, self.motion_floor_ema * 1.35)
+        self.dynamic_min_motion_for_rep = max(self.min_motion_for_rep, self.motion_floor_ema * 1.8)
+        self.min_idle_frames = max(8, int(self.min_idle_seconds * self.frame_fps_ema))
+
+        self.motion_ema = (self.motion_alpha * delta) + ((1.0 - self.motion_alpha) * self.motion_ema)
+        if self.motion_ema < self.dynamic_idle_motion_threshold:
+            self.idle_frames += 1
+        else:
+            self.idle_frames = 0
+        print(f"   delta motion = {delta:.6f} | fps≈{self.frame_fps_ema:.1f} | idle_th={self.dynamic_idle_motion_threshold:.6f} | rep_th={self.dynamic_min_motion_for_rep:.6f}")
 
         # 3️⃣ EXERCISE MODEL
         print("➡️ Step 3: Exercise Model")
@@ -329,16 +412,15 @@ class WebRehabPipeline:
 
         score = predict_score(feature_50d)
         if score is not None:
-            # Demo variability (minimal noise)
-            score += np.random.normal(0, 0.5)
+            score = max(0.0, min(float(score), 50.0))
 
-            # Motion-based penalty (VERY lenient to ensure reps count)
-            if delta < 0.004:
-                score -= 10  # too still (reduced from -10)
-            elif delta > 0.03:
-                score -= 6  # too unstable (reduced from -6)
-            # Clamp
-            score = max(0, min(score, 50))
+            # Simple EMA — score updates EVERY frame, no clamping, no buffering
+            self.smoothed_score = (
+                self.score_ema_alpha * score +
+                (1.0 - self.score_ema_alpha) * self.smoothed_score
+            )
+            self.smoothed_score = max(0.0, min(self.smoothed_score, 50.0))
+            score = self.smoothed_score
             
         if score is None:
             print("   warming up sequence buffer...")
@@ -351,13 +433,39 @@ class WebRehabPipeline:
                 "landmarks": landmarks.tolist() if landmarks is not None else [],
             }
 
+        if self.idle_frames >= self.min_idle_frames:
+            print(f"   ⏸️ IDLE DETECTED: motion_ema={self.motion_ema:.6f}")
+            return {
+                "frame_score": round(score, 2),
+                "form_status": "IDLE",
+                "llm_feedback": [],
+                "exercise_name": "idle",
+                "exercise_confidence": confidence,
+                "rep_info": {
+                    "rep_now": self.current_rep_count,
+                    "rep_target": self.target_reps,
+                    "set_now": self.current_set_count,
+                    "set_target": self.target_sets,
+                    "rep_incremented": False,
+                    "set_completed": False,
+                    "exercise_completed": False,
+                    "rep_score": None,
+                },
+                "landmarks": landmarks.tolist() if landmarks is not None else [],
+            }
+
         status = "CORRECT" if score >= self.threshold else "WRONG"
         print(f"   score = {score:.2f} | status = {status}")
 
         # 4️⃣.5 REP DETECTION
         print("➡️ Step 4.5: Rep Detection")
-        rep_info = self._detect_and_count_reps(score, delta, landmarks, feedback_exercise)
+        rep_info = self._detect_and_count_reps(score, delta, landmarks, feedback_exercise, form_status=status)
         print(f"   Rep: {rep_info['rep_now']}/{rep_info['rep_target']} | Set: {rep_info['set_now']}/{rep_info['set_target']}")
+
+        # 4️⃣.6 SCORE AGGREGATION (same as Keraal)
+        self.score_history.append(score)
+        aggregated_score = self._get_aggregated_score()
+        print(f"   Aggregated score: {aggregated_score:.2f}/50")
 
         # 5️⃣ LLM FEEDBACK
         print("➡️ Step 5: LLM Check")
@@ -476,6 +584,7 @@ class WebRehabPipeline:
             "llm_feedback": feedback_list,
             "exercise_name": exercise_name,
             "exercise_confidence": confidence,
+            "aggregated_score": round(aggregated_score, 2),
             "rep_info": rep_info,
             "landmarks": landmarks.tolist() if landmarks is not None else [],
         }
@@ -493,11 +602,19 @@ class WebRehabPipeline:
         self.last_llm_time = 0.0
         
         # Reset rep tracking
-        self.rep_detection_state = "waiting"
-        self.frames_above_threshold = 0
         self.current_rep_count = 0
         self.current_set_count = 1
         self.rep_scores_buffer = []
+        self.motion_ema = 0.0
+        self.idle_frames = 0
+        self.smoothed_score = 0.0
+        self.motion_floor_ema = self.idle_motion_threshold
+        self.dynamic_idle_motion_threshold = self.idle_motion_threshold
+        self.dynamic_min_motion_for_rep = self.min_motion_for_rep
+        self.frame_fps_ema = 5.0
+        self.last_frame_time = 0.0
+        self.last_rep_time = 0.0  # reset time-based rep timer
+        self.score_history.clear()
 
         if self.rep_counter:
             with contextlib.suppress(Exception):
