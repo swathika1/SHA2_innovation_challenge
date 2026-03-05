@@ -16,6 +16,9 @@
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
             <span id="chat-lang-badge" style="font-size: 0.7rem; background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px;">EN</span>
+            <button id="chat-listen-btn" onclick="toggleListenMode()" title="Toggle listen mode (read responses aloud)" style="background: none; border: none; color: white; font-size: 0.95rem; cursor: pointer; padding: 0 4px; opacity: 0.6;">
+                <i class="fa-solid fa-headphones"></i>
+            </button>
             <button onclick="clearChatHistory()" title="Clear chat" style="background: none; border: none; color: white; font-size: 0.9rem; cursor: pointer; padding: 0 4px; opacity: 0.8;">🗑</button>
             <button onclick="toggleChat()" style="background: none; border: none; color: white; font-size: 1.3rem; cursor: pointer; padding: 0 4px;">✕</button>
         </div>
@@ -31,7 +34,7 @@
                     <li>General health guidance</li>
                 </ul>
                 <div style="font-size: 0.8rem; color: #888; margin-top: 8px;">
-                    I support English, 中文, Bahasa Melayu, and தமிழ்
+                    I support English, 中文, Bahasa Melayu, and தமிழ் — you can speak or type!
                 </div>
             </div>
         </div>
@@ -41,6 +44,15 @@
         <span><i class="fa-solid fa-triangle-exclamation"></i> High risk detected — please consult your doctor</span>
     </div>
 
+    <!-- TTS language selector — shown only when listen mode is ON -->
+    <div id="chat-tts-lang-bar" style="display: none;">
+        <span class="tts-lang-label">Listen in:</span>
+        <button class="tts-lang-chip active" data-lang="English">EN</button>
+        <button class="tts-lang-chip" data-lang="Chinese">中文</button>
+        <button class="tts-lang-chip" data-lang="Malay">MS</button>
+        <button class="tts-lang-chip" data-lang="Tamil">தமிழ்</button>
+    </div>
+
     <div id="chat-chips">
         <button class="chat-chip" onclick="sendQuickMessage('How are my exercises going?')">My Progress</button>
         <button class="chat-chip" onclick="sendQuickMessage('I have pain during exercise')">Report Pain</button>
@@ -48,7 +60,10 @@
     </div>
 
     <div id="chat-input-area">
-        <input type="text" id="chat-input" placeholder="Type your message..." onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off">
+        <input type="text" id="chat-input" placeholder="Type or speak your message..." onkeydown="if(event.key==='Enter')sendMessage()" autocomplete="off">
+        <button id="chat-mic-btn" onclick="toggleMic()" title="Speak your message">
+            <i class="fa-solid fa-microphone"></i>
+        </button>
         <button id="chat-send-btn" onclick="sendMessage()">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M22 2L11 13"></path>

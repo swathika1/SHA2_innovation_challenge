@@ -117,6 +117,65 @@ async def query_merilion(messages: list, patient_context: str, rag_context: str 
         return _extract_response(response.json())
 
 
+def translate_text_sync(text: str, target_language: str) -> str:
+    """Translate text to target_language using MERaLiON."""
+    lang_full = {
+        "Chinese": "Chinese (Simplified)",
+        "Malay": "Bahasa Melayu",
+        "Tamil": "Tamil",
+        "English": "English"
+    }
+    target = lang_full.get(target_language, target_language)
+    headers = _build_headers()
+    payload = {
+        "instruction": f"Translate the following text to {target}. Output ONLY the translated text, no explanations, no preamble:\n\n{text}",
+        "question": "answer"
+    }
+    r = requests.post(f"{MERILION_BASE_URL}/chat", json=payload, headers=headers, timeout=20)
+    r.raise_for_status()
+    return _extract_response(r.json())
+
+
+def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm", vocab_hint: str = "") -> str:
+    """Transcribe audio using MERaLiON /process/transcribe endpoint."""
+    headers = {
+        "Authorization": f"Bearer {MERILION_API_KEY}",
+        "Accept": "application/json"
+    }
+    # Use correct MIME type based on filename extension
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "webm"
+    mime_map = {"webm": "audio/webm", "ogg": "audio/ogg", "mp4": "audio/mp4",
+                "wav": "audio/wav", "mp3": "audio/mpeg", "m4a": "audio/mp4"}
+    content_type = mime_map.get(ext, "audio/webm")
+
+    files = {"file": (filename, audio_bytes, content_type)}
+    form_data = {}
+    if vocab_hint:
+        form_data["prompt"] = vocab_hint  # vocabulary hint for domain-specific recognition
+
+    print(f"[TRANSCRIBE] Sending {len(audio_bytes)} bytes ({content_type}) to Meralion")
+    r = requests.post(
+        f"{MERILION_BASE_URL}/process/transcribe",
+        files=files,
+        data=form_data if form_data else None,
+        headers=headers,
+        timeout=30
+    )
+    print(f"[TRANSCRIBE] Response status: {r.status_code}")
+    r.raise_for_status()
+    data = r.json()
+    print(f"[TRANSCRIBE] Response data: {data}")
+    # Try common response field names
+    transcript = (
+        data.get("transcript") or
+        data.get("text") or
+        data.get("transcription") or
+        data.get("output") or
+        ""
+    )
+    return transcript if isinstance(transcript, str) else str(transcript)
+
+
 def test_connection() -> dict:
     """Test connectivity to MERaLiON API with a real chat call."""
     headers = _build_headers()

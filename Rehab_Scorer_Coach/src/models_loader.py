@@ -1,5 +1,5 @@
 import numpy as np
-import tensorflow as tf
+import keras
 import joblib
 import cv2
 from collections import Counter
@@ -23,12 +23,12 @@ fgbg = cv2.createBackgroundSubtractorMOG2(
 # =========================================================
 
 # RGB exercise classifier
-exercise_model = tf.keras.models.load_model(
+exercise_model = keras.models.load_model(
     AppConfig.exercise_detection_model_path
 )
 
 # Pose-based scoring model
-scoring_model = tf.keras.models.load_model(
+scoring_model = keras.models.load_model(
     AppConfig.scoring_model_path
 )
 

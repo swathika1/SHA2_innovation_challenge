@@ -13,3 +13,7 @@ if os.environ.get("MERILION_API_KEY"):
 
 # MeriLion API base URL (cr8lab is the official MERaLiON host)
 MERILION_BASE_URL = os.environ.get("MERILION_BASE_URL", "https://api.cr8lab.com")
+
+# ========== HuggingFace / Whisper STT ==========
+# Required for Whisper large-v3 transcription via fal-ai
+HF_TOKEN = os.environ.get("HF_TOKEN", "")

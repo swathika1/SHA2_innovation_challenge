@@ -1,6 +1,8 @@
 import os
 os.environ["TRANSFORMERS_NO_TF"] = "1"
 os.environ["USE_TF"] = "0"
+os.environ["KERAS_BACKEND"] = "torch"  # Use PyTorch backend (TF not supported on Python 3.14)
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # Fall back to CPU for unsupported MPS ops
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -26,7 +28,7 @@ except Exception as e:
     print(f"[WARNING] Optimization module not available: {e}")
 
 try:
-    from merilion_client import query_merilion_sync
+    from merilion_client import query_merilion_sync, transcribe_audio, translate_text_sync
     from risk_engine import calculate_risk_score, REFERRAL_MESSAGES
     from exercise_advisor import get_exercise_modification
     from langdetect import detect as detect_language
@@ -36,6 +38,14 @@ try:
 except Exception as e:
     CHATBOT_AVAILABLE = False
     print(f"[WARNING] Chatbot modules not available: {e}")
+
+try:
+    from whisper_transcriber import transcribe as whisper_transcribe
+    WHISPER_AVAILABLE = True
+    print("[INIT] Whisper STT (fal-ai) available")
+except Exception as e:
+    WHISPER_AVAILABLE = False
+    print(f"[WARNING] Whisper STT not available: {e}")
 
 # main.py (top-level)
 import os
@@ -230,6 +240,17 @@ def api_tts():
 
     if not text:
         return jsonify({"error": "text is required"}), 400
+
+    # Translate if the TTS language differs from the source language
+    source_language = (data.get("source_language") or "").strip()
+    if source_language and source_language != language and CHATBOT_AVAILABLE:
+        try:
+            translated = translate_text_sync(text, language)
+            if translated and translated.strip():
+                text = translated.strip()
+                print(f"[TTS] Translated from {source_language} to {language}")
+        except Exception as e:
+            print(f"[TTS] Translation failed, using original text: {e}")
 
     # ── Strategy: try edge_tts first → gTTS fallback → error ──
     # Step 1: Try edge_tts (higher quality neural voices)
@@ -2671,6 +2692,38 @@ def api_chat_clear():
     session.pop('chat_history', None)
     session.modified = True
     return jsonify({"ok": True})
+
+
+@app.route('/api/chat/transcribe', methods=['POST'])
+@login_required
+def api_chat_transcribe():
+    """Transcribe audio to text using MERaLiON API for voice chat input."""
+    if not CHATBOT_AVAILABLE:
+        return jsonify({"error": "Chatbot modules not available"}), 503
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+    audio_file = request.files['audio']
+
+    try:
+        audio_bytes = audio_file.read()
+        filename = audio_file.filename or "audio.webm"
+        print(f"[TRANSCRIBE] Audio size: {len(audio_bytes)} bytes, filename: {filename}")
+
+        transcript = ""
+        if WHISPER_AVAILABLE:
+            transcript = whisper_transcribe(audio_bytes, filename)
+            print(f"[Whisper] Transcript: '{transcript}'")
+
+        # Fallback to Meralion if Whisper unavailable or returned empty
+        if not transcript and CHATBOT_AVAILABLE:
+            print("[TRANSCRIBE] Falling back to Meralion transcription")
+            transcript = transcribe_audio(audio_bytes, filename)
+            print(f"[Meralion] Transcript: '{transcript}'")
+
+        return jsonify({"transcript": transcript})
+    except Exception as e:
+        print(f"[TRANSCRIBE ERROR] {e}")
+        return jsonify({"error": "Transcription failed", "detail": str(e)}), 500
 
 
 @app.route('/api/chat', methods=['POST'])

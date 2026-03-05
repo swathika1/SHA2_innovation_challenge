@@ -8,8 +8,10 @@ import contextlib
 import numpy as np
 import cv2
 import base64
-import mediapipe as mp
-import tensorflow as tf
+import sys, os as _os
+sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..', '..'))
+import mediapipe_compat as mp  # Tasks-API shim for MediaPipe 0.10.x (mp.solutions.pose)
+import keras
 from collections import deque
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
@@ -64,12 +66,12 @@ class KeraalModelsLoader:
         
         # Load exercise detection model
         exercise_model_path = models_dir / "keraal_exercise_detection.keras"
-        self.exercise_model = tf.keras.models.load_model(str(exercise_model_path))
+        self.exercise_model = keras.models.load_model(str(exercise_model_path))
         print(f"✅ Loaded exercise detection model: {exercise_model_path}")
         
         # Load correctness/scoring model
         correctness_model_path = models_dir / "keraal_model_v1.keras"
-        self.correctness_model = tf.keras.models.load_model(str(correctness_model_path))
+        self.correctness_model = keras.models.load_model(str(correctness_model_path))
         print(f"✅ Loaded correctness model: {correctness_model_path}")
         
         print("✅ KERAAL Models Ready")

@@ -5,7 +5,9 @@ import time
 import numpy as np
 import cv2
 import base64
-import mediapipe as mp
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+import mediapipe_compat as mp  # Tasks-API shim for MediaPipe 0.10.x (mp.solutions.pose)
 
 from Rehab_Scorer_Coach.src.config import AppConfig
 from Rehab_Scorer_Coach.src.rag_store import RAGStore
