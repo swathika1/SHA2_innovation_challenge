@@ -502,6 +502,7 @@
         sessionStorage.removeItem(STORAGE_OPEN_KEY);
         // Keep listen mode preference across clears
         fetch('/api/chat/clear', { method: 'POST', headers: {'Content-Type': 'application/json'} }).catch(function(){});
+        // Reset messages to welcome
         var container = document.getElementById('chat-messages');
         var strings = UI_STRINGS.en;
         container.innerHTML =
@@ -514,5 +515,178 @@
             '<div style="font-size: 0.8rem; color: #888; margin-top: 8px;">' + strings.langNote + '</div>' +
             '</div></div>';
         updateUILanguage('en');
+    };
+
+    // =====================================================================
+    // SPEECH-TO-TEXT (Microphone)
+    // =====================================================================
+    var chatRecognition = null;
+    var chatIsRecording = false;
+
+    var LANG_RECOGNITION_MAP = {
+        en: 'en-US',
+        zh: 'zh-CN',
+        ms: 'ms-MY',
+        ta: 'ta-IN'
+    };
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        chatRecognition = new SpeechRecognition();
+        chatRecognition.continuous = false;
+        chatRecognition.interimResults = false;
+        chatRecognition.lang = 'en-US';
+
+        chatRecognition.onresult = function(event) {
+            var transcript = '';
+            for (var i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
+            transcript = transcript.trim();
+            if (transcript) {
+                document.getElementById('chat-input').value = transcript;
+                sendMessage();
+            }
+            stopChatRecording();
+        };
+
+        chatRecognition.onerror = function(event) {
+            console.warn('Chat speech recognition error:', event.error);
+            stopChatRecording();
+        };
+
+        chatRecognition.onend = function() {
+            stopChatRecording();
+        };
+    }
+
+    function stopChatRecording() {
+        chatIsRecording = false;
+        var btn = document.getElementById('chat-mic-btn');
+        if (btn) btn.classList.remove('recording');
+        try { if (chatRecognition) chatRecognition.stop(); } catch(e) {}
+    }
+
+    window.toggleChatMic = function() {
+        if (!chatRecognition) {
+            alert('Speech recognition is not supported in this browser.');
+            return;
+        }
+        if (chatIsRecording) {
+            stopChatRecording();
+        } else {
+            chatIsRecording = true;
+            var btn = document.getElementById('chat-mic-btn');
+            if (btn) btn.classList.add('recording');
+            chatRecognition.lang = LANG_RECOGNITION_MAP[currentLang] || 'en-US';
+            try { chatRecognition.start(); } catch(e) { stopChatRecording(); }
+        }
+    };
+
+    // =====================================================================
+    // TEXT-TO-SPEECH (Speaker / Auto-speak responses)
+    // =====================================================================
+    var chatSpeakerEnabled = true;  // On by default
+    var chatTTSAudio = null;
+    var chatTTSQueue = [];
+    var chatIsSpeaking = false;
+
+    var LANG_TTS_NAME_MAP = {
+        en: 'English',
+        zh: 'Chinese',
+        ms: 'Malay',
+        ta: 'Tamil'
+    };
+
+    var LANG_BCP47_MAP = {
+        en: 'en-US',
+        zh: 'zh-CN',
+        ms: 'ms-MY',
+        ta: 'ta-IN'
+    };
+
+    window.toggleChatSpeaker = function() {
+        chatSpeakerEnabled = !chatSpeakerEnabled;
+        var btn = document.getElementById('chat-speaker-btn');
+        if (btn) {
+            btn.classList.toggle('muted', !chatSpeakerEnabled);
+            btn.innerHTML = chatSpeakerEnabled
+                ? '<i class="fa-solid fa-volume-high"></i>'
+                : '<i class="fa-solid fa-volume-xmark"></i>';
+        }
+        if (!chatSpeakerEnabled) {
+            stopChatTTS();
+        }
+    };
+
+    function stopChatTTS() {
+        try {
+            if (chatTTSAudio) { chatTTSAudio.pause(); chatTTSAudio.src = ''; chatTTSAudio = null; }
+        } catch(e) {}
+        chatTTSQueue = [];
+        chatIsSpeaking = false;
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    }
+
+    function playNextChatTTS() {
+        if (chatTTSQueue.length === 0) { chatIsSpeaking = false; return; }
+        chatIsSpeaking = true;
+        var text = chatTTSQueue.shift();
+
+        var ttsLang = LANG_TTS_NAME_MAP[currentLang] || 'English';
+
+        fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text, language: ttsLang, gender: "male" })
+        })
+        .then(function(res) {
+            if (!res.ok) throw new Error('TTS HTTP ' + res.status);
+            return res.blob();
+        })
+        .then(function(blob) {
+            var url = URL.createObjectURL(blob);
+            chatTTSAudio = new Audio(url);
+            chatTTSAudio.onended = function() { URL.revokeObjectURL(url); playNextChatTTS(); };
+            chatTTSAudio.play().catch(function() { playNextChatTTS(); });
+        })
+        .catch(function(err) {
+            console.warn('Server TTS failed, using browser fallback:', err);
+            if ('speechSynthesis' in window) {
+                var u = new SpeechSynthesisUtterance(text);
+                var bcp47 = LANG_BCP47_MAP[currentLang] || 'en-US';
+                u.lang = bcp47;
+                var voices = window.speechSynthesis.getVoices();
+                // Prefer male voice
+                var match = voices.find(function(v) {
+                    return (v.lang === bcp47 || v.lang.startsWith(bcp47.split('-')[0])) && v.name.toLowerCase().indexOf('male') !== -1;
+                }) || voices.find(function(v) { return v.lang === bcp47 || v.lang.startsWith(bcp47.split('-')[0]); });
+                if (match) u.voice = match;
+                u.rate = 1.0; u.pitch = 0.9;
+                u.onend = function() { playNextChatTTS(); };
+                u.onerror = function() { playNextChatTTS(); };
+                window.speechSynthesis.speak(u);
+            } else {
+                chatIsSpeaking = false;
+            }
+        });
+    }
+
+    function chatSpeak(text) {
+        if (!text || !chatSpeakerEnabled) return;
+        chatTTSQueue.push(text);
+        if (!chatIsSpeaking) playNextChatTTS();
+    }
+
+    // =====================================================================
+    // HOOK: Auto-speak bot responses
+    // =====================================================================
+    // Override appendMessage to also speak bot messages
+    var _originalAppendMessage = appendMessage;
+    appendMessage = function(role, text) {
+        _originalAppendMessage(role, text);
+        if (role === 'bot') {
+            chatSpeak(text.replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
+        }
     };
 })();

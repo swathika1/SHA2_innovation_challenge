@@ -2248,7 +2248,7 @@ async function playNextTTS() {
         const res = await fetch(API_BASE + '/api/tts', {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: text, language: getLanguageName() })
+            body: JSON.stringify({ text: text, language: getLanguageName(), gender: "female" })
         });
         if (!res.ok) throw new Error("TTS HTTP " + res.status);
         const blob = await res.blob();

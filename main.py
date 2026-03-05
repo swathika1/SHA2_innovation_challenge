@@ -258,18 +258,32 @@ def get_current_user():
         return query_db('SELECT * FROM users WHERE id = ?', (session['user_id'],), one=True)
     return None
 
-# ── Edge-TTS voice map (Microsoft Neural voices) ──
-EDGE_VOICE_MAP = {
-    "English": "en-US-JennyNeural",
+# ── Edge-TTS voice maps (Microsoft Neural voices) ──
+# Male voices for avatar & chatbot
+EDGE_VOICE_MAP_MALE = {
+    "English": "en-US-GuyNeural",
+    "Singlish": "en-US-GuyNeural",
     "Tamil":   "ta-IN-ValluvarNeural",
+    "Chinese": "zh-CN-YunxiNeural",
+    "Malay":   "ms-MY-OsmanNeural",
+    "Thai":    "th-TH-NiwatNeural",
+}
+# Female voices for session coaching prompts
+EDGE_VOICE_MAP_FEMALE = {
+    "English": "en-US-JennyNeural",
+    "Singlish": "en-US-JennyNeural",
+    "Tamil":   "ta-IN-PallaviNeural",
     "Chinese": "zh-CN-XiaoxiaoNeural",
     "Malay":   "ms-MY-YasminNeural",
     "Thai":    "th-TH-PremwadeeNeural",
 }
+# Default map (male) — kept for backward compat
+EDGE_VOICE_MAP = EDGE_VOICE_MAP_MALE
 
 # ── gTTS language codes (Google TTS) ──
 GTTS_LANG_MAP = {
     "English": "en",
+    "Singlish": "en",
     "Tamil":   "ta",
     "Chinese": "zh-CN",
     "Malay":   "ms",  # Malay not natively in gTTS, but 'ms' may work; fallback to 'id' (Indonesian) if needed
@@ -298,6 +312,7 @@ def api_tts():
 
     text = (data.get("text") or "").strip()
     language = (data.get("language") or "English").strip()
+    gender = (data.get("gender") or "male").strip().lower()   # "male" for avatar/chatbot, "female" for sessions
 
     if isinstance(text, list):
         text = ". ".join(text)
@@ -318,8 +333,9 @@ def api_tts():
 
     # ── Strategy: try edge_tts first → gTTS fallback → error ──
     # Step 1: Try edge_tts (higher quality neural voices)
-    edge_voice = EDGE_VOICE_MAP.get(language, EDGE_VOICE_MAP["English"])
-    edge_path = _tts_cache_path(text, language, "edge")
+    voice_map = EDGE_VOICE_MAP_FEMALE if gender == "female" else EDGE_VOICE_MAP_MALE
+    edge_voice = voice_map.get(language, voice_map["English"])
+    edge_path = _tts_cache_path(text, language + "_" + gender, "edge")
 
     if os.path.exists(edge_path):
         print(f"♻️  Cached edge TTS ({language})")
@@ -1367,6 +1383,61 @@ def patient_book_appointment():
         print(f'[ERROR] Patient book appointment failed: {e}')
 
     return redirect(url_for('patient_appointments'))
+
+
+# ==================== AVATAR ROUTES ====================
+
+@app.route('/patient/avatar')
+@login_required
+@role_required('patient')
+def avatar_page():
+    """Avatar interaction page - Speak to Jimmy"""
+    user = get_current_user()
+    return render_template('patient/avatar.html', user=user)
+
+
+@app.route('/patient/avatar/chat', methods=['POST'])
+@login_required
+@role_required('patient')
+def avatar_chat():
+    """Handle avatar chat requests"""
+    try:
+        data = request.get_json()
+        user_message = data.get('message', '').strip()
+        history = data.get('history', [])
+        language = (data.get('language') or 'English').strip()
+        
+        if not user_message:
+            return jsonify({'error': 'No message provided'}), 400
+        
+        # Import avatar service
+        from meralion_avatar import get_avatar
+        
+        avatar = get_avatar()
+        
+        # Get avatar response with RAG and patient context
+        response = avatar.query_jimmy(
+            patient_id=session['user_id'],
+            user_message=user_message,
+            conversation_history=history,
+            include_rag=True,
+            include_performance=True,
+            preferred_language=language
+        )
+        
+        return jsonify({
+            'response': response,
+            'status': 'success'
+        })
+    
+    except Exception as e:
+        print(f"[AVATAR] Error in avatar_chat: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': str(e),
+            'status': 'error'
+        }), 500
 
 
 # ==================== CLINICIAN ROUTES ====================
@@ -3029,10 +3100,13 @@ def api_chat():
             patient_context = f"""
 Name: {patient_user['name']}
 Condition: {patient_info['condition']}
-Week: {patient_info['current_week']}
+Surgery Date: {patient_info['surgery_date'] or 'N/A'}
+Current Rehab Week: {patient_info['current_week']}
 Adherence Rate: {patient_info['adherence_rate']}%
 Avg Pain Level: {patient_info['avg_pain_level']}/10
 Avg Quality Score: {patient_info['avg_quality_score']}/100
+Completed Sessions: {patient_info['completed_sessions']}
+Streak Days: {patient_info['streak_days']}
 """
             if recent_sessions_db:
                 patient_context += "\nRecent Sessions:\n"
@@ -3041,11 +3115,104 @@ Avg Quality Score: {patient_info['avg_quality_score']}/100
 
         # Get workouts for exercise plan context
         workouts = query_db('''
-            SELECT e.name FROM workouts w
+            SELECT e.name, e.category, w.sets, w.reps, w.frequency, w.instructions FROM workouts w
             JOIN exercises e ON w.exercise_id = e.id
             WHERE w.patient_id = ? AND w.is_active = 1
         ''', (patient_id,))
         current_plan = ", ".join([w['name'] for w in workouts]) if workouts else "general fitness plan"
+        if workouts:
+            patient_context += "\nActive Exercise Plan:\n"
+            for w in workouts:
+                patient_context += f"- {w['name']} ({w['category'] or 'general'}): {w['sets']}x{w['reps']} {w['frequency']}"
+                if w['instructions']:
+                    patient_context += f" — {w['instructions']}"
+                patient_context += "\n"
+
+        # Get upcoming appointments
+        upcoming_appts = query_db('''
+            SELECT a.appointment_date, a.appointment_time, a.status, u.name as doctor_name
+            FROM appointments a JOIN users u ON a.doctor_id = u.id
+            WHERE a.patient_id = ? AND a.status = 'scheduled'
+            ORDER BY a.appointment_date ASC LIMIT 3
+        ''', (patient_id,))
+        if upcoming_appts:
+            patient_context += "\nUpcoming Appointments:\n"
+            for a in upcoming_appts:
+                patient_context += f"- {a['appointment_date']} {a['appointment_time']} with {a['doctor_name']} ({a['status']})\n"
+
+        # Get recent clinician notes
+        recent_notes = query_db('''
+            SELECT cn.note_text, cn.created_at, u.name as doctor_name
+            FROM clinician_notes cn JOIN users u ON cn.doctor_id = u.id
+            WHERE cn.patient_id = ? ORDER BY cn.created_at DESC LIMIT 3
+        ''', (patient_id,))
+        if recent_notes:
+            patient_context += "\nRecent Clinician Notes:\n"
+            for n in recent_notes:
+                patient_context += f"- Dr. {n['doctor_name']} ({n['created_at']}): {n['note_text'][:200]}\n"
+
+        # Get assigned doctor info
+        doctor_info = query_db('''
+            SELECT u.name, u.email, u.phone FROM doctor_patient dp
+            JOIN users u ON dp.doctor_id = u.id WHERE dp.patient_id = ?
+        ''', (patient_id,))
+        if doctor_info:
+            patient_context += "\nAssigned Doctor(s): " + ", ".join([d['name'] for d in doctor_info]) + "\n"
+
+        # Get caregiver info
+        caregiver_info = query_db('''
+            SELECT u.name, cp.relationship FROM caregiver_patient cp
+            JOIN users u ON cp.caregiver_id = u.id WHERE cp.patient_id = ?
+        ''', (patient_id,))
+        if caregiver_info:
+            patient_context += "Caregiver(s): " + ", ".join([f"{c['name']} ({c['relationship']})" for c in caregiver_info]) + "\n"
+
+        # -- Full session reports for all completed sessions --
+        all_sessions = query_db('''
+            SELECT s.id, s.started_at, s.completed_at, s.pain_before, s.pain_after,
+                   s.effort_level, s.quality_score, s.completed_perc, s.notes
+            FROM sessions s
+            WHERE s.patient_id = ? AND s.completed_at IS NOT NULL
+            ORDER BY s.completed_at DESC
+            LIMIT 20
+        ''', (patient_id,))
+        if all_sessions:
+            patient_context += "\n=== FULL SESSION REPORTS (most recent 20) ===\n"
+            for sess in all_sessions:
+                patient_context += f"\nSession #{sess['id']} ({sess['completed_at']}):\n"
+                patient_context += f"  Quality: {sess['quality_score']}/100, Completion: {sess['completed_perc']}%\n"
+                patient_context += f"  Pain: {sess['pain_before']}/10 before → {sess['pain_after']}/10 after\n"
+                patient_context += f"  Effort Level: {sess['effort_level']}/10\n"
+                if sess['notes']:
+                    patient_context += f"  Notes: {sess['notes'][:150]}\n"
+
+                # Get exercises for this session
+                sess_exercises = query_db('''
+                    SELECT se.exercise_name, se.quality_score, se.sets_required, se.sets_completed,
+                           se.exercise_start_time, se.exercise_end_time
+                    FROM session_exercises se
+                    WHERE se.session_id = ?
+                ''', (sess['id'],))
+                if sess_exercises:
+                    for se in sess_exercises:
+                        ex_name = se['exercise_name'] or 'Unknown'
+                        patient_context += f"    - {ex_name}: Quality {se['quality_score']}/100"
+                        if se['sets_required'] and se['sets_completed']:
+                            patient_context += f", Sets required: {se['sets_required']}, completed: {se['sets_completed']}"
+                        patient_context += "\n"
+
+                # Get frame-level summary for this session
+                frame_summary = query_db('''
+                    SELECT exercise_name, COUNT(*) as frame_count,
+                           AVG(score) as avg_score, MAX(rep_count) as max_reps
+                    FROM session_frames
+                    WHERE session_id = ?
+                    GROUP BY exercise_name
+                ''', (sess['id'],))
+                if frame_summary:
+                    for fr in frame_summary:
+                        if fr['exercise_name']:
+                            patient_context += f"    [Telemetry] {fr['exercise_name']}: {fr['frame_count']} frames, avg score {fr['avg_score']:.1f}, max reps {fr['max_reps']}\n"
 
         # 3. Risk scoring - build simple session objects for the risk engine
         class SimpleSession:
