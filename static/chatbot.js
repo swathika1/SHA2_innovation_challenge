@@ -139,11 +139,7 @@
                 container.scrollTop = container.scrollHeight;
             }
 
-            // Restore listen mode
-            if (savedListen === '1') {
-                listenMode = true;
-                applyListenModeUI();
-            }
+            // Listen mode always starts OFF — user must explicitly enable each session
             if (savedTtsLang) {
                 ttsLang = savedTtsLang;
                 applyTtsLangUI();
@@ -434,8 +430,8 @@
             chatConversation.push({role: 'assistant', content: data.response});
             saveToSession();
 
-            // Speak if mic was used (voice-in = voice-out) or listen mode is on
-            if (lastSentViaMic || listenMode) {
+            // Speak only when listen mode is explicitly enabled
+            if (listenMode) {
                 speakBotResponse(data.response);
             }
             lastSentViaMic = false;
@@ -586,7 +582,7 @@
     // =====================================================================
     // TEXT-TO-SPEECH (Speaker / Auto-speak responses)
     // =====================================================================
-    var chatSpeakerEnabled = true;  // On by default
+    var chatSpeakerEnabled = false;  // Off by default — use listen mode (headphone button) for TTS
     var chatTTSAudio = null;
     var chatTTSQueue = [];
     var chatIsSpeaking = false;
@@ -682,10 +678,11 @@
     // HOOK: Auto-speak bot responses
     // =====================================================================
     // Override appendMessage to also speak bot messages
+    // Only fires when chatSpeakerEnabled AND listenMode is not already handling TTS
     var _originalAppendMessage = appendMessage;
     appendMessage = function(role, text) {
         _originalAppendMessage(role, text);
-        if (role === 'bot') {
+        if (role === 'bot' && !listenMode) {
             chatSpeak(text.replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
         }
     };
