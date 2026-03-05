@@ -233,7 +233,8 @@
         -webkit-background-clip:text; -webkit-text-fill-color:transparent;
     }
     .program-select-wrap .prog-tagline { text-align:center; color:#64748b; font-size:.95rem; margin-bottom:30px; }
-    .program-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:26px; }
+    .program-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; margin-bottom:26px; }
+    @media(max-width:900px){ .program-grid { grid-template-columns:1fr 1fr; } }
     @media(max-width:640px){ .program-grid { grid-template-columns:1fr; } }
 
     .program-card {
@@ -254,6 +255,11 @@
         box-shadow:0 0 0 5px rgba(239,68,68,.18), 0 14px 44px rgba(239,68,68,.22);
         background:linear-gradient(160deg,#fef2f2,#fff);
     }
+    .program-card.selected.personalized-card {
+        border-color:#10b981;
+        box-shadow:0 0 0 5px rgba(16,185,129,.18), 0 14px 44px rgba(16,185,129,.22);
+        background:linear-gradient(160deg,#ecfdf5,#fff);
+    }
     /* Animated tick badge */
     .prog-tick-badge {
         position:absolute; top:14px; right:14px; width:34px; height:34px; border-radius:50%;
@@ -264,6 +270,7 @@
     }
     .kimore-card .prog-tick-badge { background:linear-gradient(135deg,#3b82f6,#6366f1); }
     .keraal-card  .prog-tick-badge { background:linear-gradient(135deg,#ef4444,#f97316); }
+    .personalized-card .prog-tick-badge { background:linear-gradient(135deg,#10b981,#059669); }
     .program-card.selected .prog-tick-badge { opacity:1; transform:scale(1) rotate(0); }
     /* Hover shimmer */
     .program-card::after {
@@ -271,6 +278,7 @@
     }
     .kimore-card::after { background:linear-gradient(135deg,rgba(59,130,246,.05),rgba(99,102,241,.05)); }
     .keraal-card::after  { background:linear-gradient(135deg,rgba(239,68,68,.05),rgba(245,158,11,.05)); }
+    .personalized-card::after { background:linear-gradient(135deg,rgba(16,185,129,.05),rgba(5,150,105,.05)); }
     .program-card:hover::after { opacity:1; }
 
     .prog-icon-wrap { font-size:3.2rem; line-height:1; margin-bottom:14px; }
@@ -280,6 +288,7 @@
     }
     .kimore-card .prog-card-sub { color:#3b82f6; }
     .keraal-card  .prog-card-sub { color:#ef4444; }
+    .personalized-card .prog-card-sub { color:#059669; }
     .prog-card-desc { font-size:.84rem; color:#64748b; line-height:1.55; margin-bottom:18px; }
 
     .prog-ex-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:7px; }
@@ -291,6 +300,7 @@
     }
     .kimore-card .prog-ex-tick { background:#dbeafe; color:#1d4ed8; }
     .keraal-card  .prog-ex-tick { background:#fee2e2; color:#b91c1c; }
+    .personalized-card .prog-ex-tick { background:#d1fae5; color:#065f46; }
 
     .prog-pill {
         display:inline-flex; align-items:center; gap:5px;
@@ -299,6 +309,7 @@
     }
     .kimore-pill { background:#eff6ff; color:#1d4ed8; border:1.5px solid #bfdbfe; }
     .keraal-pill  { background:#fef2f2; color:#b91c1c; border:1.5px solid #fecaca; }
+    .personalized-pill { background:#ecfdf5; color:#065f46; border:1.5px solid #a7f3d0; }
 
     .btn-prog-next {
         display:block; width:100%; padding:16px; font-size:1.05rem; font-weight:800;
@@ -311,6 +322,8 @@
     .btn-prog-next.ready:hover { transform:translateY(-2px); box-shadow:0 9px 26px rgba(99,102,241,.45); }
     .btn-prog-next.keraal-ready { background:linear-gradient(135deg,#ef4444,#f97316); }
     .btn-prog-next.keraal-ready:hover { box-shadow:0 9px 26px rgba(239,68,68,.45); }
+    .btn-prog-next.personalized-ready { background:linear-gradient(135deg,#10b981,#059669); }
+    .btn-prog-next.personalized-ready:hover { box-shadow:0 9px 26px rgba(16,185,129,.45); }
 
     /* ===== Exercise Step (Step 2) header ===== */
     .exercise-step-header { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
@@ -326,6 +339,7 @@
     }
     .prog-selected-badge.kimore-bg { background:#eff6ff; color:#1d4ed8; border:1.5px solid #bfdbfe; }
     .prog-selected-badge.keraal-bg { background:#fef2f2; color:#b91c1c; border:1.5px solid #fecaca; }
+    .prog-selected-badge.personalized-bg { background:#ecfdf5; color:#065f46; border:1.5px solid #a7f3d0; }
 
     /* Dynamic exercise cards (step 2) */
     .ex-card {
@@ -335,6 +349,7 @@
     .ex-card:hover { border-color:#94a3b8; transform:translateY(-2px); box-shadow:0 6px 22px rgba(0,0,0,.1); }
     .ex-card.checked.kimore-ex { border-color:#3b82f6; box-shadow:0 0 0 4px rgba(59,130,246,.14); }
     .ex-card.checked.keraal-ex { border-color:#ef4444; box-shadow:0 0 0 4px rgba(239,68,68,.14); }
+    .ex-card.checked.personalized-ex { border-color:#10b981; box-shadow:0 0 0 4px rgba(16,185,129,.14); }
     .ex-thumb { width:100%; height:88px; object-fit:cover; display:block; }
     .ex-card-body { padding:9px 11px; display:flex; align-items:center; gap:8px; }
     .ex-card-check {
@@ -344,6 +359,7 @@
     }
     .ex-card.checked.kimore-ex .ex-card-check { border-color:#3b82f6; background:#3b82f6; color:#fff; }
     .ex-card.checked.keraal-ex .ex-card-check { border-color:#ef4444; background:#ef4444; color:#fff; }
+    .ex-card.checked.personalized-ex .ex-card-check { border-color:#10b981; background:#10b981; color:#fff; }
     .ex-card-name { font-size:.82rem; font-weight:600; color:#374151; }
     .ex-watch-btn {
         display:block; width:calc(100% - 22px); margin:0 11px 10px; padding:5px 0;
@@ -780,6 +796,24 @@
                 <div class="prog-pill keraal-pill">🦴 Keraal Pipeline</div>
             </div>
 
+            <!-- Personalized Plan Card -->
+            <div class="program-card personalized-card" id="progCardPersonalized" onclick="selectProgram('personalized')">
+                <div class="prog-tick-badge">✓</div>
+                <div class="prog-icon-wrap">🎯</div>
+                <div class="prog-card-name">Personalized Plan</div>
+                <div class="prog-card-sub">For {{ patient_condition }}</div>
+                <div class="prog-card-desc">Your clinician-assigned exercises tailored to your condition — combining the best from both AI pipelines.</div>
+                <ul class="prog-ex-list">
+                    {% for e in assigned_exercises %}
+                    <li class="prog-ex-item"><span class="prog-ex-tick">✓</span> {{ e.exercise_name }}</li>
+                    {% endfor %}
+                    {% if not assigned_exercises %}
+                    <li class="prog-ex-item" style="color:#888;">No exercises assigned yet</li>
+                    {% endif %}
+                </ul>
+                <div class="prog-pill personalized-pill">🎯 Personalized</div>
+            </div>
+
         </div>
 
         <button class="btn-prog-next" id="btnNextToExercise" onclick="goToExerciseStep()">
@@ -1112,6 +1146,13 @@
     ];
     // Will be replaced by user selections in startSession()
     let WORKOUTS = [];
+
+    // Exercises assigned to this patient based on their condition
+    const PATIENT_ASSIGNED_EXERCISES = [
+        {% for e in assigned_exercises %}
+        "{{ e.exercise_name }}"{{ "," if not loop.last }}
+        {% endfor %}
+    ];
 </script>
 
 <script>
@@ -1207,28 +1248,81 @@ const PROGRAM_DEFINITIONS = {
     }
 };
 
+// Build a combined "personalized" program from PATIENT_ASSIGNED_EXERCISES
+// Maps canonical DB exercise names → AVAILABLE_EXERCISES keys
+const EXERCISE_NAME_TO_KEY = {};
+for (const [key, val] of Object.entries(AVAILABLE_EXERCISES)) {
+    const canonical = val.name.replace(/\s*\(.*?\)\s*$/, '').trim();
+    EXERCISE_NAME_TO_KEY[canonical] = key;
+    EXERCISE_NAME_TO_KEY[val.name] = key;   // also map the full name with suffix
+}
+
+// Build personalized exercises list from all assigned exercises
+(function buildPersonalizedProgram() {
+    const allExercises = [
+        ...PROGRAM_DEFINITIONS.kimore.exercises,
+        ...PROGRAM_DEFINITIONS.keraal.exercises
+    ];
+    const personalizedExercises = [];
+    const addedIds = new Set();
+
+    PATIENT_ASSIGNED_EXERCISES.forEach(assignedName => {
+        // Find the matching exercise from kimore or keraal definitions
+        const matchingEx = allExercises.find(ex => {
+            if (addedIds.has(ex.id)) return false;
+            const exData = AVAILABLE_EXERCISES[ex.id];
+            if (!exData) return false;
+            const canonical = exData.name.replace(/\s*\(.*?\)\s*$/, '').trim();
+            return assignedName === canonical || assignedName === exData.name || assignedName === ex.label;
+        });
+        if (matchingEx) {
+            personalizedExercises.push(matchingEx);
+            addedIds.add(matchingEx.id);
+        }
+    });
+
+    PROGRAM_DEFINITIONS.personalized = {
+        name: 'Personalized Plan',
+        badgeClass: 'personalized-bg', badgeIcon: '🎯', badgeLabel: 'Personalized', exCardClass: 'personalized-ex',
+        exercises: personalizedExercises
+    };
+})();
+
 /* ===================== PROGRAM SELECTION FLOW ===================== */
 function selectProgram(prog) {
     selectedProgram = prog;
-    selectedPipeline = prog; // sync pipeline state
+    // For personalized, exercises may span both pipelines
+    selectedPipeline = (prog === 'personalized') ? 'both' : prog;
 
     // Toggle card selected state with animation
     document.getElementById('progCardKimore').classList.toggle('selected', prog === 'kimore');
     document.getElementById('progCardKeraal').classList.toggle('selected', prog === 'keraal');
+    document.getElementById('progCardPersonalized').classList.toggle('selected', prog === 'personalized');
 
     // Update + enable Next button
     const btn = document.getElementById('btnNextToExercise');
     btn.classList.add('ready');
     btn.classList.toggle('keraal-ready', prog === 'keraal');
-    btn.innerHTML = prog === 'kimore'
-        ? '🏋️&nbsp; Continue to General Rehab &nbsp;→'
-        : '🦴&nbsp; Continue to Back Pain Rehab &nbsp;→';
+    btn.classList.toggle('personalized-ready', prog === 'personalized');
+    if (prog === 'kimore') {
+        btn.innerHTML = '🏋️&nbsp; Continue to General Rehab &nbsp;→';
+    } else if (prog === 'keraal') {
+        btn.innerHTML = '🦴&nbsp; Continue to Back Pain Rehab &nbsp;→';
+    } else {
+        btn.innerHTML = '🎯&nbsp; Continue to Your Personalized Plan &nbsp;→';
+    }
 
     // Show/hide status-bar score cards for the right pipeline
     const kimCard = document.getElementById('kimoreScoreCard');
     const kerCard = document.getElementById('keraalScoreCard');
-    if (kimCard) kimCard.style.display = (prog === 'keraal') ? 'none' : '';
-    if (kerCard) kerCard.style.display = (prog === 'kimore') ? 'none' : '';
+    if (prog === 'personalized') {
+        // Show both score cards for personalized (exercises may span both pipelines)
+        if (kimCard) kimCard.style.display = '';
+        if (kerCard) kerCard.style.display = '';
+    } else {
+        if (kimCard) kimCard.style.display = (prog === 'keraal') ? 'none' : '';
+        if (kerCard) kerCard.style.display = (prog === 'kimore') ? 'none' : '';
+    }
 }
 
 function goToExerciseStep() {
@@ -1256,7 +1350,18 @@ function renderExerciseCards(def) {
     const grid = document.getElementById('exerciseSelector');
     if (!grid) return;
     grid.innerHTML = '';
-    def.exercises.forEach(ex => {
+
+    // For kimore/keraal: show ALL exercises in that pipeline (no filtering).
+    // For personalized: the def.exercises list is already built from
+    // PATIENT_ASSIGNED_EXERCISES, so it only contains assigned ones.
+    const exercisesToRender = def.exercises;
+
+    if (exercisesToRender.length === 0) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:30px;">No exercises assigned for this program. Please contact your clinician.</div>';
+        return;
+    }
+
+    exercisesToRender.forEach(ex => {
         const card = document.createElement('div');
         card.className = 'ex-card ' + def.exCardClass;
         card.dataset.value = ex.id;

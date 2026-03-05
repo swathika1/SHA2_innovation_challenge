@@ -145,9 +145,64 @@ def start_openpose_server():
 os.makedirs('instance', exist_ok=True)
 
 from database import close_db, query_db, execute_db, load_optimization_data
+import random
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'  # Required for sessions
+
+# ==================== CONDITIONS & EXERCISE MAPPING ====================
+
+MSK_CONDITIONS = [
+    'Joint disorders',
+    'Spine conditions',
+    'Post-surgical rehab',
+    'Sports injuries',
+    'Postural disorders',
+    'Muscle tightness',
+    'Neuromuscular rehab',
+]
+
+CONDITION_EXERCISE_MAP = {
+    'Spine conditions': [
+        'Lateral Trunk Tilt',
+        'Trunk Rotation',
+        'Forward Flexion',
+        'Flank Stretch',
+        'Torso Rotation',
+        'Trunk Rotation & Target Touch',
+    ],
+    'Joint disorders': [
+        'Squat',
+        'Pelvis Rotation',
+        'Lifting of Arms',
+    ],
+    'Post-surgical rehab': [
+        'Lifting of Arms',
+        'Squat',
+        'Pelvis Rotation',
+        'Trunk Rotation',
+    ],
+    'Sports injuries': [
+        'Squat',
+        'Pelvis Rotation',
+        'Lifting of Arms',
+    ],
+    'Postural disorders': [
+        'Lateral Trunk Tilt',
+        'Trunk Rotation',
+        'Torso Rotation',
+        'Flank Stretch',
+    ],
+    'Muscle tightness': [
+        'Forward Flexion',
+        'Flank Stretch',
+        'Lateral Trunk Tilt',
+    ],
+    'Neuromuscular rehab': [
+        'Trunk Rotation & Target Touch',
+        'Trunk Rotation',
+    ],
+}
 
 # Global dict to store latest landmarks for frontend polling
 LATEST_LANDMARKS = {}
@@ -541,30 +596,22 @@ def signup():
         
         # If patient, create patients record with optimization data
         if role == 'patient':
-            condition = request.form.get('condition', 'General Rehab')
+            condition = request.form.get('condition', '').strip()
+            # If no condition selected, assign a random one
+            if not condition or condition not in MSK_CONDITIONS:
+                condition = random.choice(MSK_CONDITIONS)
             urgency = request.form.get('urgency', 'Medium')
             max_distance = float(request.form.get('max_distance', 20))
             
             # Map condition to specialty needed
             condition_to_specialty = {
                 'Joint disorders': 'Orthopedic',
-                'Muscle injuries': 'Sports',
-                'Tendon & ligament disorders': 'Sports',
                 'Spine conditions': 'MSK',
-                'Nerve compression syndromes': 'Neuro',
-                'Post-surgical rehabilitation': 'Post-op',
-                'Sports & overuse injuries': 'Sports',
-                'Degenerative conditions': 'MSK',
-                'Inflammatory conditions': 'General',
-                'Balance & functional decline disorders': 'Neuro',
-                'Others': 'General',
-                'Knee Replacement': 'Post-op',
-                'Hip Replacement': 'Post-op',
-                'ACL Reconstruction': 'Sports',
-                'Shoulder Surgery': 'Post-op',
-                'Back Pain': 'MSK',
-                'Stroke Recovery': 'Neuro',
-                'General Rehab': 'General'
+                'Post-surgical rehab': 'Post-op',
+                'Sports injuries': 'Sports',
+                'Postural disorders': 'MSK',
+                'Muscle tightness': 'General',
+                'Neuromuscular rehab': 'Neuro',
             }
             specialty_needed = condition_to_specialty.get(condition, 'General')
             
@@ -612,6 +659,9 @@ def signup():
                         'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
                         (doctor['id'], user_id)
                     )
+            
+            # Auto-assign exercises based on patient condition
+            assign_patient_exercises(user_id, condition)
         
         # If doctor, create doctor records with optimization data
         elif role == 'doctor':
@@ -701,13 +751,27 @@ def patient_dashboard():
             one=True
         )
     
-    # Get patient's workouts
+    # Get patient's workouts — prefer workouts table, fall back to patient_exercises
     workouts = query_db('''
         SELECT w.*, e.name as exercise_name, e.description
         FROM workouts w
         JOIN exercises e ON w.exercise_id = e.id
         WHERE w.patient_id = ? AND w.is_active = 1
     ''', (session['user_id'],))
+
+    # If no rows in workouts, build the list from patient_exercises (condition-based)
+    if not workouts:
+        workouts = query_db('''
+            SELECT pe.id, pe.patient_id, pe.exercise_id,
+                   e.name AS exercise_name, e.description,
+                   3 AS sets, 10 AS reps,
+                   'Daily' AS frequency,
+                   e.description AS instructions,
+                   1 AS is_active
+            FROM patient_exercises pe
+            JOIN exercises e ON pe.exercise_id = e.id
+            WHERE pe.patient_id = ? AND pe.enabled = 1
+        ''', (session['user_id'],))
     
     # Get recent sessions (last 5) — session-level with exercise details
     import json as _json
@@ -866,12 +930,64 @@ def rehab_session():
         JOIN exercises e ON w.exercise_id = e.id
         WHERE w.patient_id = ? AND w.is_active = 1
     ''', (session['user_id'],))
+
+    # Get exercises assigned to this patient via patient_exercises
+    assigned_exercises = query_db('''
+        SELECT e.id, e.name as exercise_name, e.category, e.description
+        FROM patient_exercises pe
+        JOIN exercises e ON pe.exercise_id = e.id
+        WHERE pe.patient_id = ? AND pe.enabled = 1
+        ORDER BY e.category, e.name
+    ''', (session['user_id'],))
+    assigned_exercises = [dict(e) for e in assigned_exercises] if assigned_exercises else []
+
+    # Get patient condition for the personalized plan card
+    patient_info = query_db(
+        'SELECT condition FROM patients WHERE user_id = ?',
+        (session['user_id'],), one=True
+    )
+    patient_condition = patient_info['condition'] if patient_info and patient_info['condition'] else 'Your Condition'
     
-    resp = make_response(render_template('patient/session.html', workouts=workouts if workouts else []))
+    resp = make_response(render_template('patient/session.html',
+                                         workouts=workouts if workouts else [],
+                                         assigned_exercises=assigned_exercises,
+                                         patient_condition=patient_condition))
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
     return resp
+
+
+@app.route('/api/patient/exercises', methods=['GET'])
+@login_required
+@role_required('patient')
+def api_patient_exercises():
+    """Return the exercises assigned to the current patient."""
+    exercises = query_db('''
+        SELECT e.id, e.name as exercise_name, e.category, pe.enabled
+        FROM patient_exercises pe
+        JOIN exercises e ON pe.exercise_id = e.id
+        WHERE pe.patient_id = ?
+        ORDER BY e.category, e.name
+    ''', (session['user_id'],))
+    return jsonify([dict(e) for e in exercises] if exercises else [])
+
+
+@app.route('/api/patient/exercises/toggle', methods=['POST'])
+@login_required
+@role_required('patient')
+def api_toggle_patient_exercise():
+    """Toggle an exercise enabled/disabled for the current patient."""
+    data = request.get_json()
+    exercise_id = data.get('exercise_id')
+    enabled = data.get('enabled', 1)
+    if not exercise_id:
+        return jsonify({'error': 'exercise_id required'}), 400
+    execute_db(
+        'UPDATE patient_exercises SET enabled = ? WHERE patient_id = ? AND exercise_id = ?',
+        (1 if enabled else 0, session['user_id'], exercise_id)
+    )
+    return jsonify({'ok': True})
 
 
 @app.route('/patient/checkin', methods=['GET', 'POST'])
@@ -3173,6 +3289,16 @@ def ensure_tables_exist():
             FOREIGN KEY (patient_id) REFERENCES users(id),
             FOREIGN KEY (resolved_by) REFERENCES users(id)
         );
+
+        CREATE TABLE IF NOT EXISTS patient_exercises (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            exercise_id INTEGER NOT NULL,
+            enabled INTEGER DEFAULT 1,
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            FOREIGN KEY (exercise_id) REFERENCES exercises(id),
+            UNIQUE(patient_id, exercise_id)
+        );
     ''')
     conn.commit()
     
@@ -3366,12 +3492,67 @@ def ensure_tables_exist():
         )
         print(f"[INIT] Created {len(timeslot_data)} timeslots")
     
+    # ---- Seed / update exercises table with canonical list ----
+    CANONICAL_EXERCISES = [
+        ('Lifting of Arms', 'Shoulder', 'Stand upright, raise both arms from your sides to above your head, then slowly lower. Keep elbows slightly bent.'),
+        ('Lateral Trunk Tilt', 'Spine', 'Stand with feet shoulder-width apart. Slowly tilt your trunk to one side, return to center, then tilt to the other side.'),
+        ('Trunk Rotation', 'Spine', 'Stand with arms relaxed. Rotate your upper body to the left, return to center, then rotate right. Keep hips facing forward.'),
+        ('Squat', 'Knee', 'Stand with feet shoulder-width apart. Lower your hips by bending your knees, keeping your back straight. Rise slowly.'),
+        ('Trunk Rotation & Target Touch', 'Spine', 'Stand upright, rotate your trunk and reach toward targets at various positions. Combine trunk rotation with arm extension.'),
+        ('Pelvis Rotation', 'Hip', 'Stand upright and gently rotate your pelvis in a controlled circular motion while keeping your upper body stable.'),
+        ('Forward Flexion', 'Spine', 'Stand upright, slowly bend forward from your hips keeping your back straight. Reach towards your toes, then return upright.'),
+        ('Flank Stretch', 'Spine', 'Stand upright, raise one arm overhead and slowly stretch to the opposite side. Alternate sides.'),
+        ('Torso Rotation', 'Spine', 'Stand with feet apart, rotate your trunk gently to each side. Keep your lower body stable throughout.'),
+    ]
+    canonical_names = [e[0] for e in CANONICAL_EXERCISES]
+
+    # Remove any exercises NOT in the canonical list
+    placeholders = ','.join('?' * len(canonical_names))
+    cursor.execute(f"DELETE FROM exercises WHERE name NOT IN ({placeholders})", canonical_names)
+
+    # Insert/update canonical exercises
+    for ex_name, ex_category, ex_desc in CANONICAL_EXERCISES:
+        cursor.execute("SELECT id FROM exercises WHERE name = ?", (ex_name,))
+        row = cursor.fetchone()
+        if row:
+            cursor.execute("UPDATE exercises SET category = ?, description = ? WHERE name = ?", (ex_category, ex_desc, ex_name))
+        else:
+            cursor.execute(
+                "INSERT INTO exercises (name, category, description, difficulty) VALUES (?, ?, ?, 1)",
+                (ex_name, ex_category, ex_desc)
+            )
+    print(f"[INIT] Exercises table seeded with {len(CANONICAL_EXERCISES)} canonical exercises")
+
     conn.commit()
     conn.close()
 
 
 # Ensure tables exist on startup
 ensure_tables_exist()
+
+
+def assign_patient_exercises(patient_user_id, condition):
+    """
+    Assign exercises to a patient based on their MSK condition.
+    Inserts rows into patient_exercises for each mapped exercise.
+    """
+    exercise_names = CONDITION_EXERCISE_MAP.get(condition, [])
+    if not exercise_names:
+        # Fallback: assign all exercises
+        exercise_names = [
+            'Lifting of Arms', 'Lateral Trunk Tilt', 'Trunk Rotation',
+            'Squat', 'Trunk Rotation & Target Touch', 'Pelvis Rotation',
+            'Forward Flexion', 'Flank Stretch', 'Torso Rotation',
+        ]
+
+    for ex_name in exercise_names:
+        ex_row = query_db('SELECT id FROM exercises WHERE name = ?', (ex_name,), one=True)
+        if ex_row:
+            execute_db(
+                'INSERT OR IGNORE INTO patient_exercises (patient_id, exercise_id, enabled) VALUES (?, ?, 1)',
+                (patient_user_id, ex_row['id'])
+            )
+
 
 @app.route("/api/live_feedback_old", methods=["POST"])
 def api_live_feedback_old():

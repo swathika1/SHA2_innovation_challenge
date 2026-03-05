@@ -38,8 +38,16 @@
 {% endwith %}
 
 <div class="dashboard-header">
-    <h2>Welcome back, {{ user.name }}!</h2>
-    <span>{{ patient.condition }} - Week {{ patient.current_week }} | {{ total_sessions }} sessions completed</span>
+    <div class="welcome-block">
+        <h2 class="welcome-greeting">Welcome back, <span class="welcome-name">{{ user.name }}</span>!</h2>
+        <div class="welcome-subtitle">
+            <span class="welcome-condition-badge">{{ patient.condition }}</span>
+            <span class="welcome-separator">·</span>
+            <span class="welcome-detail">Week {{ patient.current_week }}</span>
+            <span class="welcome-separator">·</span>
+            <span class="welcome-detail"><i class="fa-solid fa-check-circle"></i> {{ total_sessions }} sessions completed</span>
+        </div>
+    </div>
 </div>
 
 <!-- Stats Row -->
@@ -138,8 +146,20 @@
         {% if workouts %}
             {% for workout in workouts %}
             <div style="display:flex; align-items:center; gap:12px; padding:12px; background:#f5f5f5; border-radius:8px; margin-bottom:10px;">
-                {% set ex_name_lower = workout.exercise_name|lower|replace(' ', '_') %}
-                <img src="{{ url_for('static', filename='gifs/' ~ ex_name_lower ~ '.svg') }}"
+                {% set gif_map = {
+                    'Lifting of Arms': 'lifting_of_arms',
+                    'Lifting Arms': 'lifting_of_arms',
+                    'Lateral Trunk Tilt': 'lateral_trunk_tilt',
+                    'Trunk Rotation': 'trunk_rotation',
+                    'Squat': 'squat',
+                    'Trunk Rotation & Target Touch': 'trunk_rotation_target',
+                    'Pelvis Rotation': 'pelvis_rotation',
+                    'Forward Flexion': 'forward_flexion',
+                    'Flank Stretch': 'flank_stretch',
+                    'Torso Rotation': 'torso_rotation'
+                } %}
+                {% set ex_svg = gif_map.get(workout.exercise_name, workout.exercise_name|lower|replace(' ', '_')) %}
+                <img src="{{ url_for('static', filename='gifs/' ~ ex_svg ~ '.svg') }}"
                      alt="{{ workout.exercise_name }} demo"
                      style="width:72px; height:72px; object-fit:contain; border-radius:8px; background:#e8ecff; flex-shrink:0;"
                      onerror="this.style.display='none'">
@@ -150,6 +170,8 @@
                     </p>
                     {% if workout.instructions %}
                     <p style="font-size: 0.85rem; color: #888;">{{ workout.instructions }}</p>
+                    {% elif workout.description %}
+                    <p style="font-size: 0.85rem; color: #888;">{{ workout.description }}</p>
                     {% endif %}
                 </div>
             </div>
