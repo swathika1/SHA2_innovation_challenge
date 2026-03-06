@@ -1700,8 +1700,33 @@ def plan_editor():
 
     patients = [dict(p) for p in patients] if patients else []
 
-    # For every patient, fetch their active workouts
+    # For every patient, sync patient_exercises → workouts, then fetch workouts
     for pat in patients:
+        # 1. Get exercises assigned via patient_exercises (condition-based defaults)
+        assigned = query_db('''
+            SELECT pe.exercise_id
+            FROM patient_exercises pe
+            WHERE pe.patient_id = ? AND pe.enabled = 1
+        ''', (pat['id'],))
+        assigned_ids = [a['exercise_id'] for a in assigned] if assigned else []
+
+        # 2. Get exercises already in workouts table (active)
+        existing_workout_exids = query_db('''
+            SELECT exercise_id FROM workouts
+            WHERE patient_id = ? AND is_active = 1
+        ''', (pat['id'],))
+        existing_ids = set(e['exercise_id'] for e in existing_workout_exids) if existing_workout_exids else set()
+
+        # 3. Auto-create workout entries for patient_exercises not yet in workouts
+        for ex_id in assigned_ids:
+            if ex_id not in existing_ids:
+                execute_db('''
+                    INSERT INTO workouts
+                    (patient_id, exercise_id, sets, reps, frequency, instructions, is_active)
+                    VALUES (?, ?, 3, 10, 'Daily', '', 1)
+                ''', (pat['id'], ex_id))
+
+        # 4. Now fetch the full workout list
         workouts = query_db('''
             SELECT w.id, w.exercise_id, w.sets, w.reps, w.frequency,
                    w.instructions, e.name AS exercise_name, e.category,
@@ -1738,6 +1763,17 @@ def api_plan_add_exercise():
 
     if not patient_id or not exercise_id:
         return jsonify({'error': 'Missing patient_id or exercise_id'}), 400
+
+    # Also ensure the exercise is tracked in patient_exercises
+    execute_db('''
+        INSERT OR IGNORE INTO patient_exercises (patient_id, exercise_id, enabled)
+        VALUES (?, ?, 1)
+    ''', (patient_id, exercise_id))
+    # Re-enable if it was previously disabled
+    execute_db('''
+        UPDATE patient_exercises SET enabled = 1
+        WHERE patient_id = ? AND exercise_id = ?
+    ''', (patient_id, exercise_id))
 
     execute_db('''
         INSERT INTO workouts
@@ -1785,8 +1821,16 @@ def api_plan_update_workout(workout_id):
 @login_required
 @role_required('doctor')
 def api_plan_remove_workout(workout_id):
-    """Soft-delete a workout from a patient's plan"""
+    """Soft-delete a workout from a patient's plan and disable in patient_exercises"""
+    # Get the exercise_id and patient_id before deactivating
+    w = query_db('SELECT patient_id, exercise_id FROM workouts WHERE id = ?', (workout_id,), one=True)
     execute_db('UPDATE workouts SET is_active = 0 WHERE id = ?', (workout_id,))
+    # Also disable in patient_exercises so it stays removed
+    if w:
+        execute_db('''
+            UPDATE patient_exercises SET enabled = 0
+            WHERE patient_id = ? AND exercise_id = ?
+        ''', (w['patient_id'], w['exercise_id']))
     return jsonify({'ok': True})
 
 

@@ -94,9 +94,16 @@
                     <span class="pe-condition">{{ patient.condition or 'General Rehab' }}</span>
                     <span class="pe-badge">{{ patient.workouts | length }} exercise{{ 's' if patient.workouts | length != 1 }}</span>
                 </div>
-                <button class="btn pe-btn-edit" onclick="toggleEdit({{ patient.id }})" id="editBtn-{{ patient.id }}">
-                    <i class="fa-solid fa-pen-to-square"></i> Edit Plan
-                </button>
+                <div class="pe-header-right">
+                    {% if patient.condition %}
+                    <span class="pe-auto-tag" title="Exercises auto-assigned based on condition">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Auto-assigned for {{ patient.condition }}
+                    </span>
+                    {% endif %}
+                    <button class="btn pe-btn-edit" onclick="toggleEdit({{ patient.id }})" id="editBtn-{{ patient.id }}">
+                        <i class="fa-solid fa-pen-to-square"></i> Edit Plan
+                    </button>
+                </div>
             </div>
 
             <!-- Workouts table -->
@@ -276,6 +283,15 @@
 }
 
 /* ---------- Edit / Save buttons ---------- */
+.pe-header-right {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.pe-auto-tag {
+    font-size: 0.75rem; color: #059669; background: #ecfdf5;
+    padding: 3px 10px; border-radius: 8px; border: 1px solid #a7f3d0;
+    white-space: nowrap;
+}
+.pe-auto-tag i { margin-right: 3px; }
 .pe-btn-edit {
     background: #17a2b8 !important; color: #fff !important;
     border: none; padding: 7px 16px; border-radius: 8px;
@@ -475,6 +491,17 @@ function handleDrop(e, patientId) {
 
 /* Add exercise via API */
 function addExerciseToPatient(patientId, exerciseId, exerciseName, category) {
+    // Check for duplicate — exercise already in the plan
+    var tbody = document.getElementById('workoutsBody-' + patientId);
+    var existingRows = tbody.querySelectorAll('.pe-workout-row');
+    for (var i = 0; i < existingRows.length; i++) {
+        var nameCell = existingRows[i].querySelector('.pe-cell-name');
+        if (nameCell && nameCell.textContent.trim() === exerciseName) {
+            showToast(exerciseName + ' is already in this plan', 'error');
+            return;
+        }
+    }
+
     fetch('/api/plan/add-exercise', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

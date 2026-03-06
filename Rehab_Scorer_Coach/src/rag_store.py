@@ -21,6 +21,7 @@ class RAGStore:
     Backed by Chroma (persistent on disk).
     """
     def __init__(self, persist_dir: Path):
+        import shutil
         self.persist_dir = Path(persist_dir)
         self.persist_dir.mkdir(parents=True, exist_ok=True)
 
@@ -31,7 +32,16 @@ class RAGStore:
         self._embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="all-MiniLM-L6-v2"
         )
-        self._client = PersistentClient(path=str(self.persist_dir))
+
+        try:
+            self._client = PersistentClient(path=str(self.persist_dir))
+        except Exception:
+            # Corrupted ChromaDB store — wipe and recreate
+            print(f"[RAGStore] Corrupted ChromaDB at {self.persist_dir}, resetting...")
+            shutil.rmtree(self.persist_dir, ignore_errors=True)
+            self.persist_dir.mkdir(parents=True, exist_ok=True)
+            self._client = PersistentClient(path=str(self.persist_dir))
+
         self._col = self._client.get_or_create_collection(
             name="exercise_docs",
             embedding_function=self._embed_fn
