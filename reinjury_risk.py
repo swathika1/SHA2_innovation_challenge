@@ -206,6 +206,7 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
         (patient_id,)
     ) or []
 
+    _zero_signal = {"pts": 0}
     if len(recent_sessions) < 3:
         return {
             "risk_level": "green",
@@ -216,6 +217,14 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
             "explanation": "Not enough session data yet to assess re-injury risk. Check back after 3+ completed sessions.",
             "trend_data": {},
             "has_data": False,
+            "signals": {
+                "form":      _zero_signal,
+                "asymmetry": _zero_signal,
+                "pain":      _zero_signal,
+                "rom":       _zero_signal,
+                "fatigue":   _zero_signal,
+                "gap":       _zero_signal,
+            },
         }
 
     quality_scores  = [float(r["quality_score"] or 0)  for r in recent_sessions]
@@ -375,7 +384,7 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
         "trend_data":     trend_data,
         "has_data":       True,
         # Individual signal breakdown (useful for detailed views)
-        "_signals": {
+        "signals": {
             "form":      {"pts": pts_form,    "slope": round(form_slope, 2)},
             "asymmetry": {"pts": pts_asym,    "avg_pct": round(asym_avg, 1) if asym_avg is not None else None, "slope": round(asym_slope, 2)},
             "pain":      {"pts": pts_pain,    "slope": round(pain_slope, 2)},
