@@ -37,6 +37,78 @@
     </div>
 </div>
 
+<!-- Re-Injury Risk Card -->
+{% if risk_data %}
+{% set lvl = risk_data.risk_level %}
+{% set lvl_colors = {
+    'green':  {'bg': '#d4edda', 'border': '#28a745', 'text': '#155724', 'badge': '#28a745'},
+    'yellow': {'bg': '#fff8e1', 'border': '#ffc107', 'text': '#856404', 'badge': '#e6a800'},
+    'orange': {'bg': '#fff3cd', 'border': '#fd7e14', 'text': '#7a3c00', 'badge': '#fd7e14'},
+    'red':    {'bg': '#f8d7da', 'border': '#dc3545', 'text': '#721c24', 'badge': '#dc3545'}
+} %}
+{% set c = lvl_colors[lvl] %}
+<div class="card" style="margin-top: 20px; border-left: 5px solid {{ c.border }}; background: {{ c.bg }};">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+        <!-- Left: icon + title + explanation -->
+        <div style="flex: 1; min-width: 220px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <span style="font-size: 1.4rem;">
+                    {% if lvl == 'green' %}<i class="fa-solid fa-shield-halved" style="color: {{ c.badge }};"></i>
+                    {% elif lvl == 'yellow' %}<i class="fa-solid fa-triangle-exclamation" style="color: {{ c.badge }};"></i>
+                    {% elif lvl == 'orange' %}<i class="fa-solid fa-circle-exclamation" style="color: {{ c.badge }};"></i>
+                    {% else %}<i class="fa-solid fa-circle-radiation" style="color: {{ c.badge }};"></i>
+                    {% endif %}
+                </span>
+                <strong style="font-size: 1.05rem; color: {{ c.text }};">Re-Injury Risk — {{ risk_data.risk_label }}</strong>
+                <span style="background: {{ c.badge }}; color: #fff; border-radius: 20px; padding: 2px 12px; font-size: 0.8rem; font-weight: 700;">
+                    Score {{ risk_data.risk_score }}/12
+                </span>
+            </div>
+            <p style="margin: 0; color: {{ c.text }}; font-size: 0.92rem; line-height: 1.5;">{{ risk_data.explanation }}</p>
+        </div>
+
+        <!-- Right: per-signal pills -->
+        <div style="display: flex; flex-direction: column; gap: 6px; min-width: 200px;">
+            {% for label, pts, icon in [
+                ('Form Trend',      risk_data._signals.form.pts,      'fa-chart-line'),
+                ('Asymmetry',       risk_data._signals.asymmetry.pts, 'fa-scale-unbalanced'),
+                ('Pain Trend',      risk_data._signals.pain.pts,      'fa-face-grimace'),
+                ('ROM',             risk_data._signals.rom.pts,       'fa-arrows-left-right'),
+                ('Session Fatigue', risk_data._signals.fatigue.pts,   'fa-battery-half'),
+                ('Effort-Quality',  risk_data._signals.gap.pts,       'fa-dumbbell')
+            ] %}
+            {% set pill_color = '#28a745' if pts == 0 else ('#ffc107' if pts == 1 else ('#fd7e14' if pts == 2 else '#dc3545')) %}
+            <div style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.55); border-radius: 8px; padding: 5px 10px; font-size: 0.83rem;">
+                <i class="fa-solid {{ icon }}" style="width: 14px; color: {{ pill_color }};"></i>
+                <span style="flex: 1; color: #333;">{{ label }}</span>
+                <span style="font-weight: 700; color: {{ pill_color }};">
+                    {% if pts == 0 %}OK{% elif pts == 1 %}!{% elif pts == 2 %}!!{% else %}!!!{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if risk_data.has_data and risk_data.trend_data.quality_scores %}
+    <!-- Form score sparkline -->
+    <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(0,0,0,0.08);">
+        <div style="font-size: 0.78rem; color: {{ c.text }}; margin-bottom: 6px; font-weight: 600;">
+            <i class="fa-solid fa-wave-square"></i>
+            Form Score Trend (last {{ risk_data.trend_data.quality_scores | length }} sessions)
+        </div>
+        <div style="display: flex; align-items: flex-end; gap: 4px; height: 40px;">
+            {% for score in risk_data.trend_data.quality_scores %}
+            {% set bar_color = '#28a745' if score >= 75 else ('#ffc107' if score >= 55 else '#dc3545') %}
+            <div title="Score: {{ score | round | int }}"
+                 style="flex: 1; height: {{ [score, 5] | max }}%; background: {{ bar_color }};
+                        border-radius: 3px 3px 0 0; min-height: 4px; opacity: 0.85;"></div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
 <!-- Weekly Summary Card -->
 <div class="card" style="margin-top: 20px;">
     <div class="card-header">Weekly Summary (Week 3)</div>
