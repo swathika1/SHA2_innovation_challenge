@@ -205,6 +205,66 @@ class WebRehabPipeline:
         }
 
     # -----------------------------------------------------
+    # Biomechanics — Asymmetry & ROM
+    # -----------------------------------------------------
+    @staticmethod
+    def _angle_3pts(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
+        """Return the interior angle at point b (degrees), using xy only."""
+        v1 = a[:2] - b[:2]
+        v2 = c[:2] - b[:2]
+        n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
+        if n1 < 1e-6 or n2 < 1e-6:
+            return 180.0
+        cos = np.dot(v1, v2) / (n1 * n2)
+        return float(np.degrees(np.arccos(np.clip(cos, -1.0, 1.0))))
+
+    @staticmethod
+    def _compute_biomechanics(landmarks: np.ndarray) -> dict:
+        """
+        Compute per-frame asymmetry and primary joint angle from 33 MediaPipe landmarks.
+
+        MediaPipe indices used:
+          11 left_shoulder  | 12 right_shoulder
+          23 left_hip       | 24 right_hip
+          25 left_knee      | 26 right_knee
+          27 left_ankle     | 28 right_ankle
+
+        Returns
+        -------
+        dict with:
+          asymmetry_pct : float  — |left_knee_angle - right_knee_angle| / avg * 100
+          joint_angle   : float  — average knee angle this frame (proxy for ROM depth)
+        """
+        result = {"asymmetry_pct": None, "joint_angle": None}
+        if landmarks is None or len(landmarks) < 29:
+            return result
+
+        lhip  = landmarks[23]
+        rhip  = landmarks[24]
+        lknee = landmarks[25]
+        rknee = landmarks[26]
+        lank  = landmarks[27]
+        rank  = landmarks[28]
+
+        # Visibility guard (z coord used as confidence proxy in mp.solutions.pose)
+        l_vis = min(lhip[2], lknee[2], lank[2])
+        r_vis = min(rhip[2], rknee[2], rank[2])
+
+        l_angle = WebRehabPipeline._angle_3pts(lhip, lknee, lank) if l_vis > 0.3 else None
+        r_angle = WebRehabPipeline._angle_3pts(rhip, rknee, rank) if r_vis > 0.3 else None
+
+        if l_angle is not None and r_angle is not None:
+            avg = (l_angle + r_angle) / 2.0
+            result["asymmetry_pct"] = round(abs(l_angle - r_angle) / (avg + 1e-6) * 100, 2)
+            result["joint_angle"]   = round(avg, 2)
+        elif l_angle is not None:
+            result["joint_angle"] = round(l_angle, 2)
+        elif r_angle is not None:
+            result["joint_angle"] = round(r_angle, 2)
+
+        return result
+
+    # -----------------------------------------------------
     # Score aggregation (same as Keraal)
     # -----------------------------------------------------
     def _get_aggregated_score(self) -> float:
@@ -467,6 +527,10 @@ class WebRehabPipeline:
         aggregated_score = self._get_aggregated_score()
         print(f"   Aggregated score: {aggregated_score:.2f}/50")
 
+        # 4️⃣.7 BIOMECHANICS — asymmetry & ROM
+        biomechanics = self._compute_biomechanics(landmarks)
+        print(f"   Biomechanics: asymmetry={biomechanics['asymmetry_pct']}% | joint_angle={biomechanics['joint_angle']}°")
+
         # 5️⃣ LLM FEEDBACK
         print("➡️ Step 5: LLM Check")
 
@@ -587,6 +651,8 @@ class WebRehabPipeline:
             "aggregated_score": round(aggregated_score, 2),
             "rep_info": rep_info,
             "landmarks": landmarks.tolist() if landmarks is not None else [],
+            "asymmetry_pct": biomechanics["asymmetry_pct"],
+            "joint_angle": biomechanics["joint_angle"],
         }
 
     # -----------------------------------------------------

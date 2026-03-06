@@ -70,6 +70,14 @@ except Exception as _re:
     print(f"[WARNING] PDF report generator not available: {_re}")
 
 try:
+    from reinjury_risk import analyze_patient_risk
+    REINJURY_RISK_AVAILABLE = True
+    print("[INIT] Re-injury risk engine loaded")
+except Exception as _rr:
+    REINJURY_RISK_AVAILABLE = False
+    print(f"[WARNING] Re-injury risk engine not available: {_rr}")
+
+try:
     from gtts import gTTS
     GTTS_AVAILABLE = True
     print("[INIT] gTTS (Google TTS) loaded successfully")
@@ -1616,6 +1624,14 @@ def patient_detail(patient_id):
         ORDER BY cr.requested_at DESC
     ''', (patient_id,))
 
+    # Re-injury risk analysis
+    risk_data = None
+    if REINJURY_RISK_AVAILABLE:
+        try:
+            risk_data = analyze_patient_risk(patient_id, query_db)
+        except Exception as _re:
+            print(f"[WARNING] Re-injury risk analysis failed for patient {patient_id}: {_re}")
+
     return render_template('clinician/patient_detail.html',
                          patient=patient,
                          patient_id=patient_id,
@@ -1623,7 +1639,22 @@ def patient_detail(patient_id):
                          sessions=sessions if sessions else [],
                          notes=notes if notes else [],
                          caregivers=caregivers if caregivers else [],
-                         pending_caregiver_requests=pending_requests if pending_requests else [])
+                         pending_caregiver_requests=pending_requests if pending_requests else [],
+                         risk_data=risk_data)
+
+
+@app.route('/api/patient/<int:patient_id>/reinjury_risk', methods=['GET'])
+@login_required
+@role_required('doctor')
+def api_reinjury_risk(patient_id):
+    """Return re-injury risk analysis for a patient as JSON."""
+    if not REINJURY_RISK_AVAILABLE:
+        return jsonify({"error": "Risk engine not available"}), 503
+    try:
+        data = analyze_patient_risk(patient_id, query_db)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/clinician/patient/<int:patient_id>/add-note', methods=['POST'])
@@ -3587,6 +3618,8 @@ def ensure_tables_exist():
             status TEXT NOT NULL DEFAULT '',
             rep_count INTEGER NOT NULL DEFAULT 0,
             set_count INTEGER NOT NULL DEFAULT 1,
+            asymmetry_pct REAL,
+            rom_angle REAL,
             FOREIGN KEY (session_id) REFERENCES sessions(id),
             FOREIGN KEY (patient_id) REFERENCES users(id)
         )
@@ -3916,15 +3949,17 @@ def _log_frame_telemetry(out: dict, program: str = 'general'):
         rep_info = out.get('rep_info') or {}
         rep_count = int(rep_info.get('rep_now', 0))
         set_count = int(rep_info.get('set_now', 1))
+        asymmetry_pct = out.get('asymmetry_pct')   # may be None
+        rom_angle     = out.get('joint_angle')       # may be None
         ts = datetime.utcnow().isoformat()
 
         execute_db(
             '''INSERT INTO session_frames
                (session_id, patient_id, timestamp, program, exercise_name,
-                score, status, rep_count, set_count)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                score, status, rep_count, set_count, asymmetry_pct, rom_angle)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (session_id, patient_id, ts, program, exercise_name,
-             score, form_status, rep_count, set_count),
+             score, form_status, rep_count, set_count, asymmetry_pct, rom_angle),
         )
     except Exception as e:
         # Never let logging break the real-time pipeline
