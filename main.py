@@ -2751,20 +2751,27 @@ SESSION_STATE = {
     "cooldown_until": 0
 }
 
-# Initialize the CV pipelines
-try:
-    PIPELINE = WebRehabPipeline()
-    print("[INIT] WebRehabPipeline (General Rehab) initialized successfully")
-except Exception as e:
-    PIPELINE = None
-    print(f"[WARNING] WebRehabPipeline failed to initialize: {e}")
+# Initialize the CV pipelines (optional at boot to avoid blocking cloud startup)
+ENABLE_CV_PIPELINES = os.environ.get("ENABLE_CV_PIPELINES", "0") == "1"
 
-try:
-    KERAAL_PIPELINE = KeraalRehabPipeline()
-    print("[INIT] KeraalRehabPipeline (Low Back Pain) initialized successfully")
-except Exception as e:
+if ENABLE_CV_PIPELINES:
+    try:
+        PIPELINE = WebRehabPipeline()
+        print("[INIT] WebRehabPipeline (General Rehab) initialized successfully")
+    except Exception as e:
+        PIPELINE = None
+        print(f"[WARNING] WebRehabPipeline failed to initialize: {e}")
+
+    try:
+        KERAAL_PIPELINE = KeraalRehabPipeline()
+        print("[INIT] KeraalRehabPipeline (Low Back Pain) initialized successfully")
+    except Exception as e:
+        KERAAL_PIPELINE = None
+        print(f"[WARNING] KeraalRehabPipeline failed to initialize: {e}")
+else:
+    PIPELINE = None
     KERAAL_PIPELINE = None
-    print(f"[WARNING] KeraalRehabPipeline failed to initialize: {e}")
+    print("[INIT] CV pipelines skipped at startup (set ENABLE_CV_PIPELINES=1 to enable)")
 
 
 # ==================== SESSION LIFECYCLE APIs ====================
