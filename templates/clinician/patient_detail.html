@@ -70,12 +70,12 @@
         <!-- Right: per-signal pills -->
         <div style="display: flex; flex-direction: column; gap: 6px; min-width: 200px;">
             {% for label, pts, icon in [
-                ('Form Trend',      risk_data._signals.form.pts,      'fa-chart-line'),
-                ('Asymmetry',       risk_data._signals.asymmetry.pts, 'fa-scale-unbalanced'),
-                ('Pain Trend',      risk_data._signals.pain.pts,      'fa-face-grimace'),
-                ('ROM',             risk_data._signals.rom.pts,       'fa-arrows-left-right'),
-                ('Session Fatigue', risk_data._signals.fatigue.pts,   'fa-battery-half'),
-                ('Effort-Quality',  risk_data._signals.gap.pts,       'fa-dumbbell')
+                ('Form Trend',      risk_data.signals.form.pts,      'fa-chart-line'),
+                ('Asymmetry',       risk_data.signals.asymmetry.pts, 'fa-scale-unbalanced'),
+                ('Pain Trend',      risk_data.signals.pain.pts,      'fa-face-grimace'),
+                ('ROM',             risk_data.signals.rom.pts,       'fa-arrows-left-right'),
+                ('Session Fatigue', risk_data.signals.fatigue.pts,   'fa-battery-half'),
+                ('Effort-Quality',  risk_data.signals.gap.pts,       'fa-dumbbell')
             ] %}
             {% set pill_color = '#28a745' if pts == 0 else ('#ffc107' if pts == 1 else ('#fd7e14' if pts == 2 else '#dc3545')) %}
             <div style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.55); border-radius: 8px; padding: 5px 10px; font-size: 0.83rem;">
