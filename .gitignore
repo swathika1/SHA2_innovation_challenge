@@ -18,8 +18,7 @@ __pycache__/
 # Flask session files
 flask_session/
 
-# Database files
-*.db
+# Database files (rehab_coach.db is tracked so collaborators get latest data)
 *.sqlite3
 instance/
 
