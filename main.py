@@ -1564,40 +1564,70 @@ def clinician_dashboard():
 @login_required
 @role_required('doctor')
 def patient_detail(patient_id):
-    """Patient Detail View"""
+    """Patient Detail View — comprehensive profile page"""
     patient = query_db('''
-        SELECT u.*, p.*
+        SELECT u.*, p.*,
+               u.id as user_id, u.name as name, u.email as email,
+               u.phone as phone, u.pincode as pincode, u.dob as dob,
+               p.condition as condition, p.surgery_date as surgery_date,
+               p.current_week as current_week, p.adherence_rate as adherence_rate,
+               p.avg_pain_level as avg_pain_level, p.avg_quality_score as avg_quality_score,
+               p.completed_sessions as completed_sessions, p.streak_days as streak_days
         FROM users u
         JOIN patients p ON u.id = p.user_id
         WHERE u.id = ?
     ''', (patient_id,), one=True)
-    
+
     if not patient:
         flash('Patient not found.', 'error')
         return redirect(url_for('clinician_dashboard'))
-    
+
+    # ── Assigned exercises (from patient_exercises, synced to workouts) ──
+    assigned_exercises = query_db('''
+        SELECT pe.id as pe_id, pe.enabled, e.id as exercise_id,
+               e.name as exercise_name, e.category, e.description
+        FROM patient_exercises pe
+        JOIN exercises e ON pe.exercise_id = e.id
+        WHERE pe.patient_id = ? AND pe.enabled = 1
+        ORDER BY e.category, e.name
+    ''', (patient_id,))
+    assigned_exercises = [dict(e) for e in assigned_exercises] if assigned_exercises else []
+
+    # Workouts with sets/reps details
     workouts = query_db('''
         SELECT w.*, e.name as exercise_name, e.category
         FROM workouts w
         JOIN exercises e ON w.exercise_id = e.id
         WHERE w.patient_id = ? AND w.is_active = 1
     ''', (patient_id,))
-    
+    workouts = [dict(w) for w in workouts] if workouts else []
+
+    # ── Session history (all completed sessions) ──
     sessions = query_db('''
-        SELECT s.*,
-               (SELECT GROUP_CONCAT(DISTINCT e.name)
+        SELECT s.id, s.quality_score, s.pain_before, s.pain_after,
+               s.effort_level, s.completed_perc, s.started_at, s.completed_at,
+               s.session_group_id,
+               (SELECT GROUP_CONCAT(DISTINCT se.exercise_name)
                 FROM session_exercises se
-                JOIN workouts w ON se.workout_id = w.id
-                JOIN exercises e ON w.exercise_id = e.id
-                WHERE se.session_id = s.id) as exercise_name
+                WHERE se.session_id = s.id) as exercise_names
         FROM sessions s
-        WHERE s.patient_id = ?
-        AND s.completed_at IS NOT NULL
+        WHERE s.patient_id = ? AND s.completed_at IS NOT NULL
         ORDER BY s.completed_at DESC
-        LIMIT 10
     ''', (patient_id,))
-    
-    # Get clinician notes for this patient
+    sessions = [dict(s) for s in sessions] if sessions else []
+
+    # ── Session dates for calendar view (distinct dates) ──
+    session_dates = []
+    for s in sessions:
+        if s.get('completed_at'):
+            try:
+                dt = s['completed_at'][:10]  # YYYY-MM-DD
+                if dt not in session_dates:
+                    session_dates.append(dt)
+            except:
+                pass
+
+    # ── Clinician notes ──
     notes = query_db('''
         SELECT cn.*, u.name as doctor_name
         FROM clinician_notes cn
@@ -1607,15 +1637,15 @@ def patient_detail(patient_id):
         LIMIT 20
     ''', (patient_id,))
 
-    # Get current caregivers for this patient
+    # ── Caregivers ──
     caregivers = query_db('''
-        SELECT u.name, u.email, cp.relationship
+        SELECT u.name, u.email, u.phone, cp.relationship
         FROM caregiver_patient cp
         JOIN users u ON cp.caregiver_id = u.id
         WHERE cp.patient_id = ?
     ''', (patient_id,))
 
-    # Get pending caregiver requests for this patient
+    # ── Pending caregiver requests ──
     pending_requests = query_db('''
         SELECT cr.id, u.name as caregiver_name, u.email as caregiver_email, cr.requested_at
         FROM caregiver_requests cr
@@ -1624,7 +1654,63 @@ def patient_detail(patient_id):
         ORDER BY cr.requested_at DESC
     ''', (patient_id,))
 
-    # Re-injury risk analysis
+    # ── Consultation / Appointment history ──
+    appointments = query_db('''
+        SELECT a.*, u.name as doctor_name
+        FROM appointments a
+        JOIN users u ON a.doctor_id = u.id
+        WHERE a.patient_id = ?
+        ORDER BY a.appointment_date DESC, a.appointment_time DESC
+        LIMIT 10
+    ''', (patient_id,))
+    appointments = [dict(a) for a in appointments] if appointments else []
+
+    # ── Patient preferred consultation time ──
+    time_prefs = query_db('''
+        SELECT t.day, t.time, t.label, pt.preference_score
+        FROM patient_time_preferences pt
+        JOIN timeslots t ON pt.timeslot_id = t.id
+        WHERE pt.patient_id = ?
+        ORDER BY pt.preference_score DESC
+        LIMIT 5
+    ''', (patient_id,))
+    time_prefs = [dict(t) for t in time_prefs] if time_prefs else []
+
+    # ── Distance from clinician ──
+    distance_info = None
+    patient_pincode = patient['pincode']
+    if patient_pincode:
+        # Get patient lat/lon from sg_postal
+        patient_loc = query_db(
+            'SELECT lat, lon FROM sg_postal WHERE postal_code = ? LIMIT 1',
+            (patient_pincode,), one=True
+        )
+        # Get clinician's pincode and lat/lon
+        doctor_pincode = query_db(
+            'SELECT pincode FROM users WHERE id = ?',
+            (session['user_id'],), one=True
+        )
+        if doctor_pincode and doctor_pincode['pincode']:
+            doctor_loc = query_db(
+                'SELECT lat, lon FROM sg_postal WHERE postal_code = ? LIMIT 1',
+                (doctor_pincode['pincode'],), one=True
+            )
+            if patient_loc and doctor_loc and patient_loc['lat'] and doctor_loc['lat']:
+                import math
+                lat1, lon1 = math.radians(patient_loc['lat']), math.radians(patient_loc['lon'])
+                lat2, lon2 = math.radians(doctor_loc['lat']), math.radians(doctor_loc['lon'])
+                dlat = lat2 - lat1
+                dlon = lon2 - lon1
+                a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+                c = 2 * math.asin(math.sqrt(a))
+                km = 6371 * c
+                distance_info = {
+                    'km': round(km, 1),
+                    'patient_postal': patient_pincode,
+                    'doctor_postal': doctor_pincode['pincode'],
+                }
+
+    # ── Re-injury risk analysis ──
     risk_data = None
     if REINJURY_RISK_AVAILABLE:
         try:
@@ -1632,14 +1718,28 @@ def patient_detail(patient_id):
         except Exception as _re:
             print(f"[WARNING] Re-injury risk analysis failed for patient {patient_id}: {_re}")
 
+    # ── Compute aggregate metrics ──
+    total_sessions = len(sessions)
+    recent_sessions = sessions[:5]
+    avg_quality_recent = (sum(s['quality_score'] for s in recent_sessions if s.get('quality_score')) / len(recent_sessions)) if recent_sessions else 0
+    avg_pain_recent = (sum(s['pain_after'] for s in recent_sessions if s.get('pain_after') is not None) / len(recent_sessions)) if recent_sessions else 0
+
     return render_template('clinician/patient_detail.html',
                          patient=patient,
                          patient_id=patient_id,
-                         workouts=workouts if workouts else [],
-                         sessions=sessions if sessions else [],
+                         assigned_exercises=assigned_exercises,
+                         workouts=workouts,
+                         sessions=sessions,
+                         session_dates=session_dates,
+                         total_sessions=total_sessions,
+                         avg_quality_recent=round(avg_quality_recent, 1),
+                         avg_pain_recent=round(avg_pain_recent, 1),
                          notes=notes if notes else [],
                          caregivers=caregivers if caregivers else [],
                          pending_caregiver_requests=pending_requests if pending_requests else [],
+                         appointments=appointments,
+                         time_prefs=time_prefs,
+                         distance_info=distance_info,
                          risk_data=risk_data)
 
 
