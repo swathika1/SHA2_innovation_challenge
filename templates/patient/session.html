@@ -1443,12 +1443,16 @@ function speakRepSetAlert(repInfo) {
     if (!audioEnabled || !repInfo) return;
     const lang = getLanguageName();
     if (repInfo.rep_incremented) {
-        const repNum = repInfo.rep_now || 1;
+        // When set_completed fires, rep_now is reset to 0 by backend — speak rep_target instead
+        const repNum = repInfo.set_completed ? (repInfo.rep_target || 1) : (repInfo.rep_now || 1);
         const fn = REP_ALERT[lang] || REP_ALERT.English;
         queueSpeech(fn(repNum));
     }
     if (repInfo.set_completed) {
-        const setNum = (repInfo.set_now || 2) - 1; // set_now was already incremented by backend
+        // Backend increments set_now after completion but caps at set_target on exercise_completed
+        // When exercise_completed: set_now = set_target (capped), so completed set = set_now
+        // When NOT exercise_completed: set_now = old+1, so completed set = set_now - 1
+        const setNum = repInfo.exercise_completed ? repInfo.set_now : (repInfo.set_now || 2) - 1;
         const fn = SET_ALERT[lang] || SET_ALERT.English;
         queueSpeech(fn(setNum));
     }
@@ -2168,7 +2172,9 @@ function updateRepUIFromBackend(out) {
         if (r.rep_incremented) {
             repIncremented = true;
             console.log('  🔥🔥🔥 REP INCREMENTED! 🔥🔥🔥');
-            addFeedback('success', '✅ Rep ' + currentRep + ' completed!');
+            // When set_completed fires, rep_now is reset to 0 — show rep_target instead
+            const displayRep = r.set_completed ? targetReps : currentRep;
+            addFeedback('success', '✅ Rep ' + displayRep + ' completed!');
         }
         
         if (r.set_completed) {
@@ -2196,10 +2202,12 @@ function updateRepUIFromBackend(out) {
     // In that case, currentRep has been reset to 0, so we must NOT update the dict with it
     
     if (setCompleted) {
-        // Set just completed: save the PREVIOUS set with all its reps (targetReps)
-        // currentSet was already incremented, so the finished set is currentSet - 1
-        setsCompletedDict[String(currentSet - 1)] = targetReps;
-        console.log(`  🎯 SET COMPLETED: setsCompletedDict['${currentSet - 1}'] = ${targetReps}`);
+        // Set just completed: save this set with all its reps (targetReps)
+        // Backend increments set_now after completion, but caps it at set_target on exercise complete
+        // So the finished set number is: use oldSet (captured before update) as the completed set
+        const completedSetNum = oldSet;  // This was the set number BEFORE backend incremented
+        setsCompletedDict[String(completedSetNum)] = targetReps;
+        console.log(`  🎯 SET COMPLETED: setsCompletedDict['${completedSetNum}'] = ${targetReps}`);
     } else if (repIncremented) {
         // Mid-set: A new rep was counted, update the current set
         setsCompletedDict[String(currentSet)] = currentRep;
@@ -2212,21 +2220,27 @@ function updateRepUIFromBackend(out) {
     updateExerciseSteps();
     updateSessionProgress();
     
-    // ✅ SET COMPLETED - Show alert and speak
+    // ✅ SET COMPLETED - Show alert (speech handled by speakRepSetAlert in processKimoreResult/processKeraalResult)
     if (setCompleted) {
-        const setMsg = 'Set ' + (currentSet-1) + ' complete! Excellent work!';
+        const setMsg = 'Set ' + oldSet + ' complete! Excellent work!';
         console.log('🎯 SET ALERT:', setMsg);
         addFeedback('success', '🎯 ' + setMsg);
-        queueSpeech(setMsg);
+        // Voice is handled by speakRepSetAlert — no duplicate queueSpeech here
     }
     
-    // ✅ EXERCISE COMPLETED - Show alert and speak
+    // ✅ EXERCISE COMPLETED - Show alert (speech handled by speakRepSetAlert)
     if (exerciseCompleted && !currentExerciseCompleted) {
         currentExerciseCompleted = true;  // Mark as completed to prevent duplicate triggers
-        const exerciseMsg = 'Exercise completed! Fantastic effort! Go to the next exercise!';
+        const exerciseMsg = 'Exercise completed! Fantastic effort!';
         console.log('🏆 EXERCISE ALERT:', exerciseMsg);
         addFeedback('success', '🏆 ' + exerciseMsg);
-        queueSpeech(exerciseMsg);
+        // Voice is handled by speakRepSetAlert — no duplicate queueSpeech here
+        
+        // Force ALL sets to full completion so save captures 100%
+        for (let s = 1; s <= targetSets; s++) {
+            setsCompletedDict[String(s)] = targetReps;
+        }
+        console.log('🏆 Forced setsCompletedDict to 100%:', Object.assign({}, setsCompletedDict));
         
         // Automatically move to next exercise after a brief delay
         setTimeout(function() {
@@ -2712,8 +2726,11 @@ async function saveCurrentExercise() {
         ? Math.round(allScores.reduce(function(a, b) { return a + b; }, 0) / allScores.length) : 0;
     const setsReq = {};
     for (let i = 1; i <= w.sets; i++) setsReq[String(i)] = w.reps;
+    // Fill missing sets: if exercise was completed, use full reps; otherwise 0
     for (let i = 1; i <= w.sets; i++) {
-        if (!(String(i) in setsCompletedDict)) setsCompletedDict[String(i)] = 0;
+        if (!(String(i) in setsCompletedDict)) {
+            setsCompletedDict[String(i)] = currentExerciseCompleted ? w.reps : 0;
+        }
     }
     const exStartISO = new Date(exerciseStartTs).toISOString();
     const exEndISO = new Date().toISOString();
