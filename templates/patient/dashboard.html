@@ -221,9 +221,9 @@
             {% endfor %}
 
             <div style="margin-top:14px; padding:12px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa;">
-                <strong style="display:block; margin-bottom:8px;">Adaptive Plan Feedback</strong>
+                <strong style="display:block; margin-bottom:8px;">Raise a Concern</strong>
                 <p style="font-size:0.86rem; color:#666; margin:0 0 10px 0;">
-                    If an exercise feels too hard or painful, submit feedback. The app will suggest a modification and your doctor can approve/reject.
+                    If any routine feels too hard or painful, raise a concern here. Your doctor will get a notification and can approve or reject the requested change.
                 </p>
                 <div style="display:grid; grid-template-columns: 1.1fr 1fr 0.8fr; gap:8px; margin-bottom:8px;">
                     <select id="adaptiveWorkout" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
@@ -242,7 +242,7 @@
                 <textarea id="adaptiveNote" rows="2" placeholder="Optional note for your doctor"
                           style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;"></textarea>
                 <div style="margin-top:8px; display:flex; align-items:center; gap:10px;">
-                    <button class="btn" onclick="submitAdaptiveFeedback()" style="background:#2563eb; color:white;">Submit Adaptation Request</button>
+                    <button class="btn" onclick="submitAdaptiveFeedback()" style="background:#2563eb; color:white;">Send Concern to Doctor</button>
                     <span id="adaptiveFeedbackMsg" style="font-size:0.85rem; color:#666;"></span>
                 </div>
             </div>
@@ -295,7 +295,7 @@
 </div>
 
 <div class="card" style="margin-top: 20px;">
-    <div class="card-header"><i class="fa-solid fa-lightbulb"></i> Adaptive Plan Suggestions</div>
+    <div class="card-header"><i class="fa-solid fa-lightbulb"></i> Concern Request Status</div>
     {% if adaptive_suggestions %}
         {% for s in adaptive_suggestions %}
         <div style="padding: 10px 12px; border-bottom:1px solid #f0f0f0;">
@@ -318,7 +318,7 @@
         </div>
         {% endfor %}
     {% else %}
-    <p style="color:#666; text-align:center; padding:16px; margin:0;">No adaptation suggestions yet.</p>
+    <p style="color:#666; text-align:center; padding:16px; margin:0;">No concern requests yet.</p>
     {% endif %}
 </div>
 
@@ -529,8 +529,6 @@
 <!-- MeriLion AI Chatbot -->
 {% include 'components/chatbot.html' %}
 
-{% if chart_sessions and chart_sessions|length > 1 %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 async function submitAdaptiveFeedback() {
     const workout_id = Number(document.getElementById('adaptiveWorkout')?.value || 0);
@@ -540,7 +538,10 @@ async function submitAdaptiveFeedback() {
     const msg = document.getElementById('adaptiveFeedbackMsg');
 
     if (!workout_id) {
-        if (msg) msg.textContent = 'Please select an exercise.';
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Please select an exercise.';
+        }
         return;
     }
 
@@ -550,17 +551,30 @@ async function submitAdaptiveFeedback() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workout_id, issue_type, difficulty, note })
         });
-        const data = await res.json();
+        const raw = await res.text();
+        let data = null;
+        try { data = raw ? JSON.parse(raw) : {}; }
+        catch (_) { data = { ok: false, error: `Server error (${res.status})` }; }
         if (!res.ok || !data.ok) {
             throw new Error(data.error || 'Failed to submit feedback');
         }
-        if (msg) msg.textContent = 'Request submitted. Doctor will review it.';
-        setTimeout(() => window.location.reload(), 700);
+        if (msg) {
+            msg.style.color = '#166534';
+            msg.textContent = '✅ Concern sent. Doctor has been notified.';
+        }
+        setTimeout(() => window.location.reload(), 1500);
     } catch (e) {
-        if (msg) msg.textContent = `Error: ${e.message}`;
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = `Error: ${e.message}`;
+        }
     }
 }
+</script>
 
+{% if chart_sessions and chart_sessions|length > 1 %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
 (function() {
     var sessions = {{ chart_sessions | tojson }};
     var labels = sessions.map(function(s) {

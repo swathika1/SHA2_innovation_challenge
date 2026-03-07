@@ -296,6 +296,7 @@ def create_adaptive_suggestion(
     source: str,
     reason: str,
     suggested_change: str,
+    doctor_id_override=None,
     severity: str = "medium",
     session_id=None,
     workout_id=None,
@@ -306,7 +307,7 @@ def create_adaptive_suggestion(
     app_confidence=None,
 ):
     """Create a pending adaptive rehab suggestion for doctor review."""
-    doctor_id = get_primary_doctor_id_for_patient(patient_id)
+    doctor_id = doctor_id_override or get_primary_doctor_id_for_patient(patient_id)
     if not doctor_id:
         return None
 
@@ -1672,6 +1673,17 @@ def clinician_dashboard():
         ORDER BY aps.created_at DESC
         LIMIT 20
     ''', (session['user_id'],))
+
+    pending_patient_concerns = query_db('''
+        SELECT aps.*, u.name AS patient_name
+        FROM adaptive_plan_suggestions aps
+        JOIN users u ON aps.patient_id = u.id
+        WHERE aps.doctor_id = ?
+          AND aps.status = 'pending'
+          AND aps.source = 'patient_feedback'
+        ORDER BY aps.created_at DESC
+        LIMIT 20
+    ''', (session['user_id'],))
     
     return render_template('clinician/dashboard.html',
                          patients=patients,
@@ -1679,7 +1691,8 @@ def clinician_dashboard():
                          needs_attention=needs_attention,
                          avg_adherence=round(avg_adherence),
                          upcoming_appointments=len(appointments) if appointments else 0,
-                         pending_adaptive_suggestions=pending_adaptive_suggestions if pending_adaptive_suggestions else [])
+                         pending_adaptive_suggestions=pending_adaptive_suggestions if pending_adaptive_suggestions else [],
+                         pending_patient_concerns=pending_patient_concerns if pending_patient_concerns else [])
 
 
 @app.route('/api/patient/plan-feedback', methods=['POST'])
@@ -1705,6 +1718,7 @@ def api_patient_plan_feedback():
     ''', (workout_id, session['user_id']), one=True)
     if not workout:
         return jsonify({'ok': False, 'error': 'Workout not found'}), 404
+    workout = dict(workout)
 
     # Suggest lighter progression when difficulty is high.
     suggested_sets = max(1, int(workout['sets']) - 1) if difficulty >= 8 else int(workout['sets'])
@@ -1717,11 +1731,35 @@ def api_patient_plan_feedback():
         f"; frequency {suggested_frequency}."
     )
 
+    target_doctor_id = workout.get('assigned_by_doctor_id')
+    if not target_doctor_id:
+        # Legacy rows may not have workout ownership; pick most recently assigned doctor on this patient's active plan.
+        owner_row = query_db('''
+            SELECT assigned_by_doctor_id
+            FROM workouts
+            WHERE patient_id = ?
+              AND is_active = 1
+              AND assigned_by_doctor_id IS NOT NULL
+            ORDER BY id DESC
+            LIMIT 1
+        ''', (session['user_id'],), one=True)
+        owner_row = dict(owner_row) if owner_row else None
+        if owner_row and owner_row.get('assigned_by_doctor_id'):
+            target_doctor_id = owner_row.get('assigned_by_doctor_id')
+
+    if target_doctor_id and not workout.get('assigned_by_doctor_id'):
+        execute_db('''
+            UPDATE workouts
+            SET assigned_by_doctor_id = ?
+            WHERE id = ? AND patient_id = ?
+        ''', (target_doctor_id, workout_id, session['user_id']))
+
     suggestion_id = create_adaptive_suggestion(
         patient_id=session['user_id'],
         source='patient_feedback',
         reason=reason,
         suggested_change=suggested_change,
+        doctor_id_override=target_doctor_id,
         severity='high' if difficulty >= 8 else 'medium',
         workout_id=workout_id,
         suggested_sets=suggested_sets,
@@ -2075,9 +2113,9 @@ def plan_editor():
             if ex_id not in existing_ids:
                 execute_db('''
                     INSERT INTO workouts
-                    (patient_id, exercise_id, sets, reps, frequency, instructions, is_active)
-                    VALUES (?, ?, 3, 10, 'Daily', '', 1)
-                ''', (pat['id'], ex_id))
+                    (patient_id, exercise_id, assigned_by_doctor_id, sets, reps, frequency, instructions, is_active)
+                    VALUES (?, ?, ?, 3, 10, 'Daily', '', 1)
+                ''', (pat['id'], ex_id, get_primary_doctor_id_for_patient(pat['id'])))
 
         # 4. Now fetch the full workout list
         workouts = query_db('''
@@ -2117,6 +2155,12 @@ def api_plan_add_exercise():
     if not patient_id or not exercise_id:
         return jsonify({'error': 'Missing patient_id or exercise_id'}), 400
 
+    # Ensure this doctor is linked to the patient they are editing.
+    execute_db(
+        'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
+        (session['user_id'], patient_id)
+    )
+
     # Also ensure the exercise is tracked in patient_exercises
     execute_db('''
         INSERT OR IGNORE INTO patient_exercises (patient_id, exercise_id, enabled)
@@ -2130,9 +2174,9 @@ def api_plan_add_exercise():
 
     execute_db('''
         INSERT INTO workouts
-        (patient_id, exercise_id, sets, reps, frequency, instructions)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (patient_id, exercise_id, sets, reps, frequency, instructions))
+        (patient_id, exercise_id, assigned_by_doctor_id, sets, reps, frequency, instructions)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (patient_id, exercise_id, session['user_id'], sets, reps, frequency, instructions))
 
     # Return the newly-created workout
     new_w = query_db('''
@@ -2158,14 +2202,23 @@ def api_plan_update_workout(workout_id):
     frequency = data.get('frequency')
     instructions = data.get('instructions')
 
+    # Resolve patient and enforce doctor-patient link for ownership routing.
+    workout_row = query_db('SELECT patient_id FROM workouts WHERE id = ?', (workout_id,), one=True)
+    if workout_row:
+        execute_db(
+            'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
+            (session['user_id'], workout_row['patient_id'])
+        )
+
     execute_db('''
         UPDATE workouts
         SET sets = COALESCE(?, sets),
             reps = COALESCE(?, reps),
             frequency = COALESCE(?, frequency),
-            instructions = COALESCE(?, instructions)
+            instructions = COALESCE(?, instructions),
+            assigned_by_doctor_id = ?
         WHERE id = ?
-    ''', (sets, reps, frequency, instructions, workout_id))
+    ''', (sets, reps, frequency, instructions, session['user_id'], workout_id))
 
     return jsonify({'ok': True})
 
@@ -2177,6 +2230,11 @@ def api_plan_remove_workout(workout_id):
     """Soft-delete a workout from a patient's plan and disable in patient_exercises"""
     # Get the exercise_id and patient_id before deactivating
     w = query_db('SELECT patient_id, exercise_id FROM workouts WHERE id = ?', (workout_id,), one=True)
+    if w:
+        execute_db(
+            'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
+            (session['user_id'], w['patient_id'])
+        )
     execute_db('UPDATE workouts SET is_active = 0 WHERE id = ?', (workout_id,))
     # Also disable in patient_exercises so it stays removed
     if w:
@@ -3882,6 +3940,7 @@ def ensure_tables_exist():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             patient_id INTEGER NOT NULL,
             exercise_id INTEGER NOT NULL,
+            assigned_by_doctor_id INTEGER,
             sets INTEGER DEFAULT 3,
             reps INTEGER DEFAULT 10,
             frequency TEXT DEFAULT 'Daily',
@@ -3889,7 +3948,8 @@ def ensure_tables_exist():
             is_active INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (patient_id) REFERENCES users(id),
-            FOREIGN KEY (exercise_id) REFERENCES exercises(id)
+            FOREIGN KEY (exercise_id) REFERENCES exercises(id),
+            FOREIGN KEY (assigned_by_doctor_id) REFERENCES users(id)
         );
         
         CREATE TABLE IF NOT EXISTS sessions (
@@ -4015,6 +4075,7 @@ def ensure_tables_exist():
         ("sessions", "session_group_id", "TEXT"),
         ("sessions", "started_at", "TIMESTAMP"),
         ("sessions", "completed_perc", "REAL DEFAULT 0"),
+        ("workouts", "assigned_by_doctor_id", "INTEGER"),
     ]
     for table, col, col_type in migrations:
         try:
