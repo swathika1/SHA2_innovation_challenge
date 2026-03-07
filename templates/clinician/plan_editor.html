@@ -61,7 +61,7 @@
                  data-exercise-id="{{ exercise.id }}"
                  data-exercise-name="{{ exercise.name }}"
                  data-exercise-category="{{ exercise.category }}"
-                 ondragstart="handleDragStart(event, {{ exercise.id }}, '{{ exercise.name }}', '{{ exercise.category }}')"
+                 ondragstart='handleDragStart(event, {{ exercise.id }}, {{ exercise.name|tojson }}, {{ exercise.category|tojson }})'
                  style="display:flex; align-items:center; gap:10px;">
                 {% set ex_key = exercise.name|lower|replace(' ', '_') %}
                 <img src="{{ url_for('static', filename='gifs/' ~ ex_key ~ '.svg') }}"
@@ -82,11 +82,17 @@
         <div class="pe-page-header">
             <h2>All Patient Plans</h2>
             <p>View and manage rehab plans for every patient under your care.</p>
+            <div class="pe-patient-search-wrap">
+                <div class="pe-patient-search-shell">
+                    <span class="pe-patient-search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+                    <input type="text" id="patientSearch" class="pe-patient-search" placeholder="Search patient by ID or name..." oninput="filterPatients()">
+                </div>
+            </div>
         </div>
 
         {% if patients %}
         {% for patient in patients %}
-        <div class="pe-patient-card" id="patient-{{ patient.id }}">
+        <div class="pe-patient-card" id="patient-{{ patient.id }}" data-patient-id="{{ patient.id }}" data-patient-name="{{ patient.name|lower }}">
             <!-- Patient header -->
             <div class="pe-patient-header">
                 <div class="pe-patient-info">
@@ -170,6 +176,20 @@
                 <span><i class="fa-solid fa-download"></i> Drop exercise here to add to plan</span>
             </div>
 
+            <div class="pe-add-row" id="addRow-{{ patient.id }}" style="display:none;">
+                <select class="pe-add-select" id="addExerciseSelect-{{ patient.id }}">
+                    <option value="">Select an exercise to add...</option>
+                    {% for exercise in exercises %}
+                    <option value="{{ exercise.id }}" data-name="{{ exercise.name }}" data-category="{{ exercise.category }}">
+                        {{ exercise.name }} ({{ exercise.category }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <button class="btn pe-btn-add" onclick="addSelectedExercise({{ patient.id }})">
+                    <i class="fa-solid fa-plus"></i> Add Exercise
+                </button>
+            </div>
+
             <!-- Save / Cancel (visible in edit mode) -->
             <div class="pe-save-row" id="saveRow-{{ patient.id }}" style="display:none;">
                 <button class="btn btn-success pe-btn-save" onclick="saveChanges({{ patient.id }})">
@@ -250,8 +270,48 @@
 /* ---------- RIGHT: Patient plans column ---------- */
 .pe-plans { min-width: 0; }
 .pe-page-header { margin-bottom: 20px; }
-.pe-page-header h2 { margin-bottom: 2px; }
-.pe-page-header p  { color: #666; font-size: 0.92rem; margin: 0; }
+.pe-page-header h2 { margin-bottom: 2px; color: #fff; }
+.pe-page-header p  { color: rgba(255,255,255,0.9); font-size: 0.92rem; margin: 0; }
+
+.pe-patient-search-wrap {
+    margin-top: 12px;
+    max-width: 520px;
+}
+.pe-patient-search-shell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(135deg, #f8fbff, #eef4ff);
+    border: 1.5px solid #dbeafe;
+    border-radius: 12px;
+    padding: 0 12px;
+    box-shadow: 0 2px 10px rgba(37, 99, 235, 0.08);
+    transition: all .2s ease;
+}
+.pe-patient-search-shell:focus-within {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.13), 0 8px 24px rgba(37, 99, 235, 0.15);
+    transform: translateY(-1px);
+}
+.pe-patient-search-icon {
+    color: #3b82f6;
+    font-size: 0.92rem;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.pe-patient-search {
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 11px 0;
+    font-size: 0.92rem;
+    color: #1f2937;
+    outline: none;
+}
+.pe-patient-search::placeholder {
+    color: #94a3b8;
+}
 
 /* ---------- Patient card ---------- */
 .pe-patient-card {
@@ -425,6 +485,7 @@ function enterEdit(patientId) {
     card.querySelectorAll('.pe-inline-input').forEach(function(el){ el.style.display = ''; });
     card.querySelectorAll('.pe-col-actions').forEach(function(el){ el.style.display = ''; });
     document.getElementById('dropZone-' + patientId).style.display = '';
+    document.getElementById('addRow-' + patientId).style.display = 'flex';
     document.getElementById('saveRow-' + patientId).style.display  = '';
 }
 
@@ -440,6 +501,7 @@ function cancelEdit(patientId) {
     card.querySelectorAll('.pe-inline-input').forEach(function(el){ el.style.display = 'none'; });
     card.querySelectorAll('.pe-col-actions').forEach(function(el){ el.style.display = 'none'; });
     document.getElementById('dropZone-' + patientId).style.display = 'none';
+    document.getElementById('addRow-' + patientId).style.display = 'none';
     document.getElementById('saveRow-' + patientId).style.display  = 'none';
 
     card.querySelectorAll('.pe-workout-row').forEach(function(row) {
@@ -451,6 +513,29 @@ function cancelEdit(patientId) {
             }
         });
     });
+}
+
+function filterPatients() {
+    var query = document.getElementById('patientSearch').value.toLowerCase().trim();
+    document.querySelectorAll('.pe-patient-card[data-patient-id]').forEach(function(card) {
+        var id = String(card.dataset.patientId || '').toLowerCase();
+        var name = String(card.dataset.patientName || '').toLowerCase();
+        card.style.display = (!query || id.indexOf(query) >= 0 || name.indexOf(query) >= 0) ? '' : 'none';
+    });
+}
+
+function addSelectedExercise(patientId) {
+    var select = document.getElementById('addExerciseSelect-' + patientId);
+    if (!select || !select.value) {
+        showToast('Select an exercise first', 'error');
+        return;
+    }
+    var option = select.options[select.selectedIndex];
+    var exerciseId = Number(select.value);
+    var exerciseName = option.dataset.name || option.textContent;
+    var category = option.dataset.category || '';
+    addExerciseToPatient(patientId, exerciseId, exerciseName, category);
+    select.value = '';
 }
 
 /* Library filter */

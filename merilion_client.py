@@ -190,10 +190,6 @@ def translate_text_sync(text: str, target_language: str) -> str:
 
 def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm", vocab_hint: str = "") -> str:
     """Transcribe audio using MERaLiON /process/transcribe endpoint."""
-    headers = {
-        "Authorization": f"Bearer {MERILION_API_KEY}",
-        "Accept": "application/json"
-    }
     # Use correct MIME type based on filename extension
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "webm"
     mime_map = {"webm": "audio/webm", "ogg": "audio/ogg", "mp4": "audio/mp4",
@@ -206,17 +202,57 @@ def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm", vocab_hin
         form_data["prompt"] = vocab_hint  # vocabulary hint for domain-specific recognition
 
     print(f"[TRANSCRIBE] Sending {len(audio_bytes)} bytes ({content_type}) to Meralion")
-    r = requests.post(
-        f"{MERILION_BASE_URL}/process/transcribe",
-        files=files,
-        data=form_data if form_data else None,
-        headers=headers,
-        timeout=30
-    )
-    print(f"[TRANSCRIBE] Response status: {r.status_code}")
-    r.raise_for_status()
-    data = r.json()
-    print(f"[TRANSCRIBE] Response data: {data}")
+
+    api_key = (MERILION_API_KEY or "").strip()
+    if api_key.lower().startswith("bearer "):
+        api_key = api_key[7:].strip()
+
+    base = (MERILION_BASE_URL or "").rstrip("/")
+    url_candidates = [
+        f"{base}/process/transcribe",
+        f"{base}/transcribe",
+    ]
+    header_candidates = [
+        {"x-api-key": api_key, "Accept": "application/json"},
+        {"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+    ]
+
+    errors = []
+    data = None
+    for url in url_candidates:
+        for headers in header_candidates:
+            try:
+                r = requests.post(
+                    url,
+                    files=files,
+                    data=form_data if form_data else None,
+                    headers=headers,
+                    timeout=30
+                )
+                print(f"[TRANSCRIBE] URL={url} auth={list(headers.keys())[0]} status={r.status_code}")
+                if r.status_code >= 400:
+                    body_preview = (r.text or "")[:250]
+                    errors.append(f"{url} [{list(headers.keys())[0]}] -> HTTP {r.status_code}: {body_preview}")
+                    continue
+
+                try:
+                    data = r.json()
+                except Exception:
+                    body_preview = (r.text or "")[:250]
+                    errors.append(f"{url} [{list(headers.keys())[0]}] -> Non-JSON: {body_preview}")
+                    continue
+
+                print(f"[TRANSCRIBE] Response data: {data}")
+                break
+            except Exception as e:
+                errors.append(f"{url} [{list(headers.keys())[0]}] -> {e}")
+                continue
+        if data is not None:
+            break
+
+    if data is None:
+        raise RuntimeError("Meralion transcribe failed: " + " | ".join(errors[-4:]))
+
     # Try common response field names
     transcript = (
         data.get("transcript") or

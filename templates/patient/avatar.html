@@ -1328,6 +1328,10 @@
         try {
             const res = await fetch('/api/chat/transcribe', { method: 'POST', body: formData });
             const data = await res.json();
+            if (!res.ok) {
+                const detail = (data && (data.detail || data.error)) ? ` (${data.detail || data.error})` : '';
+                throw new Error(`Transcription request failed: ${res.status}${detail}`);
+            }
             const spokenText = (data.transcript || '').trim();
             if (!spokenText) {
                 voiceNote.textContent = 'No speech captured. Tap microphone to try again.';

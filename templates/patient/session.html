@@ -325,6 +325,45 @@
     .btn-prog-next.personalized-ready { background:linear-gradient(135deg,#10b981,#059669); }
     .btn-prog-next.personalized-ready:hover { box-shadow:0 9px 26px rgba(16,185,129,.45); }
 
+    .assigned-today-card {
+        background: #fff;
+        border: 2px solid #d1fae5;
+        border-radius: 16px;
+        padding: 22px;
+        margin-bottom: 18px;
+        box-shadow: 0 6px 22px rgba(16,185,129,.12);
+    }
+    .assigned-today-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+    .assigned-today-head h3 { margin: 0; font-size: 1.1rem; color: #065f46; }
+    .assigned-today-pill {
+        font-size: .75rem;
+        background: #ecfdf5;
+        color: #065f46;
+        border: 1px solid #a7f3d0;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-weight: 700;
+    }
+    .assigned-task-list { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 8px; }
+    .assigned-task-list li {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: .88rem;
+        color: #334155;
+        font-weight: 600;
+    }
+    .testing-section { margin-top: 8px; }
+    .testing-section-title { font-size: .86rem; color: #64748b; font-weight: 700; margin: 0 0 10px; }
+
     /* ===== Exercise Step (Step 2) header ===== */
     .exercise-step-header { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
     .btn-back-prog {
@@ -759,9 +798,30 @@
     <!-- ── STEP 1: Program Selection ── -->
     <div id="stepProgram" class="program-select-wrap">
         <div class="prog-title-row">
-            <h2>🏥 Choose Your Rehabilitation Program</h2>
+            <h2>🏥 Start Today&apos;s Session</h2>
         </div>
-        <p class="prog-tagline">Select the program that matches your care plan and condition</p>
+        <p class="prog-tagline">Your doctor-assigned tasks are shown first. Pipeline cards below are for testing.</p>
+
+        <div class="assigned-today-card">
+            <div class="assigned-today-head">
+                <h3><i class="fa-solid fa-clipboard-check"></i> Doctor Assigned Tasks</h3>
+                <span class="assigned-today-pill">{{ assigned_exercises|length }} exercise{{ '' if assigned_exercises|length == 1 else 's' }}</span>
+            </div>
+            <ul class="assigned-task-list">
+                {% for e in assigned_exercises %}
+                <li>{{ e.exercise_name }}</li>
+                {% endfor %}
+                {% if not assigned_exercises %}
+                <li style="color:#888; font-weight:500;">No assigned exercises yet. Contact your doctor.</li>
+                {% endif %}
+            </ul>
+            <button class="btn-prog-next ready personalized-ready" onclick="startAssignedToday()" {% if not assigned_exercises %}disabled style="opacity:.5;pointer-events:none;"{% endif %}>
+                <i class="fa-solid fa-play"></i> START
+            </button>
+        </div>
+
+        <div class="testing-section">
+            <p class="testing-section-title">Testing Pipelines (optional)</p>
 
         <div class="program-grid">
 
@@ -816,6 +876,8 @@
 
         </div>
 
+        </div>
+
         <button class="btn-prog-next" id="btnNextToExercise" onclick="goToExerciseStep()">
             Select a program above to continue
         </button>
@@ -863,7 +925,7 @@
                    oninput="document.getElementById('painBeforeVal').textContent=this.value">
         </div>
 
-        <button class="btn-start-session" onclick="startSession()"><i class="fa-solid fa-play"></i> Start Session</button>
+        <button class="btn-start-session" onclick="startSession()"><i class="fa-solid fa-play"></i> START</button>
     </div>
 
 </div>
@@ -1223,6 +1285,19 @@ function closeExerciseDemo() {
 let selectedExerciseIds = [];
 let selectedProgram = null;
 
+function selectAllCurrentExercises() {
+    document.querySelectorAll('#exerciseSelector .ex-card').forEach(function(card) {
+        card.classList.add('checked');
+    });
+    updateSelectedExercisesList();
+}
+
+function startAssignedToday() {
+    selectProgram('personalized');
+    goToExerciseStep();
+    selectAllCurrentExercises();
+}
+
 /* ===================== PROGRAM DEFINITIONS ===================== */
 const PROGRAM_DEFINITIONS = {
     kimore: {
@@ -1443,16 +1518,12 @@ function speakRepSetAlert(repInfo) {
     if (!audioEnabled || !repInfo) return;
     const lang = getLanguageName();
     if (repInfo.rep_incremented) {
-        // When set_completed fires, rep_now is reset to 0 by backend — speak rep_target instead
-        const repNum = repInfo.set_completed ? (repInfo.rep_target || 1) : (repInfo.rep_now || 1);
+        const repNum = repInfo.rep_now || 1;
         const fn = REP_ALERT[lang] || REP_ALERT.English;
         queueSpeech(fn(repNum));
     }
     if (repInfo.set_completed) {
-        // Backend increments set_now after completion but caps at set_target on exercise_completed
-        // When exercise_completed: set_now = set_target (capped), so completed set = set_now
-        // When NOT exercise_completed: set_now = old+1, so completed set = set_now - 1
-        const setNum = repInfo.exercise_completed ? repInfo.set_now : (repInfo.set_now || 2) - 1;
+        const setNum = (repInfo.set_now || 2) - 1; // set_now was already incremented by backend
         const fn = SET_ALERT[lang] || SET_ALERT.English;
         queueSpeech(fn(setNum));
     }
@@ -1570,9 +1641,13 @@ function drawSkeleton(landmarks) {
     for (let gx = 20; gx < W; gx += 24) for (let gy = 10; gy < H; gy += 24) {
         ctx.beginPath(); ctx.arc(gx, gy, 1, 0, Math.PI*2); ctx.fill();
     }
-    // Use ALL 33 landmarks — bounding box from all valid points
-    const xs = landmarks.map(l => l[0]).filter(v => v > 0 && v < 1);
-    const ys = landmarks.map(l => l[1]).filter(v => v > 0 && v < 1);
+    // Use ALL landmarks and support both normalized coords (0..1) and pixel coords
+    const xs = landmarks
+        .map(l => Number(l?.[0]))
+        .filter(v => Number.isFinite(v) && v > 0);
+    const ys = landmarks
+        .map(l => Number(l?.[1]))
+        .filter(v => Number.isFinite(v) && v > 0);
     if (xs.length < 4) return;
     const minX = Math.min(...xs), maxX = Math.max(...xs);
     const minY = Math.min(...ys), maxY = Math.max(...ys);
@@ -1762,11 +1837,11 @@ function updatePipelineStatus(pipeline, status, score) {
 /* ===================== DUAL PIPELINE RESULT PROCESSORS ===================== */
 function processKimoreResult(out) {
     if (!out) return;
+    if (Array.isArray(out.landmarks) && out.landmarks.length > 0) {
+        drawSkeleton(out.landmarks);
+    }
     updateRepUIFromBackend(out);
     if (out.exercise_name) updateExerciseUI(out.exercise_name);
-
-    // ── Draw skeleton directly from response landmarks ──
-    if (out.landmarks && out.landmarks.length > 0) drawSkeleton(out.landmarks);
 
     // Always track latest non-zero score (for badge display)
     const rawK = out.frame_score != null ? Number(out.frame_score) : 0;
@@ -1819,8 +1894,9 @@ function processKimoreResult(out) {
 }
 function processKeraalResult(out) {
     if (!out) return;
-    // ── Draw skeleton directly from response landmarks ──
-    if (out.landmarks && out.landmarks.length > 0) drawSkeleton(out.landmarks);
+    if (Array.isArray(out.landmarks) && out.landmarks.length > 0) {
+        drawSkeleton(out.landmarks);
+    }
     // Track latest non-zero score
     const keraalScore = out.frame_score != null ? Number(out.frame_score) : 0;
     if (keraalScore > 0) lastKeraalScore = keraalScore;
@@ -2172,9 +2248,7 @@ function updateRepUIFromBackend(out) {
         if (r.rep_incremented) {
             repIncremented = true;
             console.log('  🔥🔥🔥 REP INCREMENTED! 🔥🔥🔥');
-            // When set_completed fires, rep_now is reset to 0 — show rep_target instead
-            const displayRep = r.set_completed ? targetReps : currentRep;
-            addFeedback('success', '✅ Rep ' + displayRep + ' completed!');
+            addFeedback('success', '✅ Rep ' + currentRep + ' completed!');
         }
         
         if (r.set_completed) {
@@ -2202,12 +2276,10 @@ function updateRepUIFromBackend(out) {
     // In that case, currentRep has been reset to 0, so we must NOT update the dict with it
     
     if (setCompleted) {
-        // Set just completed: save this set with all its reps (targetReps)
-        // Backend increments set_now after completion, but caps it at set_target on exercise complete
-        // So the finished set number is: use oldSet (captured before update) as the completed set
-        const completedSetNum = oldSet;  // This was the set number BEFORE backend incremented
-        setsCompletedDict[String(completedSetNum)] = targetReps;
-        console.log(`  🎯 SET COMPLETED: setsCompletedDict['${completedSetNum}'] = ${targetReps}`);
+        // Set just completed: save the PREVIOUS set with all its reps (targetReps)
+        // currentSet was already incremented, so the finished set is currentSet - 1
+        setsCompletedDict[String(currentSet - 1)] = targetReps;
+        console.log(`  🎯 SET COMPLETED: setsCompletedDict['${currentSet - 1}'] = ${targetReps}`);
     } else if (repIncremented) {
         // Mid-set: A new rep was counted, update the current set
         setsCompletedDict[String(currentSet)] = currentRep;
@@ -2220,27 +2292,21 @@ function updateRepUIFromBackend(out) {
     updateExerciseSteps();
     updateSessionProgress();
     
-    // ✅ SET COMPLETED - Show alert (speech handled by speakRepSetAlert in processKimoreResult/processKeraalResult)
+    // ✅ SET COMPLETED - Show alert and speak
     if (setCompleted) {
-        const setMsg = 'Set ' + oldSet + ' complete! Excellent work!';
+        const setMsg = 'Set ' + (currentSet-1) + ' complete! Excellent work!';
         console.log('🎯 SET ALERT:', setMsg);
         addFeedback('success', '🎯 ' + setMsg);
-        // Voice is handled by speakRepSetAlert — no duplicate queueSpeech here
+        queueSpeech(setMsg);
     }
     
-    // ✅ EXERCISE COMPLETED - Show alert (speech handled by speakRepSetAlert)
+    // ✅ EXERCISE COMPLETED - Show alert and speak
     if (exerciseCompleted && !currentExerciseCompleted) {
         currentExerciseCompleted = true;  // Mark as completed to prevent duplicate triggers
-        const exerciseMsg = 'Exercise completed! Fantastic effort!';
+        const exerciseMsg = 'Exercise completed! Fantastic effort! Go to the next exercise!';
         console.log('🏆 EXERCISE ALERT:', exerciseMsg);
         addFeedback('success', '🏆 ' + exerciseMsg);
-        // Voice is handled by speakRepSetAlert — no duplicate queueSpeech here
-        
-        // Force ALL sets to full completion so save captures 100%
-        for (let s = 1; s <= targetSets; s++) {
-            setsCompletedDict[String(s)] = targetReps;
-        }
-        console.log('🏆 Forced setsCompletedDict to 100%:', Object.assign({}, setsCompletedDict));
+        queueSpeech(exerciseMsg);
         
         // Automatically move to next exercise after a brief delay
         setTimeout(function() {
@@ -2726,11 +2792,8 @@ async function saveCurrentExercise() {
         ? Math.round(allScores.reduce(function(a, b) { return a + b; }, 0) / allScores.length) : 0;
     const setsReq = {};
     for (let i = 1; i <= w.sets; i++) setsReq[String(i)] = w.reps;
-    // Fill missing sets: if exercise was completed, use full reps; otherwise 0
     for (let i = 1; i <= w.sets; i++) {
-        if (!(String(i) in setsCompletedDict)) {
-            setsCompletedDict[String(i)] = currentExerciseCompleted ? w.reps : 0;
-        }
+        if (!(String(i) in setsCompletedDict)) setsCompletedDict[String(i)] = 0;
     }
     const exStartISO = new Date(exerciseStartTs).toISOString();
     const exEndISO = new Date().toISOString();
