@@ -274,6 +274,89 @@ def get_current_user():
         return query_db('SELECT * FROM users WHERE id = ?', (session['user_id'],), one=True)
     return None
 
+
+def get_primary_doctor_id_for_patient(patient_id: int):
+    """Return the assigned doctor_id for a patient (if any)."""
+    row = query_db(
+        '''
+        SELECT doctor_id
+        FROM doctor_patient
+        WHERE patient_id = ?
+        ORDER BY assigned_date DESC, id DESC
+        LIMIT 1
+        ''',
+        (patient_id,),
+        one=True,
+    )
+    return row['doctor_id'] if row else None
+
+
+def create_adaptive_suggestion(
+    patient_id: int,
+    source: str,
+    reason: str,
+    suggested_change: str,
+    severity: str = "medium",
+    session_id=None,
+    workout_id=None,
+    suggested_sets=None,
+    suggested_reps=None,
+    suggested_frequency=None,
+    patient_note: str = "",
+    app_confidence=None,
+):
+    """Create a pending adaptive rehab suggestion for doctor review."""
+    doctor_id = get_primary_doctor_id_for_patient(patient_id)
+    if not doctor_id:
+        return None
+
+    # Avoid flooding duplicates from repeated auto triggers
+    duplicate = query_db(
+        '''
+        SELECT id
+        FROM adaptive_plan_suggestions
+        WHERE patient_id = ?
+          AND doctor_id = ?
+          AND source = ?
+          AND reason = ?
+          AND status = 'pending'
+        ORDER BY created_at DESC
+        LIMIT 1
+        ''',
+        (patient_id, doctor_id, source, reason),
+        one=True,
+    )
+    if duplicate:
+        return duplicate['id']
+
+    suggestion_id = execute_db(
+        '''
+        INSERT INTO adaptive_plan_suggestions (
+            patient_id, doctor_id, session_id, workout_id,
+            source, reason, suggested_change, severity,
+            suggested_sets, suggested_reps, suggested_frequency,
+            patient_note, app_confidence, status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        ''',
+        (
+            patient_id,
+            doctor_id,
+            session_id,
+            workout_id,
+            source,
+            reason,
+            suggested_change,
+            severity,
+            suggested_sets,
+            suggested_reps,
+            suggested_frequency,
+            patient_note,
+            app_confidence,
+        ),
+    )
+    return suggestion_id
+
 # ── Edge-TTS voice maps (Microsoft Neural voices) ──
 # Male voices for avatar & chatbot
 EDGE_VOICE_MAP_MALE = {
@@ -783,12 +866,13 @@ def patient_dashboard():
             one=True
         )
     
-    # Get patient's workouts — prefer workouts table, fall back to patient_exercises
+    # Get patient's workouts — only exercises actively assigned/enabled for this patient
     workouts = query_db('''
         SELECT w.*, e.name as exercise_name, e.description
         FROM workouts w
         JOIN exercises e ON w.exercise_id = e.id
-        WHERE w.patient_id = ? AND w.is_active = 1
+        JOIN patient_exercises pe ON pe.patient_id = w.patient_id AND pe.exercise_id = w.exercise_id
+        WHERE w.patient_id = ? AND w.is_active = 1 AND pe.enabled = 1
     ''', (session['user_id'],))
 
     # If no rows in workouts, build the list from patient_exercises (condition-based)
@@ -934,6 +1018,15 @@ def patient_dashboard():
         ORDER BY cr.requested_at DESC
     ''', (session['user_id'],))
 
+    adaptive_suggestions = query_db('''
+        SELECT aps.*, u.name AS doctor_name
+        FROM adaptive_plan_suggestions aps
+        LEFT JOIN users u ON aps.doctor_id = u.id
+        WHERE aps.patient_id = ?
+        ORDER BY aps.created_at DESC
+        LIMIT 10
+    ''', (session['user_id'],))
+
     return render_template('patient/dashboard.html',
                             user=user,
                             patient=patient_info,
@@ -948,6 +1041,7 @@ def patient_dashboard():
                             today_completed=today_completed,
                             today_session_id=today_session_id,
                             today_perc=today_perc,
+                            adaptive_suggestions=adaptive_suggestions if adaptive_suggestions else [],
                             chat_patient_id=None)
 
 
@@ -960,7 +1054,8 @@ def rehab_session():
         SELECT w.*, e.name as exercise_name, e.description, e.category
         FROM workouts w
         JOIN exercises e ON w.exercise_id = e.id
-        WHERE w.patient_id = ? AND w.is_active = 1
+        JOIN patient_exercises pe ON pe.patient_id = w.patient_id AND pe.exercise_id = w.exercise_id
+        WHERE w.patient_id = ? AND w.is_active = 1 AND pe.enabled = 1
     ''', (session['user_id'],))
 
     # Get exercises assigned to this patient via patient_exercises
@@ -1568,13 +1663,154 @@ def clinician_dashboard():
         ORDER BY a.appointment_date, a.appointment_time
         LIMIT 5
     ''', (session['user_id'],))
+
+    pending_adaptive_suggestions = query_db('''
+        SELECT aps.*, u.name AS patient_name
+        FROM adaptive_plan_suggestions aps
+        JOIN users u ON aps.patient_id = u.id
+        WHERE aps.doctor_id = ? AND aps.status = 'pending'
+        ORDER BY aps.created_at DESC
+        LIMIT 20
+    ''', (session['user_id'],))
     
     return render_template('clinician/dashboard.html',
                          patients=patients,
                          total_patients=total_patients,
                          needs_attention=needs_attention,
                          avg_adherence=round(avg_adherence),
-                         upcoming_appointments=len(appointments) if appointments else 0)
+                         upcoming_appointments=len(appointments) if appointments else 0,
+                         pending_adaptive_suggestions=pending_adaptive_suggestions if pending_adaptive_suggestions else [])
+
+
+@app.route('/api/patient/plan-feedback', methods=['POST'])
+@login_required
+@role_required('patient')
+def api_patient_plan_feedback():
+    """Patient submits difficulty/error feedback to request plan adaptation."""
+    data = request.get_json(force=True) or {}
+
+    workout_id = data.get('workout_id')
+    issue_type = (data.get('issue_type') or 'too_hard').strip()
+    difficulty = int(data.get('difficulty', 7))
+    note = (data.get('note') or '').strip()
+
+    if not workout_id:
+        return jsonify({'ok': False, 'error': 'workout_id is required'}), 400
+
+    workout = query_db('''
+        SELECT w.*, e.name AS exercise_name
+        FROM workouts w
+        JOIN exercises e ON w.exercise_id = e.id
+        WHERE w.id = ? AND w.patient_id = ?
+    ''', (workout_id, session['user_id']), one=True)
+    if not workout:
+        return jsonify({'ok': False, 'error': 'Workout not found'}), 404
+
+    # Suggest lighter progression when difficulty is high.
+    suggested_sets = max(1, int(workout['sets']) - 1) if difficulty >= 8 else int(workout['sets'])
+    suggested_reps = max(5, int(workout['reps']) - 2) if difficulty >= 7 else int(workout['reps'])
+    suggested_frequency = '3x per week' if difficulty >= 8 else workout['frequency']
+
+    reason = f"Patient reported '{issue_type}' (difficulty {difficulty}/10)"
+    suggested_change = (
+        f"{workout['exercise_name']}: adjust to {suggested_sets} sets × {suggested_reps} reps"
+        f"; frequency {suggested_frequency}."
+    )
+
+    suggestion_id = create_adaptive_suggestion(
+        patient_id=session['user_id'],
+        source='patient_feedback',
+        reason=reason,
+        suggested_change=suggested_change,
+        severity='high' if difficulty >= 8 else 'medium',
+        workout_id=workout_id,
+        suggested_sets=suggested_sets,
+        suggested_reps=suggested_reps,
+        suggested_frequency=suggested_frequency,
+        patient_note=note,
+        app_confidence=0.75,
+    )
+
+    if not suggestion_id:
+        return jsonify({'ok': False, 'error': 'No assigned doctor found for this patient'}), 400
+
+    return jsonify({'ok': True, 'suggestion_id': suggestion_id})
+
+
+@app.route('/api/adaptive-suggestions/<int:suggestion_id>/approve', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_approve_adaptive_suggestion(suggestion_id):
+    """Doctor approves app/patient adaptive plan suggestion and applies workout updates."""
+    payload = request.get_json(silent=True) or {}
+    review_note = (payload.get('review_note') or '').strip()
+
+    suggestion = query_db('''
+        SELECT * FROM adaptive_plan_suggestions
+        WHERE id = ? AND doctor_id = ?
+    ''', (suggestion_id, session['user_id']), one=True)
+
+    if not suggestion:
+        return jsonify({'ok': False, 'error': 'Suggestion not found'}), 404
+    if suggestion['status'] != 'pending':
+        return jsonify({'ok': False, 'error': 'Suggestion already reviewed'}), 400
+
+    if suggestion['workout_id']:
+        execute_db('''
+            UPDATE workouts
+            SET sets = COALESCE(?, sets),
+                reps = COALESCE(?, reps),
+                frequency = COALESCE(?, frequency)
+            WHERE id = ? AND patient_id = ?
+        ''', (
+            suggestion['suggested_sets'],
+            suggestion['suggested_reps'],
+            suggestion['suggested_frequency'],
+            suggestion['workout_id'],
+            suggestion['patient_id'],
+        ))
+
+    execute_db('''
+        UPDATE adaptive_plan_suggestions
+        SET status = 'approved',
+            reviewed_at = CURRENT_TIMESTAMP,
+            reviewed_by = ?,
+            review_note = ?
+        WHERE id = ?
+    ''', (session['user_id'], review_note, suggestion_id))
+
+    return jsonify({'ok': True})
+
+
+@app.route('/api/adaptive-suggestions/<int:suggestion_id>/reject', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_reject_adaptive_suggestion(suggestion_id):
+    """Doctor rejects adaptive plan suggestion."""
+    payload = request.get_json(silent=True) or {}
+    review_note = (payload.get('review_note') or '').strip()
+
+    suggestion = query_db('''
+        SELECT id, status
+        FROM adaptive_plan_suggestions
+        WHERE id = ? AND doctor_id = ?
+    ''', (suggestion_id, session['user_id']), one=True)
+
+    if not suggestion:
+        return jsonify({'ok': False, 'error': 'Suggestion not found'}), 404
+    if suggestion['status'] != 'pending':
+        return jsonify({'ok': False, 'error': 'Suggestion already reviewed'}), 400
+
+    execute_db('''
+        UPDATE adaptive_plan_suggestions
+        SET status = 'rejected',
+            reviewed_at = CURRENT_TIMESTAMP,
+            reviewed_by = ?,
+            review_note = ?
+        WHERE id = ?
+    ''', (session['user_id'], review_note, suggestion_id))
+
+    return jsonify({'ok': True})
 
 
 @app.route('/clinician/patient/<int:patient_id>')
@@ -3018,6 +3254,66 @@ def api_session_complete():
     except Exception as e:
         print(f"[WARN] Could not update patient stats: {e}")
 
+    # Auto-adaptive suggestion trigger (no model changes; only when wrong form is detected)
+    try:
+        patient_id = session['user_id']
+        if count > 0:
+            wrong_stats = query_db('''
+                SELECT
+                    COUNT(*) AS total_frames,
+                    SUM(CASE WHEN UPPER(COALESCE(status, '')) IN ('WRONG', 'INCORRECT') THEN 1 ELSE 0 END) AS wrong_frames
+                FROM session_frames
+                WHERE session_id = ? AND patient_id = ?
+            ''', (session_id, patient_id), one=True)
+
+            total_frames = int(wrong_stats['total_frames'] or 0) if wrong_stats else 0
+            wrong_frames = int(wrong_stats['wrong_frames'] or 0) if wrong_stats else 0
+            has_wrong_form = wrong_frames > 0
+
+            if not has_wrong_form:
+                return jsonify({'ok': True, 'session_id': session_id})
+
+            severity = None
+            reason = None
+            if avg_quality < 25 or completed_perc < 50:
+                severity = 'high'
+                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames) with low quality ({avg_quality}/100) or low completion ({completed_perc}%)'
+            elif pain_after >= 7:
+                severity = 'high'
+                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames) and high pain after session ({pain_after}/10)'
+            elif avg_quality < 40:
+                severity = 'medium'
+                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames); quality below target ({avg_quality}/100)'
+
+            if reason:
+                workout = query_db('''
+                    SELECT id, sets, reps, frequency
+                    FROM workouts
+                    WHERE patient_id = ? AND is_active = 1
+                    ORDER BY id
+                    LIMIT 1
+                ''', (patient_id,), one=True)
+
+                suggested_sets = max(1, int(workout['sets']) - 1) if workout else None
+                suggested_reps = max(5, int(workout['reps']) - 2) if workout else None
+                suggested_frequency = '3x per week' if severity == 'high' else (workout['frequency'] if workout else None)
+
+                create_adaptive_suggestion(
+                    patient_id=patient_id,
+                    source='auto_session_analysis',
+                    reason=reason,
+                    suggested_change='Reduce short-term intensity and review form with clinician approval.',
+                    severity=severity,
+                    session_id=session_id,
+                    workout_id=(workout['id'] if workout else None),
+                    suggested_sets=suggested_sets,
+                    suggested_reps=suggested_reps,
+                    suggested_frequency=suggested_frequency,
+                    app_confidence=0.82 if severity == 'high' else 0.68,
+                )
+    except Exception as e:
+        print(f"[WARN] Adaptive suggestion auto-trigger failed: {e}")
+
     return jsonify({'ok': True, 'session_id': session_id})
 
 
@@ -3208,19 +3504,34 @@ def api_chat_transcribe():
         filename = audio_file.filename or "audio.webm"
         print(f"[TRANSCRIBE] Audio size: {len(audio_bytes)} bytes, filename: {filename}")
 
+        if not audio_bytes:
+            return jsonify({"error": "Empty audio payload"}), 400
+
         transcript = ""
+        provider_errors = []
         if WHISPER_AVAILABLE:
             try:
                 transcript = whisper_transcribe(audio_bytes, filename)
                 print(f"[Whisper] Transcript: '{transcript}'")
             except Exception as whisper_err:
+                provider_errors.append(f"Whisper: {whisper_err}")
                 print(f"[Whisper] Failed, falling back to Meralion: {whisper_err}")
 
         # Fallback to Meralion if Whisper unavailable or returned empty
         if not transcript and CHATBOT_AVAILABLE:
-            print("[TRANSCRIBE] Falling back to Meralion transcription")
-            transcript = transcribe_audio(audio_bytes, filename)
-            print(f"[Meralion] Transcript: '{transcript}'")
+            try:
+                print("[TRANSCRIBE] Falling back to Meralion transcription")
+                transcript = transcribe_audio(audio_bytes, filename)
+                print(f"[Meralion] Transcript: '{transcript}'")
+            except Exception as mer_err:
+                provider_errors.append(f"Meralion: {mer_err}")
+                print(f"[Meralion] Failed: {mer_err}")
+
+        if not transcript:
+            return jsonify({
+                "error": "Transcription unavailable",
+                "detail": " ; ".join(provider_errors) if provider_errors else "No speech detected"
+            }), 502
 
         return jsonify({"transcript": transcript})
     except Exception as e:
@@ -3668,6 +3979,33 @@ def ensure_tables_exist():
             FOREIGN KEY (exercise_id) REFERENCES exercises(id),
             UNIQUE(patient_id, exercise_id)
         );
+
+        CREATE TABLE IF NOT EXISTS adaptive_plan_suggestions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            doctor_id INTEGER NOT NULL,
+            session_id INTEGER,
+            workout_id INTEGER,
+            source TEXT NOT NULL DEFAULT 'auto_session_analysis',
+            reason TEXT NOT NULL,
+            suggested_change TEXT NOT NULL,
+            severity TEXT NOT NULL DEFAULT 'medium',
+            suggested_sets INTEGER,
+            suggested_reps INTEGER,
+            suggested_frequency TEXT,
+            patient_note TEXT,
+            app_confidence REAL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at TIMESTAMP,
+            reviewed_by INTEGER,
+            review_note TEXT,
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            FOREIGN KEY (doctor_id) REFERENCES users(id),
+            FOREIGN KEY (session_id) REFERENCES sessions(id),
+            FOREIGN KEY (workout_id) REFERENCES workouts(id),
+            FOREIGN KEY (reviewed_by) REFERENCES users(id)
+        );
     ''')
     conn.commit()
     
@@ -3795,6 +4133,11 @@ def ensure_tables_exist():
     # Index for fast lookup by session
     try:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_session_frames_session ON session_frames(session_id)')
+    except Exception:
+        pass
+    try:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_adaptive_suggestions_doctor_status ON adaptive_plan_suggestions(doctor_id, status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_adaptive_suggestions_patient_created ON adaptive_plan_suggestions(patient_id, created_at)')
     except Exception:
         pass
     

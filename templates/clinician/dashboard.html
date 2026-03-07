@@ -56,6 +56,40 @@
     <a href="{{ url_for('plan_editor') }}" class="btn" style="background: #28a745;"><i class="fa-solid fa-pen-to-square"></i> Create Rehab Plan</a>
 </div>
 
+<!-- Adaptive Rehab Alerts -->
+<div class="card" style="margin-bottom: 20px;">
+    <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <span><i class="fa-solid fa-lightbulb"></i> Adaptive Rehab Suggestions</span>
+        <span style="font-size:0.82rem; background:#fff3cd; color:#856404; padding:4px 10px; border-radius:999px;">
+            {{ pending_adaptive_suggestions|length if pending_adaptive_suggestions else 0 }} pending
+        </span>
+    </div>
+    {% if pending_adaptive_suggestions %}
+        {% for s in pending_adaptive_suggestions %}
+        <div style="padding: 12px 14px; border-bottom: 1px solid #f0f0f0;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+                <div>
+                    <strong>{{ s.patient_name }}</strong>
+                    <span style="font-size:0.78rem; color:#6b7280; margin-left:6px;">{{ s.source }}</span>
+                    <div style="font-size:0.9rem; margin-top:2px;">{{ s.reason }}</div>
+                    <div style="font-size:0.85rem; color:#4b5563; margin-top:3px;">{{ s.suggested_change }}</div>
+                    {% if s.patient_note %}
+                    <div style="font-size:0.82rem; color:#6b7280; margin-top:2px;">Patient note: {{ s.patient_note }}</div>
+                    {% endif %}
+                    <div style="font-size:0.78rem; color:#9ca3af; margin-top:4px;">{{ s.created_at }}</div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn" style="background:#16a34a; color:white;" onclick="reviewAdaptiveSuggestion({{ s.id }}, 'approve')">Approve</button>
+                    <button class="btn" style="background:#dc2626; color:white;" onclick="reviewAdaptiveSuggestion({{ s.id }}, 'reject')">Reject</button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="color:#666; text-align:center; padding:16px; margin:0;">No pending adaptive plan suggestions.</p>
+    {% endif %}
+</div>
+
 <!-- Filter Bar -->
 <div class="filter-bar">
     <button class="filter-btn active">All Patients ({{ total_patients }})</button>
@@ -177,4 +211,26 @@
     color: #155724;
 }
 </style>
+
+<script>
+async function reviewAdaptiveSuggestion(suggestionId, action) {
+    const endpoint = action === 'approve'
+        ? `/api/adaptive-suggestions/${suggestionId}/approve`
+        : `/api/adaptive-suggestions/${suggestionId}/reject`;
+    try {
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ review_note: '' })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+            throw new Error(data.error || 'Request failed');
+        }
+        window.location.reload();
+    } catch (err) {
+        alert(`Failed to ${action} suggestion: ${err.message}`);
+    }
+}
+</script>
 {% endblock %}
