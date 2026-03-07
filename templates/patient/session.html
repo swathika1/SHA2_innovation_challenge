@@ -1761,6 +1761,9 @@ function processKimoreResult(out) {
     updateRepUIFromBackend(out);
     if (out.exercise_name) updateExerciseUI(out.exercise_name);
 
+    // ── Draw skeleton directly from response landmarks ──
+    if (out.landmarks && out.landmarks.length > 0) drawSkeleton(out.landmarks);
+
     // Always track latest non-zero score (for badge display)
     const rawK = out.frame_score != null ? Number(out.frame_score) : 0;
     if (rawK > 0) lastKimoreScore = rawK;
@@ -1812,6 +1815,8 @@ function processKimoreResult(out) {
 }
 function processKeraalResult(out) {
     if (!out) return;
+    // ── Draw skeleton directly from response landmarks ──
+    if (out.landmarks && out.landmarks.length > 0) drawSkeleton(out.landmarks);
     // Track latest non-zero score
     const keraalScore = out.frame_score != null ? Number(out.frame_score) : 0;
     if (keraalScore > 0) lastKeraalScore = keraalScore;

@@ -78,6 +78,14 @@ except Exception as _rr:
     print(f"[WARNING] Re-injury risk engine not available: {_rr}")
 
 try:
+    from recovery_predictor import predict_recovery
+    RECOVERY_PREDICTOR_AVAILABLE = True
+    print("[INIT] Recovery timeline predictor loaded")
+except Exception as _rp:
+    RECOVERY_PREDICTOR_AVAILABLE = False
+    print(f"[WARNING] Recovery predictor not available: {_rp}")
+
+try:
     from gtts import gTTS
     GTTS_AVAILABLE = True
     print("[INIT] gTTS (Google TTS) loaded successfully")
@@ -1090,11 +1098,20 @@ def session_summary(session_id=None):
                 except:
                     pass
 
+    # ── Recovery prediction ──
+    recovery_data = None
+    if RECOVERY_PREDICTOR_AVAILABLE:
+        try:
+            recovery_data = predict_recovery(session['user_id'], query_db)
+        except Exception as _rp_err:
+            print(f"[WARNING] Recovery prediction failed: {_rp_err}")
+
     return render_template('patient/summary.html',
                          session_data=sess,
                          exercises=exercises_list,
                          overall_duration=overall_duration,
-                         session_id=session_id)
+                         session_id=session_id,
+                         recovery=recovery_data)
 
 
 # ==================== PDF SESSION REPORT DOWNLOAD ====================
@@ -2851,8 +2868,8 @@ SESSION_STATE = {
     "cooldown_until": 0
 }
 
-# Initialize the CV pipelines (optional at boot to avoid blocking cloud startup)
-ENABLE_CV_PIPELINES = os.environ.get("ENABLE_CV_PIPELINES", "0") == "1"
+# Initialize the CV pipelines (enabled by default for local dev; set ENABLE_CV_PIPELINES=0 to skip)
+ENABLE_CV_PIPELINES = os.environ.get("ENABLE_CV_PIPELINES", "1") == "1"
 
 if ENABLE_CV_PIPELINES:
     try:
