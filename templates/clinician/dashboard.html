@@ -116,6 +116,7 @@
                     <span class="risk-flag low"><i class="fa-solid fa-circle-check"></i> On Track</span>
                 {% endif %}
                 <span style="color: #666;">{{ patient.adherence_rate or 0 }}% adherence</span>
+                <a href="{{ url_for('plan_editor') }}?patient_id={{ patient.id }}" class="btn" style="background:#4361ee;color:white;"><i class="fa-solid fa-dumbbell"></i> Edit Plan</a>
                 <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="btn">View Details</a>
             </div>
         </div>

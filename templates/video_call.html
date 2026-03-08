@@ -92,11 +92,30 @@
         console.log('Jitsi API loaded');
         
         const api = new JitsiMeetExternalAPI(jitsiDomain, options);
-        
-        // Listen for conference events
+        const appointmentId = {{ appointment.id }};
+        let otherParticipantJoined = false;
+
+        // Track whether the other side actually joined the call
+        api.addEventListener('participantJoined', function(event) {
+            console.log('Other participant joined:', event);
+            otherParticipantJoined = true;
+        });
+
+        // When this user leaves — if both sides were present, mark as completed
         api.addEventListener('videoConferenceLeft', function() {
-            console.log('Call ended - redirecting to dashboard');
-            setTimeout(redirectToDashboard, 1000);
+            console.log('Call ended - otherParticipantJoined:', otherParticipantJoined);
+            if (otherParticipantJoined) {
+                // Both parties were on the call — mark attended
+                fetch(`/api/appointments/${appointmentId}/complete`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({})
+                }).finally(function() {
+                    setTimeout(redirectToDashboard, 800);
+                });
+            } else {
+                setTimeout(redirectToDashboard, 1000);
+            }
         });
         
         api.addEventListener('readyToClose', function() {

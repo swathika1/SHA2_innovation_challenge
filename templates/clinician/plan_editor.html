@@ -26,6 +26,19 @@
 
 {% block content %}
 
+{% if selected_patient_id %}
+<div style="margin-bottom: 14px;">
+    <a href="{{ url_for('plan_editor') }}" style="font-size: 0.92rem; color: #4361ee; text-decoration: none;">
+        <i class="fa-solid fa-arrow-left"></i> Back to all patients
+    </a>
+    {% for p in patients %}
+    <span style="margin-left: 14px; font-weight: 600; color: #2d3a8c; font-size: 1rem;">
+        Editing plan for: {{ p.name }}
+    </span>
+    {% endfor %}
+</div>
+{% endif %}
+
 <!-- Toast notification -->
 <div id="toast" class="pe-toast"></div>
 
