@@ -371,6 +371,32 @@
             </div>
         </div>
 
+
+<!-- ── Specialties ── -->
+<div class="info-card" id="specialties-section">
+    <div class="info-card-title">
+        <span class="card-icon"><i class="fa-solid fa-stethoscope"></i></span>
+        My Specialties
+        <span id="specSaveMsg" style="margin-left: 12px; font-size: 0.88rem; color: green;"></span>
+    </div>
+    <p style="color: #666; font-size: 0.92rem; margin-bottom: 14px;">
+        Only patients whose condition matches your specialties will appear in your New Patients list.
+    </p>
+    <div id="spec-checkboxes" style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
+        {% for spec in all_specialties %}
+        <label style="display:flex;align-items:center;gap:6px;background:#f5f7ff;border:1.5px solid {% if spec in doctor_specialties %}#4361ee{% else %}#dde2f0{% endif %};border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:400;transition:border-color .2s;">
+            <input type="checkbox" class="spec-checkbox" value="{{ spec }}"
+                   {% if spec in doctor_specialties %}checked{% endif %}
+                   onchange="document.querySelectorAll('.spec-checkbox').forEach(cb=>cb.closest('label').style.borderColor=cb.checked?'#4361ee':'#dde2f0')">
+            {{ spec }}
+        </label>
+        {% endfor %}
+    </div>
+    <button onclick="saveSpecialties()" class="btn btn-primary" style="padding:9px 22px; font-weight:600;">
+        <i class="fa-solid fa-floppy-disk"></i> Save Specialties
+    </button>
+</div>
+
         <!-- ── Summary stat chips ── -->
         <div class="stat-chips">
             <div class="stat-chip">
@@ -541,6 +567,31 @@ async function saveProfile() {
     } catch (e) {
         status.textContent = 'Network error';
         status.style.color = '#dc2626';
+    }
+}
+
+async function saveSpecialties() {
+    const checked = [...document.querySelectorAll('.spec-checkbox:checked')].map(cb => cb.value);
+    const msg = document.getElementById('specSaveMsg');
+    msg.textContent = 'Saving...';
+    msg.style.color = '#666';
+    try {
+        const r = await fetch('/api/doctor/specialties', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({specialties: checked})
+        });
+        const d = await r.json();
+        if (d.ok) {
+            msg.textContent = '✓ Preferences saved!';
+            msg.style.color = '#22c55e';
+        } else {
+            msg.textContent = 'Error saving';
+            msg.style.color = '#dc2626';
+        }
+    } catch(e) {
+        msg.textContent = 'Network error';
+        msg.style.color = '#dc2626';
     }
 }
 </script>

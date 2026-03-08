@@ -187,6 +187,12 @@
         </form>
     </div>
 
+    <!-- Appointment Calendar -->
+    <div class="card" style="margin-bottom:20px;">
+        <div class="card-header"><i class="fa-solid fa-calendar"></i> Appointments Calendar</div>
+        <div id="appt-calendar" style="padding:16px;"></div>
+    </div>
+
     <!-- Upcoming Appointments -->
     <div class="card">
         <div class="card-header"><i class="fa-solid fa-video"></i> Upcoming Video Consultations</div>
@@ -253,17 +259,21 @@
     <!-- Past Appointments -->
     {% if past_appointments %}
     <div class="card" style="margin-top: 20px;">
-        <div class="card-header"><i class="fa-solid fa-clock-rotate-left"></i> Past Appointments</div>
+        <div class="card-header"><i class="fa-solid fa-clock-rotate-left"></i> Appointment History</div>
         <div class="past-appointments">
             {% for apt in past_appointments %}
             <div class="past-item">
                 <div class="past-info">
                     <strong>{{ apt.doctor_name }}</strong>
-                    <span class="past-date">{{ apt.appointment_date }}</span>
+                    <span class="past-date">{{ apt.appointment_date }} &bull; {{ apt.appointment_time }}</span>
                 </div>
-                <span class="status-badge {{ apt.status }}">
-                    {% if apt.status == 'completed' %}✓ Completed{% else %}✕ Cancelled{% endif %}
-                </span>
+                {% if apt.status == 'completed' %}
+                <span class="status-badge completed"><i class="fa-solid fa-circle-check"></i> Attended</span>
+                {% elif apt.status == 'missed' %}
+                <span class="status-badge missed"><i class="fa-solid fa-circle-xmark"></i> Missed</span>
+                {% else %}
+                <span class="status-badge cancelled"><i class="fa-solid fa-ban"></i> Cancelled</span>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
@@ -481,6 +491,30 @@
         background: #f8d7da;
         color: #721c24;
     }
+
+    .status-badge.missed {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fca5a5;
+    }
+
+    /* Calendar styles */
+    #appt-calendar { font-family: inherit; }
+    .cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .cal-header h3 { margin:0; font-size:1rem; font-weight:600; color:#1e3a5f; }
+    .cal-nav { background:none; border:1px solid #d1d5db; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:0.85rem; color:#374151; }
+    .cal-nav:hover { background:#f3f4f6; }
+    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+    .cal-day-label { text-align:center; font-size:0.7rem; font-weight:600; color:#9ca3af; padding:4px 0; }
+    .cal-cell { text-align:center; padding:6px 2px; border-radius:6px; font-size:0.82rem; min-height:36px; position:relative; }
+    .cal-cell.other-month { color:#d1d5db; }
+    .cal-cell.today { background:#e0f2fe; color:#0369a1; font-weight:700; }
+    .cal-dots { display:flex; justify-content:center; gap:2px; margin-top:2px; }
+    .cal-dot { width:6px; height:6px; border-radius:50%; display:inline-block; }
+    .cal-dot.upcoming { background:#22c55e; }
+    .cal-dot.completed { background:#3b82f6; }
+    .cal-dot.missed { background:#ef4444; }
+    .cal-dot.cancelled { background:#9ca3af; }
     
     .alert-error {
         background: #f8d7da;
@@ -739,5 +773,91 @@
             alert('Failed to save preferences. Please try again.');
         });
     });
+
+    // Appointment Calendar
+    (function(){
+        // cal_events is pre-built in Python: [{date, status}, ...]
+        const calEvents = {{ cal_events | tojson }};
+
+        // Build a map: date string -> [status, ...]
+        const dateMap = {};
+        calEvents.forEach(e => {
+            if (!dateMap[e.date]) dateMap[e.date] = [];
+            dateMap[e.date].push(e.status);
+        });
+
+        const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+        const today = new Date();
+        let curYear = today.getFullYear();
+        let curMonth = today.getMonth();
+
+        function render() {
+            const el = document.getElementById('appt-calendar');
+            if (!el) return;
+
+            const firstDay = new Date(curYear, curMonth, 1).getDay();
+            const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
+            const prevDays = new Date(curYear, curMonth, 0).getDate();
+
+            let html = `<div class="cal-header">
+              <button class="cal-nav" id="cal-prev">&lsaquo; Prev</button>
+              <h3>${MONTHS[curMonth]} ${curYear}</h3>
+              <button class="cal-nav" id="cal-next">Next &rsaquo;</button>
+            </div><div class="cal-grid">`;
+
+            DAYS.forEach(d => { html += `<div class="cal-day-label">${d}</div>`; });
+
+            // Leading blank cells
+            for (let i = 0; i < firstDay; i++) {
+                const day = prevDays - firstDay + 1 + i;
+                html += `<div class="cal-cell other-month">${day}</div>`;
+            }
+
+            // Current month cells
+            for (let d = 1; d <= daysInMonth; d++) {
+                const mm = String(curMonth + 1).padStart(2, '0');
+                const dd = String(d).padStart(2, '0');
+                const dateStr = `${curYear}-${mm}-${dd}`;
+                const isToday = (d === today.getDate() && curMonth === today.getMonth() && curYear === today.getFullYear());
+                let cellClass = 'cal-cell' + (isToday ? ' today' : '');
+                let dots = '';
+                if (dateMap[dateStr]) {
+                    dots = '<div class="cal-dots">';
+                    dateMap[dateStr].forEach(st => { dots += `<span class="cal-dot ${st}"></span>`; });
+                    dots += '</div>';
+                }
+                html += `<div class="${cellClass}">${d}${dots}</div>`;
+            }
+
+            // Trailing blank cells
+            const totalCells = firstDay + daysInMonth;
+            const trailing = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+            for (let i = 1; i <= trailing; i++) {
+                html += `<div class="cal-cell other-month">${i}</div>`;
+            }
+
+            html += '</div>';
+
+            // Legend
+            html += `<div style="display:flex;gap:12px;margin-top:10px;font-size:0.78rem;color:#6b7280;flex-wrap:wrap;">
+              <span><span class="cal-dot upcoming" style="display:inline-block;"></span> Upcoming</span>
+              <span><span class="cal-dot completed" style="display:inline-block;"></span> Attended</span>
+              <span><span class="cal-dot missed" style="display:inline-block;"></span> Missed</span>
+              <span><span class="cal-dot cancelled" style="display:inline-block;"></span> Cancelled</span>
+            </div>`;
+
+            el.innerHTML = html;
+            document.getElementById('cal-prev').addEventListener('click', () => {
+                curMonth--; if (curMonth < 0) { curMonth = 11; curYear--; } render();
+            });
+            document.getElementById('cal-next').addEventListener('click', () => {
+                curMonth++; if (curMonth > 11) { curMonth = 0; curYear++; } render();
+            });
+        }
+
+        render();
+    })();
 </script>
 {% endblock %}
