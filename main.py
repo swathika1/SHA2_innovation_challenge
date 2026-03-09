@@ -4,9 +4,21 @@ os.environ["USE_TF"] = "0"
 os.environ["KERAS_BACKEND"] = "torch"  # Use PyTorch backend (TF not supported on Python 3.14)
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # Fall back to CPU for unsupported MPS ops
 
-# Load environment variables from .env file
+# Load environment variables from .env file (explicit path to ensure it loads)
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
+
+# Load from explicit .env path in current directory
+env_path = Path(__file__).parent / ".env"
+load_dotenv(env_path)
+
+# Verify critical keys are loaded
+_groq_key = os.environ.get("GROQ_API_KEY", "")
+_meralion_key = os.environ.get("MERILION_API_KEY", "")
+if not _groq_key:
+    print("⚠️  WARNING: GROQ_API_KEY not found in .env - AI feedback may not work")
+if not _meralion_key:
+    print("⚠️  WARNING: MERILION_API_KEY not found in .env - Meralion API may not work")
 
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file, make_response
@@ -478,6 +490,66 @@ def api_tts():
 
     print(f"❌ All TTS engines failed for {language}")
     return jsonify({"error": "TTS service temporarily unavailable"}), 503
+
+
+def _tts_to_base64(text: str, language: str = "English", gender: str = "male") -> str:
+    """
+    Generate TTS audio and return as base64-encoded MP3.
+    Used for avatar voice responses.
+    
+    Args:
+        text: Text to synthesize
+        language: Language (English, Chinese, Malay, Tamil, Singlish)
+        gender: Voice gender (male/female)
+    
+    Returns:
+        Base64-encoded MP3 audio or error message
+    """
+    try:
+        # Try edge_tts first
+        voice_map = EDGE_VOICE_MAP_FEMALE if gender == "female" else EDGE_VOICE_MAP_MALE
+        edge_voice = voice_map.get(language, voice_map["English"])
+        edge_path = _tts_cache_path(text, language + "_" + gender, "edge")
+        
+        if os.path.exists(edge_path):
+            with open(edge_path, 'rb') as f:
+                return base64.b64encode(f.read()).decode()
+        
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(
+                asyncio.wait_for(_edge_synth(text, edge_voice, edge_path), timeout=8.0)
+            )
+            loop.close()
+            
+            with open(edge_path, 'rb') as f:
+                return base64.b64encode(f.read()).decode()
+        except Exception as edge_err:
+            print(f"[TTS] Edge-TTS failed: {edge_err}")
+            if os.path.exists(edge_path):
+                try: os.remove(edge_path)
+                except: pass
+        
+        # Fallback to gTTS
+        if GTTS_AVAILABLE:
+            gtts_lang = GTTS_LANG_MAP.get(language, "en")
+            gtts_path = _tts_cache_path(text, language, "gtts")
+            
+            if os.path.exists(gtts_path):
+                with open(gtts_path, 'rb') as f:
+                    return base64.b64encode(f.read()).decode()
+            
+            _gtts_synth(text, gtts_lang, gtts_path)
+            with open(gtts_path, 'rb') as f:
+                return base64.b64encode(f.read()).decode()
+        
+        return ""  # Failed to generate TTS
+    
+    except Exception as e:
+        print(f"[TTS-BASE64] Error: {e}")
+        return ""
+
 
 @app.get("/health")
 def health():
@@ -1575,6 +1647,91 @@ def avatar_chat():
     
     except Exception as e:
         print(f"[AVATAR] Error in avatar_chat: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': str(e),
+            'status': 'error'
+        }), 500
+
+
+@app.route('/patient/avatar/voice', methods=['POST'])
+@login_required
+@role_required('patient')
+def avatar_voice():
+    """
+    Real-time voice interaction with Jimmy avatar.
+    Handles:
+    1. Voice activity detection (knows when you stop talking)
+    2. Automatic transcription
+    3. Jimmy response generation
+    4. Text-to-speech response audio
+    
+    Expects JSON:
+    {
+        "audio": "base64-encoded 16-bit PCM audio at 16kHz",
+        "language": "English|Chinese|Malay|Tamil|Singlish",
+        "history": [previous conversation messages]
+    }
+    
+    Returns JSON:
+    {
+        "transcribed_text": "what you said",
+        "response": "what Jimmy says",
+        "response_audio": "base64-encoded MP3 audio",
+        "status": "success|error"
+    }
+    """
+    try:
+        data = request.get_json()
+        audio_b64 = data.get('audio', '').strip()
+        language = (data.get('language') or 'English').strip()
+        history = data.get('history', [])
+        
+        if not audio_b64:
+            return jsonify({'error': 'No audio provided'}), 400
+        
+        # Check if webrtcvad is available
+        try:
+            import webrtcvad
+            vad_available = True
+        except ImportError:
+            vad_available = False
+            print("[AVATAR-VOICE] webrtcvad not installed - installing...")
+            # Try to install
+            import subprocess
+            try:
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'webrtcvad', '-q'])
+                vad_available = True
+            except:
+                vad_available = False
+        
+        # Process audio with voice activity detection
+        from avatar_voice_processor import process_avatar_audio_stream
+        
+        transcribed_text, jimmy_response, response_audio = process_avatar_audio_stream(
+            audio_base64=audio_b64,
+            patient_id=session['user_id'],
+            language=language,
+            history=history
+        )
+        
+        if not jimmy_response:
+            return jsonify({
+                'error': response_audio or 'Could not process audio',
+                'status': 'error'
+            }), 400
+        
+        return jsonify({
+            'transcribed_text': transcribed_text,
+            'response': jimmy_response,
+            'response_audio': response_audio,  # Base64-encoded MP3
+            'vad_available': vad_available,
+            'status': 'success'
+        })
+    
+    except Exception as e:
+        print(f"[AVATAR-VOICE] Error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({

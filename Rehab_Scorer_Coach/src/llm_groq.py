@@ -21,10 +21,14 @@ class GroqLLM:
         model: Optional[str] = None,
         timeout_seconds: int = 20,
     ):
-        # Prefer env var; allow explicit override
-        self.api_key = (api_key or os.getenv("GROQ_API_KEY", "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")).strip()
+        # Load from .env if not already loaded
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        # Prefer explicit arg > env var > error
+        self.api_key = (api_key or os.getenv("GROQ_API_KEY", "")).strip()
         if not self.api_key:
-            raise RuntimeError("GROQ_API_KEY not set")
+            raise RuntimeError("❌ GROQ_API_KEY not set in environment. Please ensure .env file contains: GROQ_API_KEY=your_key")
 
         self.client = Groq(api_key=self.api_key)
         # Safe default model; override via env or arg
