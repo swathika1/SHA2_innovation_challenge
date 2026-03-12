@@ -1130,13 +1130,37 @@ def patient_dashboard():
 @role_required('patient')
 def rehab_session():
     """Rehab Session Screen"""
+    patient_id = session['user_id']
+
+    # Auto-sync: ensure every enabled patient_exercise has a corresponding workouts row
+    # (Workouts rows hold the clinician-set sets/reps; if none exists yet, create with defaults)
+    assigned_pe = query_db('''
+        SELECT pe.exercise_id FROM patient_exercises pe
+        WHERE pe.patient_id = ? AND pe.enabled = 1
+    ''', (patient_id,))
+    assigned_ex_ids = [a['exercise_id'] for a in assigned_pe] if assigned_pe else []
+
+    existing_workout_exids = query_db('''
+        SELECT exercise_id FROM workouts
+        WHERE patient_id = ? AND is_active = 1
+    ''', (patient_id,))
+    existing_ids = set(e['exercise_id'] for e in existing_workout_exids) if existing_workout_exids else set()
+
+    for ex_id in assigned_ex_ids:
+        if ex_id not in existing_ids:
+            execute_db('''
+                INSERT INTO workouts
+                (patient_id, exercise_id, assigned_by_doctor_id, sets, reps, frequency, instructions, is_active)
+                VALUES (?, ?, NULL, 3, 10, 'Daily', '', 1)
+            ''', (patient_id, ex_id))
+
     workouts = query_db('''
         SELECT w.*, e.name as exercise_name, e.description, e.category
         FROM workouts w
         JOIN exercises e ON w.exercise_id = e.id
         JOIN patient_exercises pe ON pe.patient_id = w.patient_id AND pe.exercise_id = w.exercise_id
         WHERE w.patient_id = ? AND w.is_active = 1 AND pe.enabled = 1
-    ''', (session['user_id'],))
+    ''', (patient_id,))
 
     # Get exercises assigned to this patient via patient_exercises
     assigned_exercises = query_db('''
@@ -1145,13 +1169,13 @@ def rehab_session():
         JOIN exercises e ON pe.exercise_id = e.id
         WHERE pe.patient_id = ? AND pe.enabled = 1
         ORDER BY e.category, e.name
-    ''', (session['user_id'],))
+    ''', (patient_id,))
     assigned_exercises = [dict(e) for e in assigned_exercises] if assigned_exercises else []
 
     # Get patient condition for the personalized plan card
     patient_info = query_db(
         'SELECT condition FROM patients WHERE user_id = ?',
-        (session['user_id'],), one=True
+        (patient_id,), one=True
     )
     patient_condition = patient_info['condition'] if patient_info and patient_info['condition'] else 'Your Condition'
     
@@ -4986,10 +5010,17 @@ def api_session_start_keraal():
     
     data = request.get_json(force=True) or {}
     language = data.get("language", "English")
+    target_reps = data.get("target_reps", 10)
+    target_sets = data.get("target_sets", 3)
     
     try:
         KERAAL_PIPELINE.reset()
         KERAAL_PIPELINE.language = language
+        KERAAL_PIPELINE.target_reps = target_reps
+        KERAAL_PIPELINE.target_sets = target_sets
+        KERAAL_PIPELINE.current_rep_count = 0
+        KERAAL_PIPELINE.current_set_count = 1
+        print(f"🎯 KERAAL session started with target_reps={target_reps}, target_sets={target_sets}")
         return jsonify({
             "ok": True,
             "pipeline": "keraal",

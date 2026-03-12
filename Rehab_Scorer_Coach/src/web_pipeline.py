@@ -13,6 +13,7 @@ from Rehab_Scorer_Coach.src.config import AppConfig
 from Rehab_Scorer_Coach.src.rag_store import RAGStore
 from Rehab_Scorer_Coach.src.llm_groq import GroqLLM
 from Rehab_Scorer_Coach.src.rep_counter_mediapipe import RepCounterMediaPipe
+from Rehab_Scorer_Coach.src.rep_counter_kimore import KimoreRepCounter
 
 # 🔥 MODEL LOADER (50D + 100-frame scoring)
 from Rehab_Scorer_Coach.src.models_loader import (
@@ -34,6 +35,7 @@ class WebRehabPipeline:
         self.cooldown_seconds = 10.0   # LLM feedback every 10s (fires for ALL form statuses)
 
         self.rep_counter = RepCounterMediaPipe()
+        self.kimore_rep_counter = KimoreRepCounter()
 
         self._prev_feat = None
         self.language = "English"
@@ -112,19 +114,19 @@ class WebRehabPipeline:
     REP_SCORE_GATE = 12.0
 
     # -----------------------------------------------------
-    # Automatic Rep Detection (Kimore: time-based, every 3-4 seconds)
+    # Automatic Rep Detection (Kimore: MOTION-BASED via KimoreRepCounter)
     # -----------------------------------------------------
     def _detect_and_count_reps(self, score: float, delta: float, landmarks: np.ndarray = None, exercise_name: str = "", form_status: str = "WRONG") -> Dict[str, Any]:
         """
-        Kimore rep detection — TIME-BASED approach:
-        Increment rep count every 3.5 seconds of ACTIVE exercise time.
-        A rep is only counted when ALL conditions are met:
-          1. At least 3.5 seconds of active time since the last rep
-          2. Person is NOT idle  (sufficient motion detected)
-          3. Score >= REP_SCORE_GATE  (person is at least trying)
+        Kimore rep detection — MOTION-BASED approach:
+        Uses KimoreRepCounter with hysteresis state machine to detect
+        actual exercise repetitions from pose landmark signals.
 
-        Timer PAUSES (does not reset) when idle or score too low,
-        and resumes from where it left off once conditions are met.
+        A rep is counted when the exercise-specific signal crosses
+        both thresholds of the state machine (up->down or down->up),
+        with minimum ROM range and time guards.
+
+        Falls back to time-based counting only if landmarks are unavailable.
         """
         rep_incremented = False
         set_completed = False
@@ -136,13 +138,12 @@ class WebRehabPipeline:
 
         now = time.time()
 
-        # ── IDLE GUARD: don't advance timer when person is not moving ──
+        # ── IDLE GUARD: don't count reps when person is not moving ──
         is_idle = self.motion_ema < self.dynamic_idle_motion_threshold
         if is_idle:
-            # Pause timer by pushing last_rep_time forward
             if self.last_rep_time > 0.0:
-                self.last_rep_time = now  # freeze elapsed at 0
-            print(f"      [REP-KIMORE] idle (motion_ema={self.motion_ema:.6f}) — timer paused")
+                self.last_rep_time = now
+            print(f"      [REP-KIMORE] idle (motion_ema={self.motion_ema:.6f}) — paused")
             return {
                 "rep_now": self.current_rep_count,
                 "rep_target": self.target_reps,
@@ -154,11 +155,11 @@ class WebRehabPipeline:
                 "rep_score": None,
             }
 
-        # ── SOFT SCORE GATE: pause timer when score is very low ──
+        # ── SOFT SCORE GATE: don't count reps when score is very low ──
         if score < self.REP_SCORE_GATE:
             if self.last_rep_time > 0.0:
-                self.last_rep_time = now  # freeze elapsed at 0
-            print(f"      [REP-KIMORE] score={score:.1f} < {self.REP_SCORE_GATE} — timer paused")
+                self.last_rep_time = now
+            print(f"      [REP-KIMORE] score={score:.1f} < {self.REP_SCORE_GATE} — paused")
             return {
                 "rep_now": self.current_rep_count,
                 "rep_target": self.target_reps,
@@ -170,28 +171,50 @@ class WebRehabPipeline:
                 "rep_score": None,
             }
 
-        # ── TIME-BASED REP: count a rep every 3-4 seconds of active exercise ──
-        # Initialize timer on first active frame
-        if self.last_rep_time == 0.0:
-            self.last_rep_time = now
+        # ── MOTION-BASED REP COUNTING via KimoreRepCounter ──
+        if landmarks is not None and len(landmarks) >= 33:
+            rep_info_obj = self.kimore_rep_counter.update_landmarks(exercise_name, landmarks)
+            new_reps = rep_info_obj.reps
 
-        elapsed = now - self.last_rep_time
-        if elapsed >= self.rep_interval_seconds:
-            self.current_rep_count += 1
-            rep_incremented = True
-            rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else round(score, 2)
-            self.rep_scores_buffer = []
-            self.last_rep_time = now
-            print(f"   REP #{self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Score: {rep_score} (time-based, {elapsed:.1f}s)")
+            if new_reps > self.current_rep_count:
+                rep_incremented = True
+                rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else round(score, 2)
+                self.rep_scores_buffer = []
+                self.current_rep_count = new_reps
+                self.last_rep_time = now
+                print(f"   REP #{self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Score: {rep_score} (motion-based) | {rep_info_obj.note}")
 
-            if self.current_rep_count >= self.target_reps:
-                set_completed = True
-                self.current_set_count += 1
-                self.current_rep_count = 0
-                print(f"   SET COMPLETE -> Set {self.current_set_count}")
-                if self.current_set_count > self.target_sets:
-                    exercise_completed = True
-                    self.current_set_count = self.target_sets
+                if self.current_rep_count >= self.target_reps:
+                    set_completed = True
+                    self.current_set_count += 1
+                    self.current_rep_count = 0
+                    self.kimore_rep_counter.reset(exercise_name)
+                    print(f"   SET COMPLETE -> Set {self.current_set_count}")
+                    if self.current_set_count > self.target_sets:
+                        exercise_completed = True
+                        self.current_set_count = self.target_sets
+            else:
+                print(f"      [REP-KIMORE] motion phase={rep_info_obj.phase} | {rep_info_obj.note}")
+        else:
+            # Fallback: time-based if no landmarks available
+            if self.last_rep_time == 0.0:
+                self.last_rep_time = now
+            elapsed = now - self.last_rep_time
+            if elapsed >= self.rep_interval_seconds:
+                self.current_rep_count += 1
+                rep_incremented = True
+                rep_score = round(float(np.mean(self.rep_scores_buffer)), 2) if self.rep_scores_buffer else round(score, 2)
+                self.rep_scores_buffer = []
+                self.last_rep_time = now
+                print(f"   REP #{self.current_rep_count}/{self.target_reps} | Set {self.current_set_count}/{self.target_sets} | Score: {rep_score} (time-fallback)")
+                if self.current_rep_count >= self.target_reps:
+                    set_completed = True
+                    self.current_set_count += 1
+                    self.current_rep_count = 0
+                    print(f"   SET COMPLETE -> Set {self.current_set_count}")
+                    if self.current_set_count > self.target_sets:
+                        exercise_completed = True
+                        self.current_set_count = self.target_sets
 
         return {
             "rep_now": self.current_rep_count,
@@ -685,6 +708,10 @@ class WebRehabPipeline:
         if self.rep_counter:
             with contextlib.suppress(Exception):
                 self.rep_counter.reset()
-                
+
+        if self.kimore_rep_counter:
+            with contextlib.suppress(Exception):
+                self.kimore_rep_counter.reset()
+
         reset_sequence()
         print("✅ Session reset complete")

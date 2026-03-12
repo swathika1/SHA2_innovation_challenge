@@ -1471,10 +1471,20 @@ function updateSelectedExercisesList() {
     const def = PROGRAM_DEFINITIONS[selectedProgram] || { exercises: [] };
     list.innerHTML = checked.map((c, i) => {
         const ex = def.exercises.find(e => e.id === c.dataset.value);
+        const exDef = AVAILABLE_EXERCISES[c.dataset.value];
+        let backendMatch = null;
+        if (exDef) {
+            const exNameLower = exDef.name.toLowerCase().trim();
+            backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim() === exNameLower);
+            if (!backendMatch) backendMatch = BACKEND_WORKOUTS.find(bw => exNameLower.startsWith(bw.name.toLowerCase().trim()));
+            if (!backendMatch) backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim().startsWith(exNameLower));
+        }
+        const dispSets = backendMatch ? backendMatch.sets : 3;
+        const dispReps = backendMatch ? backendMatch.reps : 10;
         return `<li style="padding:6px 0;border-bottom:1px solid #eee;display:flex;align-items:center;gap:9px;">
             <span style="width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:900;flex-shrink:0;background:#3b82f6;color:#fff;">${i + 1}</span>
             <strong>${ex ? ex.label : c.dataset.value}</strong>
-            <span style="color:#888;font-size:.8rem;margin-left:auto;">3 sets × 10 reps</span>
+            <span style="color:#888;font-size:.8rem;margin-left:auto;">${dispSets} sets × ${dispReps} reps</span>
         </li>`;
     }).join('');
 }
@@ -2054,8 +2064,11 @@ function calcSessionProgress() {
             // Use saved data if available
             totalDone += Object.values(saved.sets_completed).reduce(function(a, b) { return a + b; }, 0);
         } else if (i === currentExIndex) {
-            // Current exercise not yet saved, use live counters
-            totalDone += getTotalRepsCompleted();
+            // Current exercise not yet saved — use setsCompletedDict (the live tracking dict)
+            // which is always up-to-date, instead of getTotalRepsCompleted() which can
+            // undercount when the backend resets currentRep to 0 on set completion.
+            const dictTotal = Object.values(setsCompletedDict).reduce(function(a, b) { return a + b; }, 0);
+            totalDone += dictTotal;
         }
         // If i < currentExIndex and not saved, it contributes 0 (shouldn't happen)
     });
@@ -2279,10 +2292,13 @@ function updateRepUIFromBackend(out) {
     // In that case, currentRep has been reset to 0, so we must NOT update the dict with it
     
     if (setCompleted) {
-        // Set just completed: save the PREVIOUS set with all its reps (targetReps)
-        // currentSet was already incremented, so the finished set is currentSet - 1
-        setsCompletedDict[String(currentSet - 1)] = targetReps;
-        console.log(`  🎯 SET COMPLETED: setsCompletedDict['${currentSet - 1}'] = ${targetReps}`);
+        // Set just completed: save the finished set with all its reps (targetReps)
+        // Normally currentSet was already incremented, so the finished set is currentSet - 1.
+        // BUT when exercise_completed is also true, the backend clamps currentSet back to
+        // targetSets (instead of targetSets+1), so the finished set IS currentSet itself.
+        const finishedSet = exerciseCompleted ? currentSet : (currentSet - 1);
+        setsCompletedDict[String(finishedSet)] = targetReps;
+        console.log(`  🎯 SET COMPLETED: setsCompletedDict['${finishedSet}'] = ${targetReps} (exerciseCompleted=${exerciseCompleted})`);
     } else if (repIncremented) {
         // Mid-set: A new rep was counted, update the current set
         setsCompletedDict[String(currentSet)] = currentRep;
@@ -2297,7 +2313,8 @@ function updateRepUIFromBackend(out) {
     
     // ✅ SET COMPLETED - Show visual alert only (speech is handled by speakRepSetAlert)
     if (setCompleted) {
-        const setMsg = 'Set ' + (currentSet-1) + ' completed!';
+        const finishedSetNum = exerciseCompleted ? currentSet : (currentSet - 1);
+        const setMsg = 'Set ' + finishedSetNum + ' completed!';
         console.log('🎯 SET ALERT:', setMsg);
         addFeedback('success', '🎯 ' + setMsg);
     }
@@ -2643,7 +2660,8 @@ async function callSessionStart() {
     if (selectedPipeline === 'keraal' || selectedPipeline === 'both') {
         promises.push(fetch(API_BASE + '/api/session/start/keraal', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ language: lang })
+            body: JSON.stringify({ language: lang,
+                target_reps: w ? w.reps : targetReps, target_sets: w ? w.sets : targetSets })
         }).then(r => r.json()).catch(() => null));
     }
     await Promise.allSettled(promises);
@@ -2659,13 +2677,32 @@ async function startSession() {
     }
     
     // Build WORKOUTS array from selected exercises
-    const userSelectedWorkouts = selectedExerciseIds.map((id, idx) => ({
-        id: idx + 1,
-        name: AVAILABLE_EXERCISES[id].name,
-        exercise_id: id,
-        sets: AVAILABLE_EXERCISES[id].sets,
-        reps: AVAILABLE_EXERCISES[id].reps
-    }));
+    // Use sets/reps from BACKEND_WORKOUTS (clinician-assigned plan) when available,
+    // otherwise fall back to AVAILABLE_EXERCISES defaults.
+    console.log('🔍 BACKEND_WORKOUTS:', BACKEND_WORKOUTS);
+    const userSelectedWorkouts = selectedExerciseIds.map((id, idx) => {
+        const exDef = AVAILABLE_EXERCISES[id];
+        // Match by exercise name against backend workouts (from DB)
+        // Try exact match first, then try prefix match (DB name may not have pipeline suffixes like "(CTK)")
+        const exNameLower = exDef.name.toLowerCase().trim();
+        let backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim() === exNameLower);
+        if (!backendMatch) {
+            // Try: DB name is a prefix of the AVAILABLE_EXERCISES name (e.g. "Forward Flexion" matches "Forward Flexion (CTK)")
+            backendMatch = BACKEND_WORKOUTS.find(bw => exNameLower.startsWith(bw.name.toLowerCase().trim()));
+        }
+        if (!backendMatch) {
+            // Try: AVAILABLE_EXERCISES name is a prefix of the DB name
+            backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim().startsWith(exNameLower));
+        }
+        console.log(`  Exercise "${exDef.name}" → backendMatch:`, backendMatch ? `"${backendMatch.name}" (${backendMatch.sets}×${backendMatch.reps})` : 'NONE (using default 3×10)');
+        return {
+            id: idx + 1,
+            name: exDef.name,
+            exercise_id: id,
+            sets: backendMatch ? backendMatch.sets : exDef.sets,
+            reps: backendMatch ? backendMatch.reps : exDef.reps
+        };
+    });
     
     // Replace WORKOUTS with user selections
     // Clear and repopulate the global WORKOUTS array
@@ -2717,8 +2754,17 @@ async function startSession() {
     setsCompletedDict = {};
     currentExerciseCompleted = false; // Reset for first exercise
     
+    // Set targets from first exercise's WORKOUTS data (DB values from clinician plan)
+    if (WORKOUTS.length > 0) {
+        targetSets = WORKOUTS[0].sets;
+        targetReps = WORKOUTS[0].reps;
+        currentRep = 0;
+        currentSet = 1;
+    }
+    
     console.log(`🚀 Session started with ${WORKOUTS.length} exercises:`, WORKOUTS);
     console.log(`First exercise: "${WORKOUTS[0].name}", ${WORKOUTS[0].sets} sets x ${WORKOUTS[0].reps} reps`);
+    console.log(`  → targetSets=${targetSets}, targetReps=${targetReps}`);
     
     updateRepCounter();
     updateExerciseSteps();
@@ -2871,7 +2917,14 @@ function showPostSession() {
     });
     exerciseSummary += '</div>';
     
-    const progressPerc = calcSessionProgress();
+    // If all exercises were completed, force progress to 100%
+    // (handles edge case where the last set's dict entry wasn't fully propagated)
+    const allExercisesDone = (currentExIndex >= WORKOUTS.length - 1) && currentExerciseCompleted;
+    const progressPerc = allExercisesDone ? 100 : calcSessionProgress();
+    
+    // Update the progress bar behind the overlay
+    document.getElementById('sessionProgressBar').style.width = progressPerc + '%';
+    document.getElementById('sessionProgressText').textContent = progressPerc + '%';
     
     overlay.innerHTML = '<div class="post-card">' +
         '<h2><i class="fa-solid fa-circle-check"></i> Session Complete!</h2>' +
