@@ -1366,8 +1366,9 @@ for (const [key, val] of Object.entries(AVAILABLE_EXERCISES)) {
 /* ===================== PROGRAM SELECTION FLOW ===================== */
 function selectProgram(prog) {
     selectedProgram = prog;
-    // For personalized, exercises may span both pipelines
-    selectedPipeline = (prog === 'personalized') ? 'both' : prog;
+    // For personalized, exercises may span both pipelines — will be auto-switched per exercise
+    basePipelineChoice = (prog === 'personalized') ? 'both' : prog;
+    selectedPipeline = basePipelineChoice;
 
     // Toggle card selected state with animation
     document.getElementById('progCardKimore').classList.toggle('selected', prog === 'kimore');
@@ -1391,9 +1392,10 @@ function selectProgram(prog) {
     const kimCard = document.getElementById('kimoreScoreCard');
     const kerCard = document.getElementById('keraalScoreCard');
     if (prog === 'personalized') {
-        // Show both score cards for personalized (exercises may span both pipelines)
+        // For personalized: show kimore by default, switchPipelineForCurrentExercise() will
+        // toggle per-exercise once the session starts
         if (kimCard) kimCard.style.display = '';
-        if (kerCard) kerCard.style.display = '';
+        if (kerCard) kerCard.style.display = 'none';
     } else {
         if (kimCard) kimCard.style.display = (prog === 'keraal') ? 'none' : '';
         if (kerCard) kerCard.style.display = (prog === 'kimore') ? 'none' : '';
@@ -1471,10 +1473,20 @@ function updateSelectedExercisesList() {
     const def = PROGRAM_DEFINITIONS[selectedProgram] || { exercises: [] };
     list.innerHTML = checked.map((c, i) => {
         const ex = def.exercises.find(e => e.id === c.dataset.value);
+        const exDef = AVAILABLE_EXERCISES[c.dataset.value];
+        let backendMatch = null;
+        if (exDef) {
+            const exNameLower = exDef.name.toLowerCase().trim();
+            backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim() === exNameLower);
+            if (!backendMatch) backendMatch = BACKEND_WORKOUTS.find(bw => exNameLower.startsWith(bw.name.toLowerCase().trim()));
+            if (!backendMatch) backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim().startsWith(exNameLower));
+        }
+        const dispSets = backendMatch ? backendMatch.sets : 3;
+        const dispReps = backendMatch ? backendMatch.reps : 10;
         return `<li style="padding:6px 0;border-bottom:1px solid #eee;display:flex;align-items:center;gap:9px;">
             <span style="width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:900;flex-shrink:0;background:#3b82f6;color:#fff;">${i + 1}</span>
             <strong>${ex ? ex.label : c.dataset.value}</strong>
-            <span style="color:#888;font-size:.8rem;margin-left:auto;">3 sets × 10 reps</span>
+            <span style="color:#888;font-size:.8rem;margin-left:auto;">${dispSets} sets × ${dispReps} reps</span>
         </li>`;
     }).join('');
 }
@@ -1494,14 +1506,14 @@ const LANG_TO_BCP47 = {
 
 /* ===================== REP / SET ALERT TRANSLATIONS ===================== */
 const REP_ALERT = {
-    English: n => `Rep ${n} complete`,
-    Tamil:   n => `உடற்பயிற்சி ${n} முடிந்தது`,
-    Chinese: n => `第${n}次完成`,
-    Malay:   n => `Rep ${n} selesai`,
-    Thai:    n => `ครั้งที่ ${n} เสร็จ`,
+    English: n => `${n}`,
+    Tamil:   n => `${n}`,
+    Chinese: n => `${n}`,
+    Malay:   n => `${n}`,
+    Thai:    n => `${n}`,
 };
 const SET_ALERT = {
-    English: n => `Set ${n} complete`,
+    English: n => `Set ${n} completed`,
     Tamil:   n => `செட் ${n} முடிந்தது`,
     Chinese: n => `第${n}组完成`,
     Malay:   n => `Set ${n} selesai`,
@@ -1518,7 +1530,10 @@ function speakRepSetAlert(repInfo) {
     if (!audioEnabled || !repInfo) return;
     const lang = getLanguageName();
     if (repInfo.rep_incremented) {
-        const repNum = repInfo.rep_now || 1;
+        // Use the frontend currentRep (in sync with display) — just say the number
+        // When set_completed is also true, backend has reset rep_now to 0,
+        // so the actual last rep is targetReps
+        const repNum = repInfo.set_completed ? targetReps : currentRep;
         const fn = REP_ALERT[lang] || REP_ALERT.English;
         queueSpeech(fn(repNum));
     }
@@ -1606,8 +1621,71 @@ const LEVEL_NAMES = ['','Beginner','Trainee','Athlete','Warrior','Champion','Leg
 
 /* ===================== PIPELINE SELECTION ===================== */
 let selectedPipeline = 'kimore'; // 'kimore' | 'keraal' | 'both'
+// For personalized plans: the "base" pipeline choice from selectProgram
+let basePipelineChoice = 'kimore';
 
 /* selectPipeline is now handled by selectProgram() in pre-session flow */
+
+/* --- Per-exercise pipeline tracking (for personalized plan weighted avg) --- */
+// Maps pipeline → { totalScore: number, exerciseCount: number }
+let pipelineScoreAccum = { kimore: { totalScore: 0, exerciseCount: 0 }, keraal: { totalScore: 0, exerciseCount: 0 } };
+
+/**
+ * Determine which pipeline a given exercise belongs to.
+ * Returns 'kimore' or 'keraal'.
+ */
+function getPipelineForExercise(exerciseId) {
+    const exDef = AVAILABLE_EXERCISES[exerciseId];
+    if (exDef && exDef.pipeline) return exDef.pipeline;
+    // Fallback: if exercise id contains keraal-specific keywords
+    if (['forward_flexion', 'flank_stretch', 'torso_rotation'].includes(exerciseId)) return 'keraal';
+    return 'kimore';
+}
+
+/**
+ * Switch the active pipeline for the current exercise and update UI accordingly.
+ * Called at session start and on each exercise transition.
+ */
+function switchPipelineForCurrentExercise() {
+    if (basePipelineChoice !== 'both') {
+        // If user explicitly chose kimore-only or keraal-only, don't auto-switch
+        selectedPipeline = basePipelineChoice;
+    } else {
+        // Personalized plan: pick pipeline based on the current exercise
+        const w = WORKOUTS[currentExIndex];
+        if (w) {
+            selectedPipeline = getPipelineForExercise(w.exercise_id);
+        }
+    }
+    // Update score card visibility — show active, hide inactive
+    const kimCard = document.getElementById('kimoreScoreCard');
+    const kerCard = document.getElementById('keraalScoreCard');
+    if (kimCard) kimCard.style.display = (selectedPipeline === 'keraal') ? 'none' : '';
+    if (kerCard) kerCard.style.display = (selectedPipeline === 'kimore') ? 'none' : '';
+    // Mark inactive pipeline badge as Idle and reset score
+    if (selectedPipeline !== 'keraal') {
+        const kerBadge = document.getElementById('keraalStatusBadge');
+        const kerScore = document.getElementById('keraalScoreDisplay');
+        if (kerBadge) { kerBadge.textContent = '💤 Idle'; kerBadge.className = 'pipeline-badge inactive'; }
+        if (kerScore) kerScore.textContent = '-- / 50';
+    }
+    if (selectedPipeline !== 'kimore') {
+        const kimBadge = document.getElementById('kimoreStatusBadge');
+        const kimScore = document.getElementById('kimoreScoreDisplay');
+        if (kimBadge) { kimBadge.textContent = '💤 Idle'; kimBadge.className = 'pipeline-badge inactive'; }
+        if (kimScore) kimScore.textContent = '-- / 50';
+    }
+    // Reset the active pipeline's badge to Analyzing
+    if (selectedPipeline === 'kimore' || selectedPipeline === 'both') {
+        const kimBadge = document.getElementById('kimoreStatusBadge');
+        if (kimBadge) { kimBadge.textContent = '⌛ Analyzing'; kimBadge.className = 'pipeline-badge analyzing'; }
+    }
+    if (selectedPipeline === 'keraal' || selectedPipeline === 'both') {
+        const kerBadge = document.getElementById('keraalStatusBadge');
+        if (kerBadge) { kerBadge.textContent = '⌛ Analyzing'; kerBadge.className = 'pipeline-badge analyzing'; }
+    }
+    console.log(`🔀 Pipeline switched to: ${selectedPipeline} for exercise "${WORKOUTS[currentExIndex]?.name}"`);
+}
 
 /* ===================== SKELETON DRAWING (separate canvas) ===================== */
 const POSE_CONNECTIONS = [
@@ -1837,6 +1915,11 @@ function updatePipelineStatus(pipeline, status, score) {
 /* ===================== DUAL PIPELINE RESULT PROCESSORS ===================== */
 function processKimoreResult(out) {
     if (!out) return;
+    // Skip entirely if kimore is not the active pipeline
+    if (selectedPipeline !== 'kimore' && selectedPipeline !== 'both') {
+        console.log('⏭️ Kimore result ignored — active pipeline is', selectedPipeline);
+        return;
+    }
     if (Array.isArray(out.landmarks) && out.landmarks.length > 0) {
         drawSkeleton(out.landmarks);
     }
@@ -1861,11 +1944,11 @@ function processKimoreResult(out) {
         lastScoreUpdateTime = nowK;
     }
 
-    // On rep completion: show pop-up and speak alert
+    // On rep completion: show pop-up and speak alert (after updateRepUIFromBackend so currentRep is in sync)
     if (out.rep_info && out.rep_info.rep_incremented && out.rep_info.rep_score != null) {
         const repScore = Number(out.rep_info.rep_score);
         showRepScorePop(repScore);
-        // Speak rep/set alert
+        // Speak rep/set alert — uses currentRep from display
         speakRepSetAlert(out.rep_info);
     }
 
@@ -1890,10 +1973,15 @@ function processKimoreResult(out) {
     }
     const fb = Array.isArray(out.llm_feedback) ? out.llm_feedback : (out.llm_feedback ? [out.llm_feedback] : []);
     renderCVFeedback(fb);
-    if ((out.form_status === 'WRONG' || out.form_status === 'INCORRECT') && fb.length > 0) speakFeedbackList(fb);
+    if (fb.length > 0) speakFeedbackList(fb);
 }
 function processKeraalResult(out) {
     if (!out) return;
+    // Skip entirely if keraal is not the active pipeline
+    if (selectedPipeline !== 'keraal' && selectedPipeline !== 'both') {
+        console.log('⏭️ Keraal result ignored — active pipeline is', selectedPipeline);
+        return;
+    }
     if (Array.isArray(out.landmarks) && out.landmarks.length > 0) {
         drawSkeleton(out.landmarks);
     }
@@ -1911,18 +1999,18 @@ function processKeraalResult(out) {
         lastScoreUpdateTime = nowKeraal;
     }
 
-    // On rep completion: show pop-up and speak alert
+    // On rep completion: show pop-up and speak alert (after updateRepUIFromBackend so currentRep is in sync)
     if (out.rep_info && out.rep_info.rep_incremented && out.rep_info.rep_score != null) {
         const repScore = Number(out.rep_info.rep_score);
         showRepScorePop(repScore);
-        // Speak rep/set alert
+        // Speak rep/set alert — uses currentRep from display
         speakRepSetAlert(out.rep_info);
     }
 
-    // Always render + speak Keraal feedback (both solo and dual mode)
+    // Always render + speak feedback for ALL form statuses (both solo and dual mode)
     const fb = Array.isArray(out.llm_feedback) ? out.llm_feedback : (out.llm_feedback ? [out.llm_feedback] : []);
     if (fb.length) renderCVFeedback(fb);
-    if ((out.form_status === 'WRONG' || out.form_status === 'INCORRECT') && fb.length > 0) speakFeedbackList(fb);
+    if (fb.length > 0) speakFeedbackList(fb);
 
     // If Keraal is the only pipeline, also drive rep UI + exercise detect + gamification
     if (selectedPipeline === 'keraal') {
@@ -2051,8 +2139,11 @@ function calcSessionProgress() {
             // Use saved data if available
             totalDone += Object.values(saved.sets_completed).reduce(function(a, b) { return a + b; }, 0);
         } else if (i === currentExIndex) {
-            // Current exercise not yet saved, use live counters
-            totalDone += getTotalRepsCompleted();
+            // Current exercise not yet saved — use setsCompletedDict (the live tracking dict)
+            // which is always up-to-date, instead of getTotalRepsCompleted() which can
+            // undercount when the backend resets currentRep to 0 on set completion.
+            const dictTotal = Object.values(setsCompletedDict).reduce(function(a, b) { return a + b; }, 0);
+            totalDone += dictTotal;
         }
         // If i < currentExIndex and not saved, it contributes 0 (shouldn't happen)
     });
@@ -2248,7 +2339,7 @@ function updateRepUIFromBackend(out) {
         if (r.rep_incremented) {
             repIncremented = true;
             console.log('  🔥🔥🔥 REP INCREMENTED! 🔥🔥🔥');
-            addFeedback('success', '✅ Rep ' + currentRep + ' completed!');
+            addFeedback('success', '✅ Rep ' + currentRep + ' / ' + targetReps);
         }
         
         if (r.set_completed) {
@@ -2276,10 +2367,13 @@ function updateRepUIFromBackend(out) {
     // In that case, currentRep has been reset to 0, so we must NOT update the dict with it
     
     if (setCompleted) {
-        // Set just completed: save the PREVIOUS set with all its reps (targetReps)
-        // currentSet was already incremented, so the finished set is currentSet - 1
-        setsCompletedDict[String(currentSet - 1)] = targetReps;
-        console.log(`  🎯 SET COMPLETED: setsCompletedDict['${currentSet - 1}'] = ${targetReps}`);
+        // Set just completed: save the finished set with all its reps (targetReps)
+        // Normally currentSet was already incremented, so the finished set is currentSet - 1.
+        // BUT when exercise_completed is also true, the backend clamps currentSet back to
+        // targetSets (instead of targetSets+1), so the finished set IS currentSet itself.
+        const finishedSet = exerciseCompleted ? currentSet : (currentSet - 1);
+        setsCompletedDict[String(finishedSet)] = targetReps;
+        console.log(`  🎯 SET COMPLETED: setsCompletedDict['${finishedSet}'] = ${targetReps} (exerciseCompleted=${exerciseCompleted})`);
     } else if (repIncremented) {
         // Mid-set: A new rep was counted, update the current set
         setsCompletedDict[String(currentSet)] = currentRep;
@@ -2292,21 +2386,20 @@ function updateRepUIFromBackend(out) {
     updateExerciseSteps();
     updateSessionProgress();
     
-    // ✅ SET COMPLETED - Show alert and speak
+    // ✅ SET COMPLETED - Show visual alert only (speech is handled by speakRepSetAlert)
     if (setCompleted) {
-        const setMsg = 'Set ' + (currentSet-1) + ' complete! Excellent work!';
+        const finishedSetNum = exerciseCompleted ? currentSet : (currentSet - 1);
+        const setMsg = 'Set ' + finishedSetNum + ' completed!';
         console.log('🎯 SET ALERT:', setMsg);
         addFeedback('success', '🎯 ' + setMsg);
-        queueSpeech(setMsg);
     }
     
-    // ✅ EXERCISE COMPLETED - Show alert and speak
+    // ✅ EXERCISE COMPLETED - Show visual alert only (speech is handled by speakRepSetAlert)
     if (exerciseCompleted && !currentExerciseCompleted) {
         currentExerciseCompleted = true;  // Mark as completed to prevent duplicate triggers
         const exerciseMsg = 'Exercise completed! Fantastic effort! Go to the next exercise!';
         console.log('🏆 EXERCISE ALERT:', exerciseMsg);
         addFeedback('success', '🏆 ' + exerciseMsg);
-        queueSpeech(exerciseMsg);
         
         // Automatically move to next exercise after a brief delay
         setTimeout(function() {
@@ -2380,8 +2473,11 @@ async function speakFeedbackList(items) {
     if (hash === lastSpokenHash) return;
 
     // Queue ALL feedback lines individually so each is spoken fully
+    // but skip fallback/error messages (e.g. "feedback unavailable")
     items.forEach(function(line) {
         if (line && typeof line === 'string' && line.trim()) {
+            const lower = line.toLowerCase();
+            if (lower.includes('unavailable') || lower.includes('error')) return;
             queueSpeech(line.trim());
         }
     });
@@ -2639,7 +2735,8 @@ async function callSessionStart() {
     if (selectedPipeline === 'keraal' || selectedPipeline === 'both') {
         promises.push(fetch(API_BASE + '/api/session/start/keraal', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ language: lang })
+            body: JSON.stringify({ language: lang,
+                target_reps: w ? w.reps : targetReps, target_sets: w ? w.sets : targetSets })
         }).then(r => r.json()).catch(() => null));
     }
     await Promise.allSettled(promises);
@@ -2655,13 +2752,32 @@ async function startSession() {
     }
     
     // Build WORKOUTS array from selected exercises
-    const userSelectedWorkouts = selectedExerciseIds.map((id, idx) => ({
-        id: idx + 1,
-        name: AVAILABLE_EXERCISES[id].name,
-        exercise_id: id,
-        sets: AVAILABLE_EXERCISES[id].sets,
-        reps: AVAILABLE_EXERCISES[id].reps
-    }));
+    // Use sets/reps from BACKEND_WORKOUTS (clinician-assigned plan) when available,
+    // otherwise fall back to AVAILABLE_EXERCISES defaults.
+    console.log('🔍 BACKEND_WORKOUTS:', BACKEND_WORKOUTS);
+    const userSelectedWorkouts = selectedExerciseIds.map((id, idx) => {
+        const exDef = AVAILABLE_EXERCISES[id];
+        // Match by exercise name against backend workouts (from DB)
+        // Try exact match first, then try prefix match (DB name may not have pipeline suffixes like "(CTK)")
+        const exNameLower = exDef.name.toLowerCase().trim();
+        let backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim() === exNameLower);
+        if (!backendMatch) {
+            // Try: DB name is a prefix of the AVAILABLE_EXERCISES name (e.g. "Forward Flexion" matches "Forward Flexion (CTK)")
+            backendMatch = BACKEND_WORKOUTS.find(bw => exNameLower.startsWith(bw.name.toLowerCase().trim()));
+        }
+        if (!backendMatch) {
+            // Try: AVAILABLE_EXERCISES name is a prefix of the DB name
+            backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim().startsWith(exNameLower));
+        }
+        console.log(`  Exercise "${exDef.name}" → backendMatch:`, backendMatch ? `"${backendMatch.name}" (${backendMatch.sets}×${backendMatch.reps})` : 'NONE (using default 3×10)');
+        return {
+            id: idx + 1,
+            name: exDef.name,
+            exercise_id: id,
+            sets: backendMatch ? backendMatch.sets : exDef.sets,
+            reps: backendMatch ? backendMatch.reps : exDef.reps
+        };
+    });
     
     // Replace WORKOUTS with user selections
     // Clear and repopulate the global WORKOUTS array
@@ -2713,8 +2829,23 @@ async function startSession() {
     setsCompletedDict = {};
     currentExerciseCompleted = false; // Reset for first exercise
     
+    // Reset per-pipeline score accumulators for weighted average
+    pipelineScoreAccum = { kimore: { totalScore: 0, exerciseCount: 0 }, keraal: { totalScore: 0, exerciseCount: 0 } };
+    
+    // Set targets from first exercise's WORKOUTS data (DB values from clinician plan)
+    if (WORKOUTS.length > 0) {
+        targetSets = WORKOUTS[0].sets;
+        targetReps = WORKOUTS[0].reps;
+        currentRep = 0;
+        currentSet = 1;
+    }
+    
+    // Switch active pipeline to match the first exercise
+    switchPipelineForCurrentExercise();
+    
     console.log(`🚀 Session started with ${WORKOUTS.length} exercises:`, WORKOUTS);
     console.log(`First exercise: "${WORKOUTS[0].name}", ${WORKOUTS[0].sets} sets x ${WORKOUTS[0].reps} reps`);
+    console.log(`  → targetSets=${targetSets}, targetReps=${targetReps}`);
     
     updateRepCounter();
     updateExerciseSteps();
@@ -2769,6 +2900,9 @@ async function nextExercise() {
     allScores = [];
     setsCompletedDict = {};
     exerciseStartTs = Date.now();
+    
+    // Switch pipeline to match this exercise's type
+    switchPipelineForCurrentExercise();
     updateRepCounter();
     updateExerciseSteps();
     updateSessionProgress();
@@ -2790,6 +2924,15 @@ async function saveCurrentExercise() {
     const w = WORKOUTS[currentExIndex];
     const avgQ = allScores.length > 0
         ? Math.round(allScores.reduce(function(a, b) { return a + b; }, 0) / allScores.length) : 0;
+    
+    // Accumulate this exercise's score into the correct pipeline bucket (for weighted average)
+    const exPipeline = getPipelineForExercise(w.exercise_id);
+    if (avgQ > 0) {
+        pipelineScoreAccum[exPipeline].totalScore += avgQ;
+        pipelineScoreAccum[exPipeline].exerciseCount += 1;
+    }
+    console.log(`  Pipeline accumulator update: ${exPipeline} += ${avgQ}, accum:`, pipelineScoreAccum);
+    
     const setsReq = {};
     for (let i = 1; i <= w.sets; i++) setsReq[String(i)] = w.reps;
     for (let i = 1; i <= w.sets; i++) {
@@ -2857,21 +3000,59 @@ function showPostSession() {
     const overlay = document.createElement('div');
     overlay.className = 'post-overlay';
     
-    // Build exercise summary
+    // Build exercise summary with pipeline tags
     let exerciseSummary = '<div style="margin-bottom:16px;"><h4 style="margin:0 0 8px;">Completed Exercises:</h4>';
     WORKOUTS.forEach(function(w, i) {
         const saved = exerciseData[i];
         const repsCompleted = saved ? Object.values(saved.sets_completed).reduce(function(a, b) { return a + b; }, 0) : 0;
         const status = repsCompleted >= (w.sets * w.reps) ? '✅' : '⏱️';
-        exerciseSummary += '<div style="padding:4px 0;">' + status + ' ' + w.name + ': ' + repsCompleted + '/' + (w.sets * w.reps) + ' reps</div>';
+        const exPipe = getPipelineForExercise(w.exercise_id);
+        const pipeBadge = exPipe === 'keraal'
+            ? '<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;margin-left:6px;">🦴 Keraal</span>'
+            : '<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;margin-left:6px;">🏋️ Kimore</span>';
+        exerciseSummary += '<div style="padding:4px 0;display:flex;align-items:center;gap:4px;">' + status + ' ' + w.name + pipeBadge + ': ' + repsCompleted + '/' + (w.sets * w.reps) + ' reps</div>';
     });
     exerciseSummary += '</div>';
     
-    const progressPerc = calcSessionProgress();
+    // Compute weighted average session score from per-pipeline accumulators
+    const kimAcc = pipelineScoreAccum.kimore;
+    const kerAcc = pipelineScoreAccum.keraal;
+    const kimAvg = kimAcc.exerciseCount > 0 ? (kimAcc.totalScore / kimAcc.exerciseCount) : 0;
+    const kerAvg = kerAcc.exerciseCount > 0 ? (kerAcc.totalScore / kerAcc.exerciseCount) : 0;
+    const totalExWithScores = kimAcc.exerciseCount + kerAcc.exerciseCount;
+    const weightedAvgScore = totalExWithScores > 0
+        ? ((kimAvg * kimAcc.exerciseCount + kerAvg * kerAcc.exerciseCount) / totalExWithScores)
+        : 0;
+    console.log(`📊 Session score breakdown: Kimore avg=${kimAvg.toFixed(1)} (${kimAcc.exerciseCount} ex), Keraal avg=${kerAvg.toFixed(1)} (${kerAcc.exerciseCount} ex), Weighted avg=${weightedAvgScore.toFixed(1)}`);
+    
+    // Build score breakdown display
+    let scoreBreakdown = '';
+    if (totalExWithScores > 0) {
+        scoreBreakdown = '<div style="margin-bottom:14px;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">';
+        scoreBreakdown += '<h4 style="margin:0 0 6px;font-size:.9rem;">📊 Session Average Score: <span style="color:#007bff;font-size:1.1rem;">' + weightedAvgScore.toFixed(1) + ' / 50</span></h4>';
+        if (kimAcc.exerciseCount > 0 && kerAcc.exerciseCount > 0) {
+            // Both pipelines were used — show breakdown
+            scoreBreakdown += '<div style="font-size:.82rem;color:#666;display:flex;gap:16px;">';
+            scoreBreakdown += '<span>🏋️ Kimore: ' + kimAvg.toFixed(1) + '/50 (' + kimAcc.exerciseCount + ' ex)</span>';
+            scoreBreakdown += '<span>🦴 Keraal: ' + kerAvg.toFixed(1) + '/50 (' + kerAcc.exerciseCount + ' ex)</span>';
+            scoreBreakdown += '</div>';
+        }
+        scoreBreakdown += '</div>';
+    }
+    
+    // If all exercises were completed, force progress to 100%
+    // (handles edge case where the last set's dict entry wasn't fully propagated)
+    const allExercisesDone = (currentExIndex >= WORKOUTS.length - 1) && currentExerciseCompleted;
+    const progressPerc = allExercisesDone ? 100 : calcSessionProgress();
+    
+    // Update the progress bar behind the overlay
+    document.getElementById('sessionProgressBar').style.width = progressPerc + '%';
+    document.getElementById('sessionProgressText').textContent = progressPerc + '%';
     
     overlay.innerHTML = '<div class="post-card">' +
         '<h2><i class="fa-solid fa-circle-check"></i> Session Complete!</h2>' +
         '<p style="color:#666;">Overall progress: <strong>' + progressPerc + '%</strong></p>' +
+        scoreBreakdown +
         exerciseSummary +
         '<div class="pain-slider-group">' +
             '<label>Pain After (0-10): <span class="pain-value" id="painAfterVal">0</span></label>' +

@@ -211,7 +211,7 @@ FINAL INSTRUCTION: You MUST respond in {language} only. Use the REFERENCE contex
                 time.sleep(0.6 * (attempt + 1))
 
         print(f"[LLM] Failed after {max_retries + 1} attempts")
-        return [f"Continue with proper form. ({language} feedback unavailable)"]
+        return [f"Keep going, maintain proper form and posture."]
 
     # ============================================================================
     # Helper: Convert text output to bullet points

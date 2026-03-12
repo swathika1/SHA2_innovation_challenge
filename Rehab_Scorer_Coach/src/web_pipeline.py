@@ -32,7 +32,7 @@ class WebRehabPipeline:
         self.cfg = AppConfig()
 
         self.threshold = 35.0
-        self.cooldown_seconds = 6.0
+        self.cooldown_seconds = 10.0   # LLM feedback every 10s (fires for ALL form statuses)
 
         self.rep_counter = RepCounterMediaPipe()
         self.kimore_rep_counter = KimoreRepCounter()
@@ -554,13 +554,13 @@ class WebRehabPipeline:
         biomechanics = self._compute_biomechanics(landmarks)
         print(f"   Biomechanics: asymmetry={biomechanics['asymmetry_pct']}% | joint_angle={biomechanics['joint_angle']}°")
 
-        # 5️⃣ LLM FEEDBACK
+        # 5️⃣ LLM FEEDBACK (enabled for ALL form statuses — CORRECT and WRONG)
         print("➡️ Step 5: LLM Check")
 
         feedback_list = self.last_feedback_list
         now = time.time()
 
-        if status == "WRONG" and (now - self.last_llm_time) > self.cooldown_seconds:
+        if (now - self.last_llm_time) > self.cooldown_seconds:
             print("   🔥 Triggering LLM")
 
             try:
