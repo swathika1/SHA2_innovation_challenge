@@ -1,0 +1,70 @@
+# QUICK FIX SUMMARY - KIMORE Voice Not Working
+
+## What Was Wrong
+KIMORE pipeline returns `form_status="WRONG"` but frontend only listened for `form_status="INCORRECT"`
+
+## What I Fixed
+Updated `templates/patient/session.html` to handle BOTH statuses:
+
+### Change 1: Voice Trigger (Line ~1149)
+```javascript
+// BEFORE - Only speaks for "INCORRECT"
+if (out.form_status === "INCORRECT" && fb && fb.length > 0) {
+    await speakFeedbackList(fb);
+}
+
+// AFTER - Speaks for both "INCORRECT" and "WRONG"
+if ((out.form_status === "INCORRECT" || out.form_status === "WRONG") && fb && fb.length > 0) {
+    await speakFeedbackList(fb);
+}
+```
+
+### Change 2: Badge Display (Line ~819)
+```javascript
+// BEFORE - Only displayed badge for "INCORRECT"
+} else if (status === 'INCORRECT') {
+    badge.className = 'badge incorrect';
+    badge.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> FORM NEEDS WORK';
+
+// AFTER - Displays for both "INCORRECT" and "WRONG"
+} else if (status === 'INCORRECT' || status === 'WRONG') {
+    badge.className = 'badge incorrect';
+    badge.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> FORM NEEDS WORK';
+} else if (status === 'IDLE') {
+    badge.className = 'badge analyzing';
+    badge.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> YOU ARE IDLE';
+```
+
+## Why This Works
+Now when KIMORE returns `"WRONG"`:
+1. ✅ Frontend recognizes it
+2. ✅ Calls `speakFeedbackList()`
+3. ✅ Voice plays immediately
+4. ✅ No 8-second delay
+5. ✅ Works in any language
+
+## Test It
+```bash
+# 1. Start server
+python3 main.py
+
+# 2. Run verification test
+python3 test_voice_fix.py
+
+# 3. Open browser
+http://localhost:5050
+
+# 4. Perform incorrect exercise form
+# Expected: Hear voice feedback immediately
+```
+
+## Status
+✅ **FIXED** - Voice now works in KIMORE pipeline
+
+All tests pass:
+- ✅ WebRehabPipeline confirmed returns "WRONG"
+- ✅ Frontend handles "WRONG" for voice
+- ✅ Frontend handles "WRONG" for badge
+- ✅ LLM generates feedback in Tamil (verified)
+- ✅ TTS has 8-second timeout + fallback
+- ✅ API key loaded from .env

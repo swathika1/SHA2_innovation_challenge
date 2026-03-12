@@ -8,6 +8,57 @@ SAFETY_RULES = """Rules:
 - Be empathetic, clear, and concise
 - Respond in the same language the patient uses (English, 中文, Bahasa Melayu, தமிழ்)"""
 
+APP_CONTEXT = """
+=== APP DATABASE SCHEMA (rehab_coach.db — SQLite) ===
+You have access to patient data from these tables. Use this to give informed, personalized answers.
+
+1. users — id, email, name, role (doctor/patient/caregiver), phone, created_at
+2. patients — user_id, condition, surgery_date, current_week, adherence_rate (%), avg_pain_level (0-10), avg_quality_score (0-100), completed_sessions, streak_days
+3. doctor_patient — doctor_id, patient_id, assigned_date
+4. caregiver_patient — caregiver_id, patient_id, relationship
+5. exercises — id, name, description, category, difficulty (1-5), video_url
+6. workouts — patient_id, exercise_id, sets, reps, frequency, instructions, is_active
+7. sessions — patient_id, started_at, completed_at, pain_before (0-10), pain_after (0-10), effort_level, quality_score (0-100), completed_perc (%)
+8. session_exercises — session_id, workout_id, exercise_name, quality_score, sets_required/completed (JSON)
+9. session_frames — frame-level telemetry: session_id, exercise_name, score, status, rep_count, set_count
+10. appointments — doctor_id, patient_id, date, time, duration, status (scheduled/completed/cancelled)
+11. clinician_notes — doctor notes about patients
+12. caregiver_requests — caregiver access requests (pending/approved/rejected)
+13. login_history — user login audit trail
+
+=== RAG KNOWLEDGE BASES ===
+Two vector stores provide exercise guidance that may be injected as context:
+
+FAISS (vector_store/) — Keraal PDF guides, rehabilitation literature
+ChromaDB (rag_db/) — Comprehensive exercise knowledge:
+
+KIMORE Exercises (motion-capture scoring, 0-50 scale):
+  1. Lifting of Arms — shoulder mobility, lateral arm raise
+  2. Lateral Trunk Tilt — trunk lateral flexibility
+  3. Trunk Rotation — spinal rotational mobility
+  4. Squat — lower limb strength, hip/knee flexion
+  5. Trunk Rotation & Target — rotation + reaching coordination
+  Scoring: Primary Outcome (0-15) + Control Factor (0-35) = 0-50
+
+KERAAL Exercises (webcam BlazePose scoring, 0-50 scale):
+  - Forward Flexion (CTK) — hip hinge, hamstring stretch
+  - Flank Stretch (ELK) — lateral trunk stretch
+  - Torso Rotation (RTK) — trunk rotation
+  Scoring: ≥27.5/50 = CORRECT form
+
+General: Safety guidelines, scoring systems, LBP rehab protocols
+
+=== APP FEATURES ===
+- Real-time webcam exercise scoring (OpenPose/BlazePose skeleton detection)
+- Pain tracking before/after sessions (0-10)
+- Quality scoring per session (0-100)
+- Adherence rate and streak tracking
+- Doctor dashboard, caregiver access workflow
+- Appointment scheduling with optimization
+- Multilingual: English, Chinese, Malay, Tamil, Singlish
+- Avatar coach (Jimmy) for voice/text interaction
+"""
+
 
 def _build_headers() -> dict:
     """Build auth headers for MERaLiON API."""
@@ -26,6 +77,7 @@ LANGUAGE_INSTRUCTIONS = {
 
 
 def _build_chat_payload(messages: list, patient_context: str, rag_context: str = "", lang_key: str = "en") -> dict:
+    # sourcery skip: merge-list-appends-into-extend, use-named-expression
     """Build payload for MERaLiON /chat endpoint.
 
     MERaLiON responds best when the full prompt is in the 'instruction' field.
@@ -45,8 +97,9 @@ def _build_chat_payload(messages: list, patient_context: str, rag_context: str =
 
     # Build the full instruction that MERaLiON will respond to
     instruction_parts = [
-        "You are a healthcare rehab assistant. Answer the patient's question directly with specific, practical advice.",
-        SAFETY_RULES
+        "You are a healthcare rehab assistant for the Home Rehab Coach app. Answer the patient's question directly with specific, practical advice.",
+        SAFETY_RULES,
+        APP_CONTEXT
     ]
 
     # Explicit language override — placed early so the model sees it clearly
@@ -60,8 +113,12 @@ def _build_chat_payload(messages: list, patient_context: str, rag_context: str =
     if history_lines:
         instruction_parts.append("\nPrevious conversation:\n" + "\n".join(history_lines[-6:]))
 
+    # RAG context — inject rehabilitation knowledge if available
+    if rag_context and rag_context.strip():
+        instruction_parts.append(f"\nRelevant Rehabilitation Knowledge (use this to inform your answer):\n{rag_context}")
+
     instruction_parts.append(f"\nPatient asks: {question}")
-    instruction_parts.append("\nRespond directly to their question with helpful, specific advice:")
+    instruction_parts.append("\nRespond directly to their question with helpful, specific advice. Reference the rehabilitation knowledge above when relevant:")
 
     return {
         "instruction": "\n".join(instruction_parts),
@@ -110,6 +167,101 @@ async def query_merilion(messages: list, patient_context: str, rag_context: str 
         )
         response.raise_for_status()
         return _extract_response(response.json())
+
+
+def translate_text_sync(text: str, target_language: str) -> str:
+    """Translate text to target_language using MERaLiON."""
+    lang_full = {
+        "Chinese": "Chinese (Simplified)",
+        "Malay": "Bahasa Melayu",
+        "Tamil": "Tamil",
+        "English": "English"
+    }
+    target = lang_full.get(target_language, target_language)
+    headers = _build_headers()
+    payload = {
+        "instruction": f"Translate the following text to {target}. Output ONLY the translated text, no explanations, no preamble:\n\n{text}",
+        "question": "answer"
+    }
+    r = requests.post(f"{MERILION_BASE_URL}/chat", json=payload, headers=headers, timeout=20)
+    r.raise_for_status()
+    return _extract_response(r.json())
+
+
+def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm", vocab_hint: str = "") -> str:
+    """Transcribe audio using MERaLiON /process/transcribe endpoint."""
+    # Use correct MIME type based on filename extension
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "webm"
+    mime_map = {"webm": "audio/webm", "ogg": "audio/ogg", "mp4": "audio/mp4",
+                "wav": "audio/wav", "mp3": "audio/mpeg", "m4a": "audio/mp4"}
+    content_type = mime_map.get(ext, "audio/webm")
+
+    files = {"file": (filename, audio_bytes, content_type)}
+    form_data = {}
+    if vocab_hint:
+        form_data["prompt"] = vocab_hint  # vocabulary hint for domain-specific recognition
+
+    print(f"[TRANSCRIBE] Sending {len(audio_bytes)} bytes ({content_type}) to Meralion")
+
+    api_key = (MERILION_API_KEY or "").strip()
+    if api_key.lower().startswith("bearer "):
+        api_key = api_key[7:].strip()
+
+    base = (MERILION_BASE_URL or "").rstrip("/")
+    url_candidates = [
+        f"{base}/process/transcribe",
+        f"{base}/transcribe",
+    ]
+    header_candidates = [
+        {"x-api-key": api_key, "Accept": "application/json"},
+        {"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+    ]
+
+    errors = []
+    data = None
+    for url in url_candidates:
+        for headers in header_candidates:
+            try:
+                r = requests.post(
+                    url,
+                    files=files,
+                    data=form_data if form_data else None,
+                    headers=headers,
+                    timeout=30
+                )
+                print(f"[TRANSCRIBE] URL={url} auth={list(headers.keys())[0]} status={r.status_code}")
+                if r.status_code >= 400:
+                    body_preview = (r.text or "")[:250]
+                    errors.append(f"{url} [{list(headers.keys())[0]}] -> HTTP {r.status_code}: {body_preview}")
+                    continue
+
+                try:
+                    data = r.json()
+                except Exception:
+                    body_preview = (r.text or "")[:250]
+                    errors.append(f"{url} [{list(headers.keys())[0]}] -> Non-JSON: {body_preview}")
+                    continue
+
+                print(f"[TRANSCRIBE] Response data: {data}")
+                break
+            except Exception as e:
+                errors.append(f"{url} [{list(headers.keys())[0]}] -> {e}")
+                continue
+        if data is not None:
+            break
+
+    if data is None:
+        raise RuntimeError("Meralion transcribe failed: " + " | ".join(errors[-4:]))
+
+    # Try common response field names
+    transcript = (
+        data.get("transcript") or
+        data.get("text") or
+        data.get("transcription") or
+        data.get("output") or
+        ""
+    )
+    return transcript if isinstance(transcript, str) else str(transcript)
 
 
 def test_connection() -> dict:

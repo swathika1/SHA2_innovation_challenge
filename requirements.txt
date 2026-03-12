@@ -5,47 +5,55 @@
 # ============================================================
 
 # --- Web framework (Flask) ---
-Flask==2.3.2
-Werkzeug==2.3.6
-Flask-SQLAlchemy==3.0.5
+Flask==3.0.2
+Werkzeug==3.0.0
+Flask-SQLAlchemy==3.1.1
 Flask-Login==0.6.3
-Flask-Session==0.5.0
-Flask-CORS==4.0.0
+Flask-Session>=0.5.0
+Flask-CORS>=4.0.0
 
 # --- FastAPI chatbot server (app_chat.py) ---
-fastapi
-uvicorn
-pydantic
-httpx
+fastapi>=0.115.0
+uvicorn==0.40.0
+pydantic==2.11.10
+httpx==0.28.1
 
 # --- Database ---
-SQLAlchemy
-
-# --- Optimization (Gurobi - optional, mock solver used if missing) ---
-gurobipy>=12.0.0,<13.0.0
+SQLAlchemy>=2.0.32
 
 # --- ML / CV core ---
-numpy
-opencv-python
-mediapipe
-tensorflow
-keras
-joblib
+numpy>=1.26.4
+opencv-python==4.11.0.86
+mediapipe==0.10.32
+tensorflow>=2.16.1
+keras==3.13.2
+joblib==1.3.2
+torch==2.10.0
+
+# --- Pose estimation (OpenPifPaf - legacy pipeline) ---
+# openpifpaf==0.13.11  # incompatible with Python 3.13 (requires torch 1.13.1)
 
 # --- RAG / Embeddings ---
-chromadb==0.5.5
-sentence-transformers==3.0.1
-faiss-cpu
+chromadb==1.1.1
+sentence-transformers>=3.0.1
+faiss-cpu>=1.7.0
 
 # --- LLM clients ---
-google-generativeai
-groq
+google-genai==1.62.0
+groq==1.0.0
 
 # --- Text-to-Speech ---
-pyttsx3
-edge-tts
+pyttsx3>=2.90
+edge-tts==7.2.7
+gTTS==2.5.4
+
+# --- PDF processing & report generation ---
+PyPDF2>=3.0.0
+pdfplumber==0.11.9
+reportlab==4.4.10
 
 # --- Utilities ---
-requests
-langdetect
-Pillow
+requests==2.32.5
+langdetect>=1.0.9
+Pillow==12.1.0
+python-dotenv==1.2.1

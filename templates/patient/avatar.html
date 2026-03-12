@@ -1,0 +1,1384 @@
+{% extends 'base.html' %}
+
+{% block title %}Speak to Jimmy - Home Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo"> Home Rehab Coach</a></h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('patient_appointments') }}">Consultations</a>
+        <a href="{{ url_for('avatar_page') }}" class="active" style="background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%); color: white; padding: 8px 16px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; text-decoration: none;"><i class="fa-solid fa-mask"></i> Speak to Jimmy</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>{{ user.name }}</strong></div>
+                    <a href="{{ url_for('patient_profile') }}"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<style>
+    .jimmy-shell {
+        max-width: 1100px;
+        margin: 18px auto;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow: 0 12px 28px rgba(0,0,0,0.15);
+        min-height: calc(100vh - 170px);
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+    }
+
+    .jimmy-top {
+        background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+        color: #fff;
+        padding: 18px 20px;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+    }
+
+    .hero-avatar-wrap {
+        width: 340px;
+        height: 420px;
+        border-radius: 18px;
+        border: 4px solid rgba(255,255,255,0.95);
+        box-shadow: 0 18px 36px rgba(0,0,0,0.35);
+        position: relative;
+        overflow: hidden;
+        background: #101524;
+        flex-shrink: 0;
+    }
+
+    #heroAvatarCanvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+
+    .hero-avatar-wrap[data-state="listening"] { box-shadow: 0 0 0 8px rgba(244,63,94,0.45), 0 18px 36px rgba(0,0,0,0.45); }
+    .hero-avatar-wrap[data-state="thinking"] { box-shadow: 0 0 0 8px rgba(255,255,255,0.25), 0 18px 36px rgba(0,0,0,0.45); }
+    .hero-avatar-wrap[data-state="talking"] { box-shadow: 0 0 0 9px rgba(255,221,87,0.5), 0 18px 36px rgba(0,0,0,0.52); }
+
+    .hero-mask {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(9,14,25,0.06) 0%, rgba(9,14,25,0.2) 100%);
+        pointer-events: none;
+    }
+
+    .hero-state {
+        position: absolute;
+        left: 50%;
+        bottom: 12px;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.55);
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 700;
+        border-radius: 999px;
+        padding: 4px 10px;
+    }
+
+    .jimmy-meta h2 { margin: 0 0 6px 0; font-size: 2rem; }
+    .jimmy-meta p { margin: 0; opacity: 0.95; }
+
+    .mode-row {
+        display: flex;
+        gap: 10px;
+        padding: 12px 18px;
+        border-bottom: 1px solid #ececec;
+        background: #f8fafc;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .mode-btn {
+        border: 1px solid #d4d9e6;
+        background: #fff;
+        color: #2b3347;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .mode-btn.active {
+        background: #2c56d8;
+        border-color: #2c56d8;
+        color: #fff;
+    }
+
+    .language-select {
+        margin-left: auto;
+        border: 1px solid #d4d9e6;
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: #fff;
+        font-weight: 600;
+        color: #243447;
+    }
+
+    .panel {
+        padding: 16px;
+        background: #f3f5f9;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .chat-messages {
+        overflow-y: auto;
+        max-height: 380px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .message { display: flex; }
+    .message.user { justify-content: flex-end; }
+
+    .bubble {
+        max-width: 72%;
+        border-radius: 14px;
+        padding: 10px 14px;
+        line-height: 1.45;
+        font-size: 0.98rem;
+        white-space: pre-wrap;
+    }
+
+    .user .bubble {
+        background: #5873e4;
+        color: #fff;
+        border-bottom-right-radius: 4px;
+    }
+
+    .avatar .bubble {
+        background: #fff;
+        color: #1f2a37;
+        border: 1px solid #dde3ee;
+        border-bottom-left-radius: 4px;
+    }
+
+    .msg-time { font-size: 0.72rem; opacity: 0.6; margin-top: 4px; }
+
+    .chat-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        background: #fff;
+        border: 1px solid #e5e9f0;
+        border-radius: 12px;
+        padding: 10px;
+    }
+
+    #messageInput {
+        flex: 1;
+        min-height: 48px;
+        max-height: 120px;
+        resize: vertical;
+        border: 1px solid #d5dbe7;
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 1rem;
+        font-family: inherit;
+    }
+
+    .ctrl-btn {
+        border: none;
+        width: 48px;
+        height: 48px;
+        border-radius: 10px;
+        color: #fff;
+        cursor: pointer;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 1.1rem;
+    }
+
+    .ctrl-send { background: #3d66e7; }
+    .ctrl-mic { background: #ef4444; }
+    .ctrl-mic.active { animation: pulseMic 1s infinite; }
+    .ctrl-speaker {
+        background: #10b981;
+        font-size: 1.15rem;
+    }
+    .ctrl-speaker.muted {
+        background: #6b7280;
+        opacity: 0.6;
+    }
+
+    .voice-only-panel {
+        display: none;
+        min-height: 230px;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        background: #0f172a;
+        color: #fff;
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .voice-only-panel .big-mic {
+        width: 88px;
+        height: 88px;
+        border-radius: 50%;
+        border: 0;
+        background: #ef4444;
+        color: #fff;
+        font-size: 1.8rem;
+        cursor: pointer;
+        box-shadow: 0 12px 25px rgba(239,68,68,0.35);
+    }
+
+    .voice-only-panel .big-mic.active { animation: pulseMic 1s infinite; }
+
+    .voice-note {
+        margin-top: 12px;
+        font-size: 0.92rem;
+        color: #cbd5e1;
+        text-align: center;
+        max-width: 560px;
+        line-height: 1.5;
+    }
+
+    @keyframes pulseMic {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.08); }
+    }
+
+    .typing {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+    }
+
+    .typing span {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #8f96a5;
+        animation: dot 1.2s infinite;
+    }
+
+    .typing span:nth-child(2) { animation-delay: .2s; }
+    .typing span:nth-child(3) { animation-delay: .4s; }
+
+    @keyframes dot {
+        0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+        30% { transform: translateY(-5px); opacity: 1; }
+    }
+
+    .text-mode-only { display: block; }
+
+    @media (max-width: 900px) {
+        .jimmy-top { flex-direction: column; text-align: center; }
+        .hero-avatar-wrap { width: 260px; height: 320px; }
+        .language-select { margin-left: 0; }
+        .bubble { max-width: 86%; }
+    }
+</style>
+
+<div class="jimmy-shell">
+    <div class="jimmy-top">
+        <div class="hero-avatar-wrap" id="heroAvatarWrap" data-state="idle">
+            <canvas id="heroAvatarCanvas" width="680" height="840" aria-label="Animated superhero Jimmy avatar"></canvas>
+            <div class="hero-mask"></div>
+            <div class="hero-state" id="heroStateText">IDLE</div>
+        </div>
+        <div class="jimmy-meta">
+            <h2>Superhero Rehab Coach Jimmy</h2>
+            <p>Realistic talking avatar mode is voice-only: Jimmy listens and replies by voice automatically.</p>
+        </div>
+    </div>
+
+    <div class="mode-row">
+        <button id="modeTextBtn" class="mode-btn">Text Chat</button>
+        <button id="modeAvatarBtn" class="mode-btn active">Talk to Avatar</button>
+
+        <select id="languageSelect" class="language-select" title="Language">
+            <option value="English">English</option>
+            <option value="Chinese">中文 (Chinese)</option>
+            <option value="Malay">Bahasa Melayu</option>
+            <option value="Tamil">தமிழ் (Tamil)</option>
+            <option value="Singlish">Singlish</option>
+        </select>
+    </div>
+
+    <div class="panel">
+        <div id="textModePanel" class="text-mode-only">
+            <div class="chat-messages" id="chatMessages">
+                <div class="message avatar">
+                    <div class="bubble">
+                        Hey {{ user.name }}! I’m Jimmy.
+                        You can use text chat here, or switch to Talk to Avatar for pure voice interaction.
+                        <div class="msg-time" id="introTime"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="chat-controls">
+                <button id="textMicBtn" class="ctrl-btn ctrl-mic" title="Hold to speak"><i class="fa-solid fa-microphone"></i></button>
+                <textarea id="messageInput" placeholder="Type your question..."></textarea>
+                <button id="sendBtn" class="ctrl-btn ctrl-send" title="Send text"><i class="fa-solid fa-paper-plane"></i></button>
+                <button id="textSpeakerBtn" class="ctrl-btn ctrl-speaker" title="Toggle auto-speak"><i class="fa-solid fa-volume-high"></i></button>
+            </div>
+        </div>
+
+        <div id="voiceModePanel" class="voice-only-panel">
+            <button id="voiceMicBtn" class="big-mic" title="Start or stop listening"><i class="fa-solid fa-microphone"></i></button>
+            <div class="voice-note" id="voiceNote">
+                Tap the microphone and speak. Jimmy will listen and answer automatically by voice.
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const LANG_CONFIG = {
+        English: { recognition: 'en-SG', tts: 'English', synthesis: 'en-SG' },
+        Chinese: { recognition: 'zh-CN', tts: 'Chinese', synthesis: 'zh-CN' },
+        Malay: { recognition: 'ms-MY', tts: 'Malay', synthesis: 'ms-MY' },
+        Tamil: { recognition: 'ta-IN', tts: 'Tamil', synthesis: 'ta-IN' },
+        Singlish: { recognition: 'en-SG', tts: 'Singlish', synthesis: 'en-SG' }
+    };
+
+    let recAudioCtx = null;
+    let recProcessor = null;
+    let recSource = null;
+    let pcmChunks = [];
+    let recordStream = null;
+
+    const heroAvatarWrap = document.getElementById('heroAvatarWrap');
+    const heroAvatarCanvas = document.getElementById('heroAvatarCanvas');
+    const heroStateText = document.getElementById('heroStateText');
+
+    const modeTextBtn = document.getElementById('modeTextBtn');
+    const modeAvatarBtn = document.getElementById('modeAvatarBtn');
+    const languageSelect = document.getElementById('languageSelect');
+
+    const textModePanel = document.getElementById('textModePanel');
+    const voiceModePanel = document.getElementById('voiceModePanel');
+
+    const chatMessages = document.getElementById('chatMessages');
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    const voiceMicBtn = document.getElementById('voiceMicBtn');
+    const voiceNote = document.getElementById('voiceNote');
+    const textMicBtn = document.getElementById('textMicBtn');
+    const textSpeakerBtn = document.getElementById('textSpeakerBtn');
+
+    let currentMode = 'avatar';
+    let avatarState = 'idle';
+    let isListening = false;
+    let manualStop = false;
+    let isSending = false;
+    let textMicActive = false;
+    let textSpeakerOn = true;   // auto-speak Jimmy replies in text chat
+    let history = [];
+
+    let speechAudio = null;
+    let speechUrl = null;
+    let audioContext = null;
+    let analyser = null;
+    let sourceNode = null;
+    let rafId = null;
+    let fallbackTimer = null;
+    let mouthLevel = 0;
+    let avatarRenderer = null;
+
+    document.getElementById('introTime').textContent = new Date().toLocaleTimeString();
+
+    function setAvatarState(state) {
+        avatarState = state;
+        heroAvatarWrap.dataset.state = state;
+        heroStateText.textContent = state.toUpperCase();
+        if (avatarRenderer) avatarRenderer.setState(state);
+    }
+
+    class SuperheroAvatarRenderer {
+        constructor(canvas) {
+            this.canvas = canvas;
+            this.ctx = canvas.getContext('2d');
+            this.state = 'idle';
+            this.mouthLevel = 0;
+            this.smoothedMouthLevel = 0;
+            this.startAt = performance.now();
+            this.blinkLevel = 1;
+            this.lastBlinkAt = 0;
+            this.nextBlinkGap = 1700 + Math.random() * 2500;
+            this.gazeX = 0;
+            this.gazeY = 0;
+            this.targetGazeX = 0;
+            this.targetGazeY = 0;
+            this.lastGazeShift = 0;
+            this.nextGazeShift = 700 + Math.random() * 900;
+            this.browLift = 0;
+            this.renderLoop = this.renderLoop.bind(this);
+            requestAnimationFrame(this.renderLoop);
+        }
+
+        setState(state) {
+            this.state = state;
+        }
+
+        setMouthLevel(level) {
+            this.mouthLevel = Math.max(0, Math.min(1, level || 0));
+        }
+
+        updateBlink(timestamp) {
+            if (timestamp - this.lastBlinkAt < this.nextBlinkGap) {
+                this.blinkLevel = 1;
+                return;
+            }
+
+            const blinkProgress = (timestamp - this.lastBlinkAt - this.nextBlinkGap) / 170;
+            if (blinkProgress <= 1) {
+                if (blinkProgress < 0.5) {
+                    this.blinkLevel = 1 - blinkProgress * 2;
+                } else {
+                    this.blinkLevel = (blinkProgress - 0.5) * 2;
+                }
+            } else {
+                this.blinkLevel = 1;
+                this.lastBlinkAt = timestamp;
+                this.nextBlinkGap = 1500 + Math.random() * 2800;
+            }
+        }
+
+        updateMicroMotion(timestamp, elapsed) {
+            if (timestamp - this.lastGazeShift > this.nextGazeShift) {
+                const intensity = this.state === 'talking' ? 1 : 0.6;
+                this.targetGazeX = (Math.random() - 0.5) * 10 * intensity;
+                this.targetGazeY = (Math.random() - 0.5) * 6 * intensity;
+                this.lastGazeShift = timestamp;
+                this.nextGazeShift = 700 + Math.random() * 900;
+            }
+
+            this.gazeX += (this.targetGazeX - this.gazeX) * 0.08;
+            this.gazeY += (this.targetGazeY - this.gazeY) * 0.08;
+            this.smoothedMouthLevel += (this.mouthLevel - this.smoothedMouthLevel) * 0.28;
+
+            const speakingPulse = this.state === 'talking' ? Math.sin(elapsed * 9.2) * 0.07 : 0;
+            this.browLift = Math.max(0, this.smoothedMouthLevel * 0.25 + speakingPulse);
+        }
+
+        drawBackground(ctx, width, height, elapsed) {
+            const bg = ctx.createLinearGradient(0, 0, 0, height);
+            bg.addColorStop(0, '#1a2447');
+            bg.addColorStop(0.55, '#15284f');
+            bg.addColorStop(1, '#0f1a34');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, width, height);
+
+            const flare = ctx.createRadialGradient(width * 0.5, height * 0.35, 40, width * 0.5, height * 0.35, width * 0.62);
+            flare.addColorStop(0, 'rgba(255,164,33,0.22)');
+            flare.addColorStop(1, 'rgba(255,164,33,0)');
+            ctx.fillStyle = flare;
+            ctx.fillRect(0, 0, width, height);
+
+            for (let i = 0; i < 14; i++) {
+                const px = ((i * 81) + Math.sin(elapsed + i) * 40) % width;
+                const py = ((i * 57) + Math.cos(elapsed * 1.15 + i) * 50) % height;
+                ctx.fillStyle = 'rgba(255,255,255,0.18)';
+                ctx.fillRect(px, py, 3, 3);
+            }
+        }
+
+        drawCharacter(ctx, width, height, elapsed) {
+            const cx = width / 2;
+            const cy = height / 2 + 30;
+            const idleBob = Math.sin(elapsed * 1.8) * 4;
+            const talkBob = this.state === 'talking' ? Math.sin(elapsed * 10.0) * 1.8 : 0;
+            const bob = idleBob + talkBob;
+            const headTurn = this.gazeX * 0.12;
+            const headTilt = this.gazeX * 0.005;
+
+            ctx.save();
+            ctx.translate(cx, cy + bob);
+
+            /* ── SHOULDERS / ARMS ── */
+            // Left shoulder/arm
+            const armGrad = ctx.createLinearGradient(-200, 100, -120, 300);
+            armGrad.addColorStop(0, '#1e4f8a');
+            armGrad.addColorStop(1, '#0d2a52');
+            ctx.fillStyle = armGrad;
+            ctx.beginPath();
+            ctx.moveTo(-140, 90);
+            ctx.quadraticCurveTo(-195, 120, -210, 180);
+            ctx.quadraticCurveTo(-220, 260, -195, 350);
+            ctx.lineTo(-155, 350);
+            ctx.quadraticCurveTo(-145, 240, -120, 150);
+            ctx.quadraticCurveTo(-100, 110, -80, 94);
+            ctx.closePath();
+            ctx.fill();
+            // Right shoulder/arm
+            const armGradR = ctx.createLinearGradient(200, 100, 120, 300);
+            armGradR.addColorStop(0, '#1e4f8a');
+            armGradR.addColorStop(1, '#0d2a52');
+            ctx.fillStyle = armGradR;
+            ctx.beginPath();
+            ctx.moveTo(140, 90);
+            ctx.quadraticCurveTo(195, 120, 210, 180);
+            ctx.quadraticCurveTo(220, 260, 195, 350);
+            ctx.lineTo(155, 350);
+            ctx.quadraticCurveTo(145, 240, 120, 150);
+            ctx.quadraticCurveTo(100, 110, 80, 94);
+            ctx.closePath();
+            ctx.fill();
+
+            /* ── TORSO (blue suit base) ── */
+            const suit = ctx.createLinearGradient(0, 70, 0, 370);
+            suit.addColorStop(0, '#2563b0');
+            suit.addColorStop(0.5, '#1a4d8e');
+            suit.addColorStop(1, '#0e3062');
+            ctx.fillStyle = suit;
+            ctx.beginPath();
+            ctx.moveTo(-140, 90);
+            ctx.quadraticCurveTo(-100, 80, -56, 82);
+            ctx.lineTo(56, 82);
+            ctx.quadraticCurveTo(100, 80, 140, 90);
+            ctx.quadraticCurveTo(170, 180, 160, 360);
+            ctx.lineTo(-160, 360);
+            ctx.quadraticCurveTo(-170, 180, -140, 90);
+            ctx.closePath();
+            ctx.fill();
+
+            /* ── Pectoral muscles / body contour lines ── */
+            ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+            ctx.lineWidth = 2.5;
+            // left pec
+            ctx.beginPath();
+            ctx.moveTo(-8, 100);
+            ctx.quadraticCurveTo(-60, 108, -100, 140);
+            ctx.stroke();
+            // right pec
+            ctx.beginPath();
+            ctx.moveTo(8, 100);
+            ctx.quadraticCurveTo(60, 108, 100, 140);
+            ctx.stroke();
+            // center chest highlight
+            const chestHL = ctx.createLinearGradient(0, 88, 0, 170);
+            chestHL.addColorStop(0, 'rgba(255,255,255,0.16)');
+            chestHL.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = chestHL;
+            ctx.beginPath();
+            ctx.moveTo(-90, 130);
+            ctx.quadraticCurveTo(-50, 95, 0, 105);
+            ctx.quadraticCurveTo(50, 95, 90, 130);
+            ctx.quadraticCurveTo(40, 165, 0, 160);
+            ctx.quadraticCurveTo(-40, 165, -90, 130);
+            ctx.closePath();
+            ctx.fill();
+
+            /* ── Orange/Gold V-panel (matching reference) ── */
+            const emblem = ctx.createLinearGradient(0, 90, 0, 360);
+            emblem.addColorStop(0, '#ffb833');
+            emblem.addColorStop(0.4, '#f5a623');
+            emblem.addColorStop(1, '#e08a0e');
+            ctx.fillStyle = emblem;
+            ctx.beginPath();
+            ctx.moveTo(-56, 82);
+            ctx.lineTo(56, 82);
+            ctx.lineTo(95, 360);
+            ctx.lineTo(-95, 360);
+            ctx.closePath();
+            ctx.fill();
+            // V-panel highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.12)';
+            ctx.beginPath();
+            ctx.moveTo(-40, 86);
+            ctx.lineTo(0, 88);
+            ctx.lineTo(-15, 200);
+            ctx.lineTo(-55, 200);
+            ctx.closePath();
+            ctx.fill();
+            // Orange shoulder panels (like reference)
+            ctx.fillStyle = '#f5a623';
+            ctx.beginPath();
+            ctx.moveTo(-56, 82);
+            ctx.quadraticCurveTo(-90, 84, -125, 100);
+            ctx.quadraticCurveTo(-135, 130, -120, 155);
+            ctx.quadraticCurveTo(-90, 128, -56, 108);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#f5a623';
+            ctx.beginPath();
+            ctx.moveTo(56, 82);
+            ctx.quadraticCurveTo(90, 84, 125, 100);
+            ctx.quadraticCurveTo(135, 130, 120, 155);
+            ctx.quadraticCurveTo(90, 128, 56, 108);
+            ctx.closePath();
+            ctx.fill();
+
+            // Panel border lines
+            ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(-56, 82);
+            ctx.lineTo(-95, 360);
+            ctx.moveTo(56, 82);
+            ctx.lineTo(95, 360);
+            ctx.stroke();
+
+            /* ── REHAB COACH text ── */
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 4;
+            ctx.fillText('REHAB', 0, 260);
+            ctx.fillText('COACH', 0, 288);
+            ctx.shadowBlur = 0;
+
+            /* ── Collar / suit neckline ── */
+            const collarGrad = ctx.createLinearGradient(0, 58, 0, 90);
+            collarGrad.addColorStop(0, '#0e2a50');
+            collarGrad.addColorStop(1, '#1a4580');
+            ctx.fillStyle = collarGrad;
+            ctx.beginPath();
+            ctx.moveTo(-52, 72);
+            ctx.quadraticCurveTo(0, 88, 52, 72);
+            ctx.quadraticCurveTo(0, 62, -52, 72);
+            ctx.closePath();
+            ctx.fill();
+
+            /* ── NECK ── */
+            const neckGrad = ctx.createLinearGradient(0, 10, 0, 72);
+            neckGrad.addColorStop(0, '#e8b894');
+            neckGrad.addColorStop(1, '#d4a07a');
+            ctx.fillStyle = neckGrad;
+            ctx.beginPath();
+            ctx.moveTo(-32, 14);
+            ctx.lineTo(-36, 72);
+            ctx.quadraticCurveTo(0, 80, 36, 72);
+            ctx.lineTo(32, 14);
+            ctx.closePath();
+            ctx.fill();
+            // Neck shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.beginPath();
+            ctx.moveTo(-28, 50);
+            ctx.quadraticCurveTo(0, 62, 28, 50);
+            ctx.quadraticCurveTo(0, 76, -28, 50);
+            ctx.closePath();
+            ctx.fill();
+
+            /* ── HEAD ── */
+            ctx.save();
+            ctx.rotate(headTilt);
+
+            // Face shape (reference: strong jawline, squared chin)
+            const faceGrad = ctx.createRadialGradient(-20 + this.gazeX * 0.06, -110, 30, 0, -80, 170);
+            faceGrad.addColorStop(0, '#f5d4b8');
+            faceGrad.addColorStop(0.7, '#e8b894');
+            faceGrad.addColorStop(1, '#d4a07a');
+            ctx.fillStyle = faceGrad;
+            ctx.beginPath();
+            ctx.moveTo(headTurn, -218);
+            // forehead wider
+            ctx.bezierCurveTo(80 + headTurn, -218, 118 + headTurn, -185, 122 + headTurn, -130);
+            // cheekbone wide
+            ctx.bezierCurveTo(126 + headTurn, -80, 120 + headTurn, -30, 100 + headTurn, -5);
+            // strong jaw angle
+            ctx.lineTo(72 + headTurn, 24);
+            // squared chin
+            ctx.quadraticCurveTo(40 + headTurn, 52, headTurn, 56);
+            ctx.quadraticCurveTo(-40 + headTurn, 52, -72 + headTurn, 24);
+            // left jaw
+            ctx.lineTo(-100 + headTurn, -5);
+            ctx.bezierCurveTo(-120 + headTurn, -30, -126 + headTurn, -80, -122 + headTurn, -130);
+            ctx.bezierCurveTo(-118 + headTurn, -185, -80 + headTurn, -218, headTurn, -218);
+            ctx.fill();
+
+            // Jaw shadow for definition
+            ctx.fillStyle = 'rgba(160,100,60,0.18)';
+            ctx.beginPath();
+            ctx.moveTo(-100 + headTurn, -5);
+            ctx.lineTo(-72 + headTurn, 24);
+            ctx.quadraticCurveTo(-40 + headTurn, 52, headTurn, 56);
+            ctx.quadraticCurveTo(40 + headTurn, 52, 72 + headTurn, 24);
+            ctx.lineTo(100 + headTurn, -5);
+            ctx.quadraticCurveTo(60 + headTurn, 10, headTurn, 14);
+            ctx.quadraticCurveTo(-60 + headTurn, 10, -100 + headTurn, -5);
+            ctx.closePath();
+            ctx.fill();
+
+            // Cheekbone highlight
+            ctx.fillStyle = 'rgba(255,225,200,0.22)';
+            ctx.beginPath();
+            ctx.ellipse(-60 + headTurn, -50, 28, 16, -0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(60 + headTurn, -50, 28, 16, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            /* ── MASK (covers eye area, reference style) ── */
+            // The mask sits across the eyes from temple to temple
+            ctx.fillStyle = '#111318';
+            ctx.beginPath();
+            // mask top edge - angular like reference
+            ctx.moveTo(-122 + headTurn, -116);
+            ctx.quadraticCurveTo(-80 + headTurn, -142, -30 + headTurn, -138);
+            ctx.lineTo(30 + headTurn, -138);
+            ctx.quadraticCurveTo(80 + headTurn, -142, 122 + headTurn, -116);
+            // mask bottom edge - sharp V-shape nose bridge
+            ctx.lineTo(108 + headTurn, -62);
+            ctx.quadraticCurveTo(70 + headTurn, -52, 30 + headTurn, -64);
+            ctx.quadraticCurveTo(10 + headTurn, -72, headTurn, -78);
+            ctx.quadraticCurveTo(-10 + headTurn, -72, -30 + headTurn, -64);
+            ctx.quadraticCurveTo(-70 + headTurn, -52, -108 + headTurn, -62);
+            ctx.closePath();
+            ctx.fill();
+
+            // Mask brow ridge (raised ridge for intimidation)
+            const browY = -120 - this.browLift * 8;
+            ctx.strokeStyle = '#222530';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(-100 + headTurn, browY + 10);
+            ctx.quadraticCurveTo(-50 + headTurn, browY - 6, -10 + headTurn, browY + 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(100 + headTurn, browY + 10);
+            ctx.quadraticCurveTo(50 + headTurn, browY - 6, 10 + headTurn, browY + 2);
+            ctx.stroke();
+
+            /* ── EYES (white visible eyes - superhero style!) ── */
+            const leftEyeX = -50 + headTurn;
+            const rightEyeX = 50 + headTurn;
+            const eyeY = -92 + this.gazeY * 0.3;
+            const eyeH = Math.max(1.5, 18 * this.blinkLevel);
+            const eyeW = 26;
+
+            // White eye glow (like superhero comic)
+            ctx.shadowColor = 'rgba(255,255,255,0.5)';
+            ctx.shadowBlur = 12;
+
+            // Left eye - white almond shape
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.save();
+            ctx.translate(leftEyeX, eyeY);
+            ctx.rotate(headTilt - 0.08);
+            ctx.beginPath();
+            ctx.moveTo(-eyeW, 0);
+            ctx.quadraticCurveTo(-eyeW * 0.5, -eyeH, 0, -eyeH * 0.9);
+            ctx.quadraticCurveTo(eyeW * 0.7, -eyeH * 0.7, eyeW, 0);
+            ctx.quadraticCurveTo(eyeW * 0.5, eyeH * 0.8, 0, eyeH * 0.7);
+            ctx.quadraticCurveTo(-eyeW * 0.7, eyeH * 0.6, -eyeW, 0);
+            ctx.closePath();
+            ctx.fill();
+            // Iris
+            const pupilOX = this.gazeX * 0.35;
+            const pupilOY = this.gazeY * 0.25;
+            ctx.fillStyle = '#2c4a6e';
+            ctx.beginPath();
+            ctx.ellipse(pupilOX, pupilOY, 9, Math.min(9, eyeH * 0.6), 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Pupil
+            ctx.fillStyle = '#0a0a0a';
+            ctx.beginPath();
+            ctx.ellipse(pupilOX, pupilOY, 4.5, Math.min(4.5, eyeH * 0.32), 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Eye highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.beginPath();
+            ctx.ellipse(pupilOX + 3, pupilOY - 3, 2.8, 2.2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            // Right eye
+            ctx.fillStyle = '#ffffff';
+            ctx.save();
+            ctx.translate(rightEyeX, eyeY);
+            ctx.rotate(headTilt + 0.08);
+            ctx.beginPath();
+            ctx.moveTo(-eyeW, 0);
+            ctx.quadraticCurveTo(-eyeW * 0.7, -eyeH * 0.7, 0, -eyeH * 0.9);
+            ctx.quadraticCurveTo(eyeW * 0.5, -eyeH, eyeW, 0);
+            ctx.quadraticCurveTo(eyeW * 0.7, eyeH * 0.6, 0, eyeH * 0.7);
+            ctx.quadraticCurveTo(-eyeW * 0.5, eyeH * 0.8, -eyeW, 0);
+            ctx.closePath();
+            ctx.fill();
+            // Iris
+            ctx.fillStyle = '#2c4a6e';
+            ctx.beginPath();
+            ctx.ellipse(pupilOX, pupilOY, 9, Math.min(9, eyeH * 0.6), 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Pupil
+            ctx.fillStyle = '#0a0a0a';
+            ctx.beginPath();
+            ctx.ellipse(pupilOX, pupilOY, 4.5, Math.min(4.5, eyeH * 0.32), 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Eye highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.beginPath();
+            ctx.ellipse(pupilOX + 3, pupilOY - 3, 2.8, 2.2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            ctx.shadowBlur = 0;
+
+            /* ── NOSE ── */
+            ctx.strokeStyle = 'rgba(160,100,60,0.35)';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(headTurn, -62);
+            ctx.quadraticCurveTo(8 + headTurn, -28, 4 + headTurn, -16);
+            ctx.stroke();
+            // Nostril hints
+            ctx.fillStyle = 'rgba(140,80,50,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(-8 + headTurn, -14, 5, 3, 0, 0, Math.PI * 2);
+            ctx.ellipse(10 + headTurn, -14, 5, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            /* ── MOUTH ── */
+            const mouthOpen = Math.min(1, 0.04 + this.smoothedMouthLevel * 1.1 + (this.state === 'talking' ? 0.1 : 0));
+            const mouthW = 30 + mouthOpen * 14;
+            const mouthH = 3 + mouthOpen * 18;
+            const jawDrop = mouthOpen * 6;
+            const mouthY = 18 + jawDrop;
+
+            if (mouthOpen > 0.08) {
+                // Open mouth interior
+                ctx.fillStyle = '#2a0808';
+                ctx.beginPath();
+                ctx.ellipse(headTurn, mouthY, mouthW, mouthH, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Tongue hint
+                ctx.fillStyle = '#b84040';
+                ctx.beginPath();
+                ctx.ellipse(headTurn, mouthY + mouthH * 0.3, mouthW * 0.5, mouthH * 0.35, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Teeth
+                if (mouthOpen > 0.2) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                    ctx.beginPath();
+                    ctx.ellipse(headTurn, mouthY - mouthH * 0.55, mouthW * 0.7, 3.5, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            // Lips
+            ctx.strokeStyle = 'rgba(170,80,70,0.7)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(-mouthW + headTurn, mouthY - 1);
+            ctx.quadraticCurveTo(headTurn, mouthY - mouthH * 0.4 - 3, mouthW + headTurn, mouthY - 1);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(-mouthW + headTurn, mouthY + 1);
+            ctx.quadraticCurveTo(headTurn, mouthY + mouthH * 0.5 + 3, mouthW + headTurn, mouthY + 1);
+            ctx.stroke();
+
+            /* ── HAIR (styled dark hair like reference) ── */
+            const hairGrad = ctx.createLinearGradient(0, -230, 0, -140);
+            hairGrad.addColorStop(0, '#1a1410');
+            hairGrad.addColorStop(0.5, '#2a2018');
+            hairGrad.addColorStop(1, '#1c1612');
+            ctx.fillStyle = hairGrad;
+            ctx.beginPath();
+            // Volume on top, swept to right
+            ctx.moveTo(-90 + headTurn, -160);
+            ctx.bezierCurveTo(-110 + headTurn, -195, -90 + headTurn, -240, -40 + headTurn, -252);
+            ctx.bezierCurveTo(-10 + headTurn, -260, 30 + headTurn, -265, 60 + headTurn, -256);
+            ctx.bezierCurveTo(95 + headTurn, -245, 115 + headTurn, -220, 110 + headTurn, -190);
+            ctx.bezierCurveTo(108 + headTurn, -175, 100 + headTurn, -160, 90 + headTurn, -152);
+            // curve around temples
+            ctx.quadraticCurveTo(80 + headTurn, -168, 60 + headTurn, -178);
+            ctx.quadraticCurveTo(20 + headTurn, -200, -20 + headTurn, -195);
+            ctx.quadraticCurveTo(-60 + headTurn, -190, -80 + headTurn, -170);
+            ctx.closePath();
+            ctx.fill();
+
+            // Hair highlight strands
+            ctx.strokeStyle = 'rgba(80,60,40,0.35)';
+            ctx.lineWidth = 1.5;
+            for (let i = 0; i < 5; i++) {
+                ctx.beginPath();
+                const sx = -50 + i * 25 + headTurn;
+                ctx.moveTo(sx, -190);
+                ctx.quadraticCurveTo(sx + 15, -225, sx + 8 + i * 3, -245);
+                ctx.stroke();
+            }
+            // A subtle shine on hair
+            ctx.fillStyle = 'rgba(100,80,60,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(20 + headTurn, -230, 40, 12, -0.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore(); /* end head rotation */
+
+            /* ── Shoulder muscle lines on arms ── */
+            ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-160, 120);
+            ctx.quadraticCurveTo(-140, 170, -145, 220);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(160, 120);
+            ctx.quadraticCurveTo(140, 170, 145, 220);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        renderLoop(timestamp) {
+            const ctx = this.ctx;
+            const width = this.canvas.width;
+            const height = this.canvas.height;
+            const elapsed = (timestamp - this.startAt) / 1000;
+
+            this.updateBlink(timestamp);
+            this.updateMicroMotion(timestamp, elapsed);
+            this.drawBackground(ctx, width, height, elapsed);
+            this.drawCharacter(ctx, width, height, elapsed);
+
+            requestAnimationFrame(this.renderLoop);
+        }
+    }
+
+    avatarRenderer = new SuperheroAvatarRenderer(heroAvatarCanvas);
+
+    function setMode(mode) {
+        currentMode = mode;
+        modeTextBtn.classList.toggle('active', mode === 'text');
+        modeAvatarBtn.classList.toggle('active', mode === 'avatar');
+
+        if (mode === 'text') {
+            textModePanel.style.display = 'block';
+            voiceModePanel.style.display = 'none';
+            stopAudioSpeech();
+            setAvatarState('idle');
+            voiceBuffer = '';
+        } else {
+            textModePanel.style.display = 'none';
+            voiceModePanel.style.display = 'flex';
+            setAvatarState('idle');
+        }
+    }
+
+    modeTextBtn.addEventListener('click', () => setMode('text'));
+    modeAvatarBtn.addEventListener('click', () => setMode('avatar'));
+
+    languageSelect.addEventListener('change', () => {
+        // language used at transcription time via the server-side /api/chat/transcribe endpoint
+    });
+
+    function addMessage(role, text) {
+        const wrap = document.createElement('div');
+        wrap.className = `message ${role}`;
+        const safe = role === 'user' ? escapeHtml(text) : text;
+        wrap.innerHTML = `<div class="bubble">${safe}<div class="msg-time">${new Date().toLocaleTimeString()}</div></div>`;
+        chatMessages.appendChild(wrap);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function showTyping() {
+        const el = document.createElement('div');
+        el.className = 'message avatar';
+        el.id = 'typingIndicator';
+        el.innerHTML = '<div class="bubble"><span class="typing"><span></span><span></span><span></span></span></div>';
+        chatMessages.appendChild(el);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function removeTyping() {
+        const el = document.getElementById('typingIndicator');
+        if (el) el.remove();
+    }
+
+    async function queryJimmy(inputText, renderChat) {
+        if (!inputText || isSending) return null;
+
+        if (renderChat) {
+            addMessage('user', inputText);
+            showTyping();
+        }
+
+        history.push({ role: 'user', content: inputText });
+        isSending = true;
+        setAvatarState('thinking');
+
+        try {
+            const res = await fetch('{{ url_for("avatar_chat") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: inputText,
+                    history: history.slice(-8),
+                    language: languageSelect.value
+                })
+            });
+            if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+            const data = await res.json();
+            const answer = (data.response || '').toString();
+            history.push({ role: 'assistant', content: answer });
+
+            if (renderChat) {
+                removeTyping();
+                addMessage('avatar', answer);
+            }
+
+            return answer;
+        } catch (err) {
+            if (renderChat) {
+                removeTyping();
+                addMessage('avatar', `Error: ${escapeHtml(err.message)}. Please try again.`);
+            }
+            setAvatarState('idle');
+            return null;
+        } finally {
+            isSending = false;
+        }
+    }
+
+    async function sendTextMessage() {
+        const inputText = (messageInput.value || '').trim();
+        if (!inputText) return;
+        messageInput.value = '';
+        sendBtn.disabled = true;
+        const answer = await queryJimmy(inputText, true);
+        if (answer && textSpeakerOn) {
+            await speakAuto(answer);
+        }
+        setAvatarState('idle');
+        sendBtn.disabled = false;
+    }
+
+    /* ── Text-mode mic (speech-to-text into textarea) ── */
+    let textRecognition = null;
+    if (SpeechRecognition) {
+        textRecognition = new SpeechRecognition();
+        textRecognition.continuous = false;
+        textRecognition.interimResults = true;
+        textRecognition.maxAlternatives = 1;
+
+        textRecognition.onstart = () => {
+            textMicActive = true;
+            textMicBtn.classList.add('active');
+        };
+
+        textRecognition.onresult = (event) => {
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
+            messageInput.value = transcript;
+        };
+
+        textRecognition.onerror = () => {
+            textMicActive = false;
+            textMicBtn.classList.remove('active');
+        };
+
+        textRecognition.onend = () => {
+            textMicActive = false;
+            textMicBtn.classList.remove('active');
+            // Auto-send if we captured something
+            const captured = (messageInput.value || '').trim();
+            if (captured) sendTextMessage();
+        };
+    }
+
+    textMicBtn.addEventListener('click', () => {
+        if (!textRecognition) { alert('Speech recognition not supported in this browser.'); return; }
+        if (textMicActive) {
+            textRecognition.stop();
+        } else {
+            const cfg = LANG_CONFIG[languageSelect.value] || LANG_CONFIG.English;
+            textRecognition.lang = cfg.recognition;
+            textRecognition.start();
+        }
+    });
+
+    /* ── Speaker toggle ── */
+    textSpeakerBtn.addEventListener('click', () => {
+        textSpeakerOn = !textSpeakerOn;
+        textSpeakerBtn.classList.toggle('muted', !textSpeakerOn);
+        textSpeakerBtn.innerHTML = textSpeakerOn
+            ? '<i class="fa-solid fa-volume-high"></i>'
+            : '<i class="fa-solid fa-volume-xmark"></i>';
+        if (!textSpeakerOn) stopAudioSpeech();
+    });
+
+    function stopFallbackMouth() {
+        if (fallbackTimer) {
+            clearInterval(fallbackTimer);
+            fallbackTimer = null;
+        }
+        mouthLevel = 0;
+        if (avatarRenderer) avatarRenderer.setMouthLevel(0);
+    }
+
+    function stopAudioSpeech() {
+        if (speechAudio) {
+            speechAudio.pause();
+            speechAudio.src = '';
+            speechAudio = null;
+        }
+        if (speechUrl) {
+            URL.revokeObjectURL(speechUrl);
+            speechUrl = null;
+        }
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+        if (sourceNode) {
+            try { sourceNode.disconnect(); } catch (_) {}
+            sourceNode = null;
+        }
+        if (analyser) {
+            try { analyser.disconnect(); } catch (_) {}
+            analyser = null;
+        }
+        if (audioContext && audioContext.state !== 'closed') {
+            audioContext.close().catch(() => {});
+        }
+        audioContext = null;
+        stopFallbackMouth();
+    }
+
+    function animateFromAnalyser() {
+        if (!analyser || !speechAudio || speechAudio.paused) return;
+        const arr = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(arr);
+        let sum = 0;
+        for (let i = 0; i < arr.length; i++) sum += arr[i];
+        mouthLevel = Math.min(1, (sum / arr.length) / 90);
+        if (avatarRenderer) avatarRenderer.setMouthLevel(mouthLevel);
+        rafId = requestAnimationFrame(animateFromAnalyser);
+    }
+
+    async function speakAuto(text) {
+        stopAudioSpeech();
+        setAvatarState('talking');
+
+        const langCfg = LANG_CONFIG[languageSelect.value] || LANG_CONFIG.English;
+
+        try {
+            const ttsRes = await fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, language: langCfg.tts, gender: "male" })
+            });
+            if (!ttsRes.ok) throw new Error(`TTS ${ttsRes.status}`);
+
+            const blob = await ttsRes.blob();
+            speechUrl = URL.createObjectURL(blob);
+            speechAudio = new Audio(speechUrl);
+
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (Ctx) {
+                audioContext = new Ctx();
+                sourceNode = audioContext.createMediaElementSource(speechAudio);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                sourceNode.connect(analyser);
+                analyser.connect(audioContext.destination);
+                speechAudio.onplay = () => {
+                    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+                    animateFromAnalyser();
+                };
+            }
+
+            await speechAudio.play();
+            await new Promise((resolve) => {
+                speechAudio.onended = resolve;
+                speechAudio.onerror = resolve;
+            });
+
+            stopAudioSpeech();
+            setAvatarState('idle');
+            return;
+        } catch (err) {
+            console.warn('Server TTS failed, using browser speech:', err);
+        }
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = langCfg.synthesis;
+        utterance.rate = 0.95;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+
+        utterance.onstart = () => {
+            setAvatarState('talking');
+            fallbackTimer = setInterval(() => {
+                mouthLevel = 0.2 + Math.random() * 0.75;
+                if (avatarRenderer) avatarRenderer.setMouthLevel(mouthLevel);
+            }, 90);
+        };
+
+        utterance.onend = () => {
+            stopFallbackMouth();
+            setAvatarState('idle');
+        };
+
+        utterance.onerror = () => {
+            stopFallbackMouth();
+            setAvatarState('idle');
+        };
+
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function encodeWAV(samples, sampleRate) {
+        const buf = new ArrayBuffer(44 + samples.length * 2);
+        const view = new DataView(buf);
+        function ws(off, s) { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); }
+        ws(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true);
+        ws(8, 'WAVE'); ws(12, 'fmt ');
+        view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+        ws(36, 'data'); view.setUint32(40, samples.length * 2, true);
+        let off = 44;
+        for (let i = 0; i < samples.length; i++, off += 2) {
+            const s = Math.max(-1, Math.min(1, samples[i]));
+            view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        }
+        return new Blob([buf], { type: 'audio/wav' });
+    }
+
+    function stopRecording() {
+        if (recProcessor) { recProcessor.disconnect(); recProcessor = null; }
+        if (recSource) { recSource.disconnect(); recSource = null; }
+        if (recordStream) { recordStream.getTracks().forEach(t => t.stop()); recordStream = null; }
+        const ctx = recAudioCtx;
+        recAudioCtx = null;
+        return ctx;
+    }
+
+    function toggleListening() {
+        if (currentMode !== 'avatar') return;
+
+        if (isListening) {
+            isListening = false;
+            voiceMicBtn.classList.remove('active');
+            voiceNote.textContent = 'Processing speech…';
+            setAvatarState('thinking');
+
+            const ctx = stopRecording();
+            const sampleRate = ctx ? ctx.sampleRate : 16000;
+            if (ctx) ctx.close();
+
+            const totalSamples = pcmChunks.reduce((acc, c) => acc + c.length, 0);
+            if (totalSamples < 800) {
+                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
+                setAvatarState('idle');
+                return;
+            }
+            const merged = new Float32Array(totalSamples);
+            let offset = 0;
+            for (const chunk of pcmChunks) { merged.set(chunk, offset); offset += chunk.length; }
+            pcmChunks = [];
+            processVoiceBlob(encodeWAV(merged, sampleRate));
+            return;
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            voiceNote.textContent = 'Microphone not supported in this browser.';
+            return;
+        }
+
+        pcmChunks = [];
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            .then(stream => {
+                recordStream = stream;
+                recAudioCtx = new AudioContext();
+                recSource = recAudioCtx.createMediaStreamSource(stream);
+                recProcessor = recAudioCtx.createScriptProcessor(4096, 1, 1);
+                recProcessor.onaudioprocess = e => {
+                    pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+                };
+                recSource.connect(recProcessor);
+                recProcessor.connect(recAudioCtx.destination);
+
+                isListening = true;
+                voiceMicBtn.classList.add('active');
+                voiceNote.textContent = 'Listening… Tap mic again when done speaking.';
+                setAvatarState('listening');
+            })
+            .catch(err => {
+                console.error('[Jimmy mic] getUserMedia error:', err);
+                voiceNote.textContent = 'Microphone access denied. Please allow mic access and try again.';
+            });
+    }
+
+    async function processVoiceBlob(blob) {
+        voiceNote.textContent = 'Transcribing…';
+        const formData = new FormData();
+        formData.append('audio', blob, 'voice.wav');
+        try {
+            const res = await fetch('/api/chat/transcribe', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (!res.ok) {
+                const detail = (data && (data.detail || data.error)) ? ` (${data.detail || data.error})` : '';
+                throw new Error(`Transcription request failed: ${res.status}${detail}`);
+            }
+            const spokenText = (data.transcript || '').trim();
+            if (!spokenText) {
+                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
+                setAvatarState('idle');
+                return;
+            }
+            voiceNote.textContent = `Heard: "${spokenText}"`;
+            voiceNote.textContent = 'Thinking…';
+            const answer = await queryJimmy(spokenText, false);
+            if (answer) {
+                voiceNote.textContent = 'Jimmy is responding…';
+                await speakAuto(answer);
+                voiceNote.textContent = 'Done. Tap microphone to ask next question.';
+            } else {
+                voiceNote.textContent = 'I could not get a response. Tap microphone to retry.';
+                setAvatarState('idle');
+            }
+        } catch (err) {
+            console.error('[Jimmy mic] Transcription error:', err);
+            voiceNote.textContent = 'Transcription failed. Tap microphone to try again.';
+            setAvatarState('idle');
+        }
+    }
+
+    sendBtn.addEventListener('click', sendTextMessage);
+    messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendTextMessage();
+        }
+    });
+    voiceMicBtn.addEventListener('click', toggleListening);
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    window.addEventListener('beforeunload', () => {
+        stopRecording();
+        if (recAudioCtx) { recAudioCtx.close(); recAudioCtx = null; }
+        stopAudioSpeech();
+        window.speechSynthesis.cancel();
+    });
+
+    setMode('avatar');
+    setAvatarState('idle');
+</script>
+{% endblock %}

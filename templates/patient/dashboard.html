@@ -8,6 +8,7 @@
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}" class="active">Dashboard</a>
         <a href="{{ url_for('patient_appointments') }}">Consultations</a>
+        <a href="{{ url_for('avatar_page') }}" style="background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%); color: white; padding: 8px 16px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; text-decoration: none; transition: transform 0.2s; box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);"><i class="fa-solid fa-mask"></i> Speak to Jimmy</a>
         <div class="nav-user">
             <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
             <div class="nav-user-dropdown">
@@ -38,8 +39,16 @@
 {% endwith %}
 
 <div class="dashboard-header">
-    <h2>Welcome back, {{ user.name }}!</h2>
-    <span>{{ patient.condition }} - Week {{ patient.current_week }} | {{ total_sessions }} sessions completed</span>
+    <div class="welcome-block">
+        <h2 class="welcome-greeting">Welcome back, <span class="welcome-name">{{ user.name }}</span>!</h2>
+        <div class="welcome-subtitle">
+            <span class="welcome-condition-badge">{{ patient.condition }}</span>
+            <span class="welcome-separator">·</span>
+            <span class="welcome-detail">Week {{ patient.current_week }}</span>
+            <span class="welcome-separator">·</span>
+            <span class="welcome-detail"><i class="fa-solid fa-check-circle"></i> {{ total_sessions }} sessions completed</span>
+        </div>
+    </div>
 </div>
 
 <!-- Stats Row -->
@@ -131,22 +140,112 @@
 </div>
 {% endif %}
 
+<!-- Speak to Jimmy Avatar Card -->
+<div class="card" style="background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%); color: white; margin-bottom: 20px; border: none; position: relative; overflow: hidden;">
+    <div style="position: absolute; top: -20px; right: -20px; font-size: 60px; opacity: 0.1; transform: rotate(15deg);">🗣️</div>
+    <div style="padding: 30px; text-align: center; position: relative; z-index: 1;">
+        <div style="font-size: 4rem; margin-bottom: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); animation: avatarFloat 3s ease-in-out infinite;">🗣️</div>
+        <h3 style="margin: 0 0 10px 0; font-size: 1.8rem; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">Meet Jimmy</h3>
+        <p style="margin: 0 0 15px 0; opacity: 0.95; font-size: 1.1rem;"><strong>Your Animated Rehab Coach!</strong></p>
+        <p style="margin: 0 0 20px 0; opacity: 0.9;">Watch Jimmy come to life as he talks and listens to help you with your rehabilitation!</p>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <a href="{{ url_for('avatar_page') }}" class="btn" style="background: white; color: #ff6b35; padding: 12px 28px; font-weight: bold; border: none; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                <i class="fa-solid fa-comments"></i> Speak to Jimmy
+            </a>
+            <button onclick="document.getElementById('jimmyFeatures').scrollIntoView({behavior: 'smooth'})" class="btn" style="background: rgba(255,255,255,0.2); color: white; padding: 12px 28px; font-weight: bold; border: 1px solid white;">
+                Learn More <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Jimmy Features Overview -->
+<div class="card" id="jimmyFeatures" style="margin-bottom: 20px;">
+    <div class="card-header"><i class="fa-solid fa-robot"></i> Jimmy's Amazing Features:</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); padding: 15px; border-radius: 8px; border-left: 4px solid #ff6b35;">
+            <h4 style="margin: 0 0 8px 0; color: #ff6b35;"><i class="fa-solid fa-dumbbell"></i> Exercise Guidance</h4>
+            <p style="margin: 0; font-size: 0.9rem; color: #666;">Watch Jimmy animate as he guides you through perfect exercise form and technique.</p>
+        </div>
+        <div style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); padding: 15px; border-radius: 8px; border-left: 4px solid #ff6b35;">
+            <h4 style="margin: 0 0 8px 0; color: #ff6b35;"><i class="fa-solid fa-brain"></i> Smart Responses</h4>
+            <p style="margin: 0; font-size: 0.9rem; color: #666;">Jimmy comes alive with animated expressions while providing personalized rehabilitation advice.</p>
+        </div>
+        <div style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); padding: 15px; border-radius: 8px; border-left: 4px solid #ff6b35;">
+            <h4 style="margin: 0 0 8px 0; color: #ff6b35;"><i class="fa-solid fa-chart-line"></i> Live Progress</h4>
+            <p style="margin: 0; font-size: 0.9rem; color: #666;">See Jimmy react and celebrate your performance improvements in real-time.</p>
+        </div>
+        <div style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); padding: 15px; border-radius: 8px; border-left: 4px solid #ff6b35;">
+            <h4 style="margin: 0 0 8px 0; color: #ff6b35;"><i class="fa-solid fa-microphone"></i> Voice Animation</h4>
+            <p style="margin: 0; font-size: 0.9rem; color: #666;">Watch Jimmy's mouth move and expressions change as he speaks and listens to you.</p>
+        </div>
+    </div>
+</div>
+
 <div class="grid grid-2">
     <!-- My Exercises -->
     <div class="card">
         <div class="card-header"><i class="fa-solid fa-clipboard-list"></i> My Exercise Plan</div>
         {% if workouts %}
             {% for workout in workouts %}
-            <div style="padding: 12px; background: #f5f5f5; border-radius: 4px; margin-bottom: 10px;">
-                <strong>{{ workout.exercise_name }}</strong>
-                <p style="font-size: 0.9rem; color: #666; margin: 5px 0;">
-                    {{ workout.sets }} sets × {{ workout.reps }} reps | {{ workout.frequency }}
-                </p>
-                {% if workout.instructions %}
-                <p style="font-size: 0.85rem; color: #888;">{{ workout.instructions }}</p>
-                {% endif %}
+            <div style="display:flex; align-items:center; gap:12px; padding:12px; background:#f5f5f5; border-radius:8px; margin-bottom:10px;">
+                {% set gif_map = {
+                    'Lifting of Arms': 'lifting_of_arms',
+                    'Lifting Arms': 'lifting_of_arms',
+                    'Lateral Trunk Tilt': 'lateral_trunk_tilt',
+                    'Trunk Rotation': 'trunk_rotation',
+                    'Squat': 'squat',
+                    'Trunk Rotation & Target Touch': 'trunk_rotation_target',
+                    'Pelvis Rotation': 'pelvis_rotation',
+                    'Forward Flexion': 'forward_flexion',
+                    'Flank Stretch': 'flank_stretch',
+                    'Torso Rotation': 'torso_rotation'
+                } %}
+                {% set ex_svg = gif_map.get(workout.exercise_name, workout.exercise_name|lower|replace(' ', '_')) %}
+                <img src="{{ url_for('static', filename='gifs/' ~ ex_svg ~ '.svg') }}"
+                     alt="{{ workout.exercise_name }} demo"
+                     style="width:72px; height:72px; object-fit:contain; border-radius:8px; background:#e8ecff; flex-shrink:0;"
+                     onerror="this.style.display='none'">
+                <div style="flex:1;">
+                    <strong>{{ workout.exercise_name }}</strong>
+                    <p style="font-size: 0.9rem; color: #666; margin: 5px 0;">
+                        {{ workout.sets }} sets × {{ workout.reps }} reps | {{ workout.frequency }}
+                    </p>
+                    {% if workout.instructions %}
+                    <p style="font-size: 0.85rem; color: #888;">{{ workout.instructions }}</p>
+                    {% elif workout.description %}
+                    <p style="font-size: 0.85rem; color: #888;">{{ workout.description }}</p>
+                    {% endif %}
+                </div>
             </div>
             {% endfor %}
+
+            <div style="margin-top:14px; padding:12px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa;">
+                <strong style="display:block; margin-bottom:8px;">Adaptive Plan Feedback</strong>
+                <p style="font-size:0.86rem; color:#666; margin:0 0 10px 0;">
+                    If an exercise feels too hard or painful, submit feedback. The app will suggest a modification and your doctor can approve/reject.
+                </p>
+                <div style="display:grid; grid-template-columns: 1.1fr 1fr 0.8fr; gap:8px; margin-bottom:8px;">
+                    <select id="adaptiveWorkout" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                        {% for workout in workouts %}
+                        <option value="{{ workout.id }}">{{ workout.exercise_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="adaptiveIssue" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                        <option value="too_hard">Too hard</option>
+                        <option value="pain_during_exercise">Pain during exercise</option>
+                        <option value="form_confusing">Form instructions confusing</option>
+                    </select>
+                    <input id="adaptiveDifficulty" type="number" min="1" max="10" value="7" placeholder="Difficulty 1-10"
+                           style="padding:8px; border:1px solid #d1d5db; border-radius:6px;" />
+                </div>
+                <textarea id="adaptiveNote" rows="2" placeholder="Optional note for your doctor"
+                          style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;"></textarea>
+                <div style="margin-top:8px; display:flex; align-items:center; gap:10px;">
+                    <button class="btn" onclick="submitAdaptiveFeedback()" style="background:#2563eb; color:white;">Submit Adaptation Request</button>
+                    <span id="adaptiveFeedbackMsg" style="font-size:0.85rem; color:#666;"></span>
+                </div>
+            </div>
         {% else %}
             <p style="color: #666; text-align: center; padding: 20px;">
                 No exercises assigned yet. Your clinician will create your plan soon.
@@ -193,6 +292,34 @@
             </p>
         {% endif %}
     </div>
+</div>
+
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header"><i class="fa-solid fa-lightbulb"></i> Adaptive Plan Suggestions</div>
+    {% if adaptive_suggestions %}
+        {% for s in adaptive_suggestions %}
+        <div style="padding: 10px 12px; border-bottom:1px solid #f0f0f0;">
+            <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start; flex-wrap:wrap;">
+                <div>
+                    <strong>{{ s.reason }}</strong>
+                    <div style="font-size:0.86rem; color:#555; margin-top:2px;">{{ s.suggested_change }}</div>
+                    {% if s.patient_note %}
+                    <div style="font-size:0.82rem; color:#777; margin-top:2px;">Your note: {{ s.patient_note }}</div>
+                    {% endif %}
+                    <div style="font-size:0.78rem; color:#999; margin-top:4px;">{{ s.created_at }} • Dr. {{ s.doctor_name or 'Assigned Doctor' }}</div>
+                </div>
+                <span style="font-size:0.78rem; font-weight:700; padding:4px 8px; border-radius:999px;
+                    {% if s.status == 'approved' %}background:#dcfce7; color:#166534;
+                    {% elif s.status == 'rejected' %}background:#fee2e2; color:#991b1b;
+                    {% else %}background:#fef3c7; color:#92400e;{% endif %}">
+                    {{ s.status|upper }}
+                </span>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <p style="color:#666; text-align:center; padding:16px; margin:0;">No adaptation suggestions yet.</p>
+    {% endif %}
 </div>
 
 <!-- No appointments message if none scheduled -->
@@ -405,6 +532,35 @@
 {% if chart_sessions and chart_sessions|length > 1 %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+async function submitAdaptiveFeedback() {
+    const workout_id = Number(document.getElementById('adaptiveWorkout')?.value || 0);
+    const issue_type = document.getElementById('adaptiveIssue')?.value || 'too_hard';
+    const difficulty = Number(document.getElementById('adaptiveDifficulty')?.value || 7);
+    const note = (document.getElementById('adaptiveNote')?.value || '').trim();
+    const msg = document.getElementById('adaptiveFeedbackMsg');
+
+    if (!workout_id) {
+        if (msg) msg.textContent = 'Please select an exercise.';
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/patient/plan-feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workout_id, issue_type, difficulty, note })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+            throw new Error(data.error || 'Failed to submit feedback');
+        }
+        if (msg) msg.textContent = 'Request submitted. Doctor will review it.';
+        setTimeout(() => window.location.reload(), 700);
+    } catch (e) {
+        if (msg) msg.textContent = `Error: ${e.message}`;
+    }
+}
+
 (function() {
     var sessions = {{ chart_sessions | tojson }};
     var labels = sessions.map(function(s) {

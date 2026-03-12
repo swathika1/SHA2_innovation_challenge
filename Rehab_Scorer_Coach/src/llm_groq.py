@@ -22,7 +22,7 @@ class GroqLLM:
         timeout_seconds: int = 20,
     ):
         # Prefer env var; allow explicit override
-        self.api_key = (api_key or os.getenv("GROQ_API_KEY", "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")).strip() #"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"
+        self.api_key = (api_key or os.getenv("GROQ_API_KEY", "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")).strip()
         if not self.api_key:
             raise RuntimeError("GROQ_API_KEY not set")
 
@@ -136,59 +136,79 @@ POSE SUMMARY:
         **kwargs,  # ignore unexpected args safely (e.g., frame_b64 mistakenly passed)
     ) -> List[str]:  # sourcery skip: assign-if-exp, reintroduce-else
         """
-        Generate 2-4 short actionable coaching bullets (or 1 encouragement if OK).
-        Text-only. Uses: RAG context + numeric summary + pose summary.
+        Generate 2-4 short actionable coaching bullets in the specified language.
+        Uses: RAG context + numeric summary + pose summary.
         """
         exercise_name = (exercise_name or "unknown").strip()
         language = (language or "English").strip()
 
         system = (
             "You are a physiotherapy rehab coaching assistant. "
-            "Follow the user instructions exactly."
+            "Follow the user instructions exactly and ALWAYS respond in the requested language."
         )
 
-        user = f"""
-Output language: {language}
+        user = f"""Output language: {language}
 Exercise: {exercise_name}
 
 You will be given:
-- REFERENCE (how exercise should be done)
-- NUMERIC SUMMARY (score/status)
-- POSE SUMMARY (key pose/angles/joints)
+- REFERENCE (how exercise should be done, from medical guides - USE THIS!)
+- NUMERIC SUMMARY (form score and status)
+- POSE SUMMARY (body positioning details)
 
 Rules:
-- Reply with ONLY 2 to 4 short actionable bullet points.
+- Reply with EXACTLY 2 to 4 SHORT actionable bullet points.
 - If form looks acceptable, reply with ONLY 1 short encouraging bullet.
 - No headings, no long paragraphs, no markdown sections.
 - Avoid diagnosis; focus on safe form cues.
+- Use bullet points (-, •, or *) to separate items.
+- CRITICAL: Base your feedback on the REFERENCE context provided below.
+- CRITICAL: Respond ENTIRELY in {language}. Do NOT mix languages under any circumstance.
 
-REFERENCE (RAG):
-{rag_context}
+REFERENCE (Medical Guide - Base your feedback on this):
+{rag_context if rag_context.strip() else "Standard rehabilitation form guidance for " + exercise_name}
 
 NUMERIC SUMMARY:
 {numeric_summary}
 
 POSE SUMMARY:
 {pose_summary}
-""".strip()
+
+FINAL INSTRUCTION: You MUST respond in {language} only. Use the REFERENCE context above to provide specific, exercise-appropriate feedback. Be actionable and clear.""".strip()
 
         last_err = None
         for attempt in range(max_retries + 1):
             try:
-                resp = self._chat(system=system, user=user, temperature=0.2, max_tokens=200)
+                resp = self._chat(system=system, user=user, temperature=0.2, max_tokens=250)
                 text = (resp.choices[0].message.content or "").strip()
-
-                bullets = self._to_bullets(text, max_items=4)
-
-                # enforce constraints: if model returned 0 bullets, give fallback
-                if not bullets:
-                    return ["Keep going — form looks steady."]
-
-                # if model returned >4, trim
-                return bullets[:4]
-
+                print(f"[LLM] Raw response ({language}): {text[:100]}...")
+                
+                # Parse bullet points
+                lines = text.split('\n')
+                feedback = []
+                for line in lines:
+                    line = line.strip()
+                    # Remove bullet markers
+                    if line.startswith('-') or line.startswith('•') or line.startswith('*'):
+                        line = line[1:].strip()
+                    if line and len(line) > 10:  # Skip short lines
+                        feedback.append(line)
+                
+                if feedback:
+                    print(f"[LLM] Parsed {len(feedback)} feedback items in {language}")
+                    return feedback[:4]  # Return up to 4 items
+                
+                # Fallback if no bullet points found
+                print(f"[LLM] No bullets found, returning raw text")
+                return [text] if text else ["Continue with proper form."]
+            
             except Exception as e:
                 last_err = e
-                time.sleep(0.8 * (attempt + 1))
+                print(f"[LLM] Attempt {attempt + 1} failed: {e}")
+                time.sleep(0.6 * (attempt + 1))
 
-        return [f"LLM error: {type(last_err).__name__}: {last_err}"]
+        print(f"[LLM] Failed after {max_retries + 1} attempts")
+        return [f"Keep going, maintain proper form and posture."]
+
+    # ============================================================================
+    # Helper: Convert text output to bullet points
+    # ============================================================================

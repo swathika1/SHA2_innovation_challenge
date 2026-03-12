@@ -1,3 +1,7 @@
+# Environment / secrets — NEVER commit these
+.env
+.env.*
+
 venv/
 .venv/
 
@@ -14,8 +18,8 @@ __pycache__/
 # Flask session files
 flask_session/
 
-# Database files
-*.db
+# Database files (rehab_coach.db is tracked so collaborators get latest data)
+*.sqlite3
 instance/
 
 # SSL certificates (if they contain sensitive data)

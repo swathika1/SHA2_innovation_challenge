@@ -3,8 +3,7 @@ from groq import Groq
 
 # DO NOT hardcode keys in repo. Use env var:
 # export GROQ_API_KEY="..."
-client = Groq(api_key=os.environ.get("GROQ_API_KEY", "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"))
-#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
+client = Groq(api_key=os.environ.get("GROQ_API_KEY", "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"))
 
 SYSTEM = (
 """

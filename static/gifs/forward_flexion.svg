@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef2f2"/>
+      <stop offset="100%" stop-color="#fce7f3"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" rx="16" fill="url(#bg)"/>
+  <text x="150" y="32" text-anchor="middle" font-family="system-ui,sans-serif" font-size="15" font-weight="800" fill="#be123c">Forward Flexion (CTK)</text>
+
+  <!--
+    Side-view stick figure with per-joint animation.
+    Standing → bend forward 90° → hold → return.
+    Arms reach independently to touch the toes.
+    keyTimes: 0=standing  0.35=bent  0.55=hold  1=standing
+  -->
+
+  <!-- ============ FIXED: Legs (side view) ============ -->
+  <line x1="160" y1="220" x2="160" y2="295" stroke="#be123c" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="160" cy="295" r="4" fill="#be123c"/>
+  <line x1="160" y1="295" x2="160" y2="350" stroke="#be123c" stroke-width="5" stroke-linecap="round"/>
+  <line x1="160" y1="350" x2="142" y2="354" stroke="#be123c" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="160" cy="220" r="6" fill="#be123c"/>
+
+  <!-- Bend angle guide -->
+  <path d="M160,185 A35,35 0 0,0 125,220" fill="none" stroke="#059669" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.4"/>
+
+  <!-- ============ ANIMATED: Torso (hip→shoulder) ============ -->
+  <line stroke="#059669" stroke-width="5" stroke-linecap="round">
+    <animate attributeName="x1" values="160;160;160;160" keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite"/>
+    <animate attributeName="y1" values="220;220;220;220" keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite"/>
+    <animate attributeName="x2" values="160;80;80;160"   keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="y2" values="140;222;222;140"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+  </line>
+
+  <!-- ============ ANIMATED: Shoulder joint ============ -->
+  <circle r="5" fill="#059669">
+    <animate attributeName="cx" values="160;80;80;160"   keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="cy" values="140;222;222;140"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+  </circle>
+
+  <!-- ============ ANIMATED: Neck ============ -->
+  <line stroke="#be123c" stroke-width="4" stroke-linecap="round">
+    <animate attributeName="x1" values="160;80;80;160"   keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="y1" values="140;222;222;140"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="x2" values="160;62;62;160"    keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="y2" values="124;224;224;124"   keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+  </line>
+
+  <!-- ============ ANIMATED: Head ============ -->
+  <circle r="17" fill="#fecdd3" stroke="#be123c" stroke-width="3">
+    <animate attributeName="cx" values="160;48;48;160"   keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="cy" values="108;226;226;108"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+  </circle>
+  <!-- Eye -->
+  <circle r="2" fill="#be123c">
+    <animate attributeName="cx" values="152;46;46;152"   keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="cy" values="105;234;234;105"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+  </circle>
+
+  <!-- ============ ANIMATED: Upper arm (shoulder→elbow) ============ -->
+  <line stroke="#be123c" stroke-width="4" stroke-linecap="round">
+    <animate attributeName="x1" values="160;80;80;160"   keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="y1" values="140;222;222;140"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="x2" values="158;118;118;158"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="y2" values="180;282;282;180"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+  </line>
+
+  <!-- ============ ANIMATED: Elbow joint ============ -->
+  <circle r="3" fill="#be123c">
+    <animate attributeName="cx" values="158;118;118;158"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="cy" values="180;282;282;180"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+  </circle>
+
+  <!-- ============ ANIMATED: Forearm (elbow→hand) ============ -->
+  <line stroke="#be123c" stroke-width="3.5" stroke-linecap="round">
+    <animate attributeName="x1" values="158;118;118;158"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="y1" values="180;282;282;180"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="x2" values="156;152;152;156"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="y2" values="218;350;350;218"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+  </line>
+
+  <!-- ============ ANIMATED: Fingertips (green — touches toes at y≈350) ============ -->
+  <circle fill="#059669">
+    <animate attributeName="cx" values="156;152;152;156"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="cy" values="218;350;350;218"  keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"/>
+    <animate attributeName="r"  values="4;6;6;4"          keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;1;1;0.5" keyTimes="0;0.35;0.55;1" dur="4.5s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Toe-touch target (pulsing glow at feet) -->
+  <circle cx="150" cy="354" r="8" fill="#059669" opacity="0.15">
+    <animate attributeName="r" values="8;12;8" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.15;0.35;0.15" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Ground line -->
+  <line x1="70" y1="358" x2="230" y2="358" stroke="#be123c" stroke-width="1" stroke-dasharray="6,4" opacity="0.2"/>
+
+  <rect x="22" y="372" width="256" height="22" rx="11" fill="#059669" opacity="0.12"/>
+  <text x="150" y="387" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10.5" font-weight="600" fill="#059669">Bend forward, reach down to touch your toes</text>
+</svg>

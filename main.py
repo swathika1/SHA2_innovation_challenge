@@ -1,12 +1,19 @@
 import os
 os.environ["TRANSFORMERS_NO_TF"] = "1"
 os.environ["USE_TF"] = "0"
+os.environ["KERAS_BACKEND"] = "torch"  # Use PyTorch backend (TF not supported on Python 3.14)
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # Fall back to CPU for unsupported MPS ops
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
 
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 from Rehab_Scorer_Coach.src.web_pipeline import WebRehabPipeline
+from Rehab_Scorer_Coach.src.keraal_pipeline import KeraalRehabPipeline
 from flask_cors import CORS # type: ignore
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
@@ -21,7 +28,7 @@ except Exception as e:
     print(f"[WARNING] Optimization module not available: {e}")
 
 try:
-    from merilion_client import query_merilion_sync
+    from merilion_client import query_merilion_sync, transcribe_audio, translate_text_sync
     from risk_engine import calculate_risk_score, REFERRAL_MESSAGES
     from exercise_advisor import get_exercise_modification
     from langdetect import detect as detect_language
@@ -31,6 +38,14 @@ try:
 except Exception as e:
     CHATBOT_AVAILABLE = False
     print(f"[WARNING] Chatbot modules not available: {e}")
+
+try:
+    from whisper_transcriber import transcribe as whisper_transcribe
+    WHISPER_AVAILABLE = True
+    print("[INIT] Whisper STT (fal-ai) available")
+except Exception as e:
+    WHISPER_AVAILABLE = False
+    print(f"[WARNING] Whisper STT not available: {e}")
 
 # main.py (top-level)
 import os
@@ -45,6 +60,38 @@ import tempfile
 import os
 import asyncio
 import edge_tts
+
+try:
+    from report_generator import generate_session_report
+    REPORT_AVAILABLE = True
+    print("[INIT] PDF report generator loaded")
+except Exception as _re:
+    REPORT_AVAILABLE = False
+    print(f"[WARNING] PDF report generator not available: {_re}")
+
+try:
+    from reinjury_risk import analyze_patient_risk
+    REINJURY_RISK_AVAILABLE = True
+    print("[INIT] Re-injury risk engine loaded")
+except Exception as _rr:
+    REINJURY_RISK_AVAILABLE = False
+    print(f"[WARNING] Re-injury risk engine not available: {_rr}")
+
+try:
+    from recovery_predictor import predict_recovery
+    RECOVERY_PREDICTOR_AVAILABLE = True
+    print("[INIT] Recovery timeline predictor loaded")
+except Exception as _rp:
+    RECOVERY_PREDICTOR_AVAILABLE = False
+    print(f"[WARNING] Recovery predictor not available: {_rp}")
+
+try:
+    from gtts import gTTS
+    GTTS_AVAILABLE = True
+    print("[INIT] gTTS (Google TTS) loaded successfully")
+except ImportError:
+    GTTS_AVAILABLE = False
+    print("[WARNING] gTTS not installed, only edge_tts available")
 
 
 OPENPOSE_PORT = 9001
@@ -114,9 +161,67 @@ def start_openpose_server():
 os.makedirs('instance', exist_ok=True)
 
 from database import close_db, query_db, execute_db, load_optimization_data
+import random
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'  # Required for sessions
+
+# ==================== CONDITIONS & EXERCISE MAPPING ====================
+
+MSK_CONDITIONS = [
+    'Joint disorders',
+    'Spine conditions',
+    'Post-surgical rehab',
+    'Sports injuries',
+    'Postural disorders',
+    'Muscle tightness',
+    'Neuromuscular rehab',
+]
+
+CONDITION_EXERCISE_MAP = {
+    'Spine conditions': [
+        'Lateral Trunk Tilt',
+        'Trunk Rotation',
+        'Forward Flexion',
+        'Flank Stretch',
+        'Torso Rotation',
+        'Trunk Rotation & Target Touch',
+    ],
+    'Joint disorders': [
+        'Squat',
+        'Pelvis Rotation',
+        'Lifting of Arms',
+    ],
+    'Post-surgical rehab': [
+        'Lifting of Arms',
+        'Squat',
+        'Pelvis Rotation',
+        'Trunk Rotation',
+    ],
+    'Sports injuries': [
+        'Squat',
+        'Pelvis Rotation',
+        'Lifting of Arms',
+    ],
+    'Postural disorders': [
+        'Lateral Trunk Tilt',
+        'Trunk Rotation',
+        'Torso Rotation',
+        'Flank Stretch',
+    ],
+    'Muscle tightness': [
+        'Forward Flexion',
+        'Flank Stretch',
+        'Lateral Trunk Tilt',
+    ],
+    'Neuromuscular rehab': [
+        'Trunk Rotation & Target Touch',
+        'Trunk Rotation',
+    ],
+}
+
+# Global dict to store latest landmarks for frontend polling
+LATEST_LANDMARKS = {}
 
 # Register database cleanup function
 app.teardown_appcontext(close_db)
@@ -169,23 +274,136 @@ def get_current_user():
         return query_db('SELECT * FROM users WHERE id = ?', (session['user_id'],), one=True)
     return None
 
-VOICE_MAP = {
-    "English": "en-US-JennyNeural",
+
+def get_primary_doctor_id_for_patient(patient_id: int):
+    """Return the assigned doctor_id for a patient (if any)."""
+    row = query_db(
+        '''
+        SELECT doctor_id
+        FROM doctor_patient
+        WHERE patient_id = ?
+        ORDER BY assigned_date DESC, id DESC
+        LIMIT 1
+        ''',
+        (patient_id,),
+        one=True,
+    )
+    return row['doctor_id'] if row else None
+
+
+def create_adaptive_suggestion(
+    patient_id: int,
+    source: str,
+    reason: str,
+    suggested_change: str,
+    severity: str = "medium",
+    session_id=None,
+    workout_id=None,
+    suggested_sets=None,
+    suggested_reps=None,
+    suggested_frequency=None,
+    patient_note: str = "",
+    app_confidence=None,
+):
+    """Create a pending adaptive rehab suggestion for doctor review."""
+    doctor_id = get_primary_doctor_id_for_patient(patient_id)
+    if not doctor_id:
+        return None
+
+    # Avoid flooding duplicates from repeated auto triggers
+    duplicate = query_db(
+        '''
+        SELECT id
+        FROM adaptive_plan_suggestions
+        WHERE patient_id = ?
+          AND doctor_id = ?
+          AND source = ?
+          AND reason = ?
+          AND status = 'pending'
+        ORDER BY created_at DESC
+        LIMIT 1
+        ''',
+        (patient_id, doctor_id, source, reason),
+        one=True,
+    )
+    if duplicate:
+        return duplicate['id']
+
+    suggestion_id = execute_db(
+        '''
+        INSERT INTO adaptive_plan_suggestions (
+            patient_id, doctor_id, session_id, workout_id,
+            source, reason, suggested_change, severity,
+            suggested_sets, suggested_reps, suggested_frequency,
+            patient_note, app_confidence, status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        ''',
+        (
+            patient_id,
+            doctor_id,
+            session_id,
+            workout_id,
+            source,
+            reason,
+            suggested_change,
+            severity,
+            suggested_sets,
+            suggested_reps,
+            suggested_frequency,
+            patient_note,
+            app_confidence,
+        ),
+    )
+    return suggestion_id
+
+# ── Edge-TTS voice maps (Microsoft Neural voices) ──
+# Male voices for avatar & chatbot
+EDGE_VOICE_MAP_MALE = {
+    "English": "en-US-GuyNeural",
+    "Singlish": "en-US-GuyNeural",
     "Tamil":   "ta-IN-ValluvarNeural",
+    "Chinese": "zh-CN-YunxiNeural",
+    "Malay":   "ms-MY-OsmanNeural",
+    "Thai":    "th-TH-NiwatNeural",
+}
+# Female voices for session coaching prompts
+EDGE_VOICE_MAP_FEMALE = {
+    "English": "en-US-JennyNeural",
+    "Singlish": "en-US-JennyNeural",
+    "Tamil":   "ta-IN-PallaviNeural",
     "Chinese": "zh-CN-XiaoxiaoNeural",
     "Malay":   "ms-MY-YasminNeural",
     "Thai":    "th-TH-PremwadeeNeural",
 }
+# Default map (male) — kept for backward compat
+EDGE_VOICE_MAP = EDGE_VOICE_MAP_MALE
 
-def _tts_cache_path(text: str, language: str) -> str:
-    h = hashlib.md5(f"{language}|{text}".encode("utf-8")).hexdigest()
+# ── gTTS language codes (Google TTS) ──
+GTTS_LANG_MAP = {
+    "English": "en",
+    "Singlish": "en",
+    "Tamil":   "ta",
+    "Chinese": "zh-CN",
+    "Malay":   "ms",  # Malay not natively in gTTS, but 'ms' may work; fallback to 'id' (Indonesian) if needed
+    "Thai":    "th",
+}
+
+def _tts_cache_path(text: str, language: str, engine: str = "edge") -> str:
+    h = hashlib.md5(f"{engine}|{language}|{text}".encode("utf-8")).hexdigest()
     cache_dir = os.path.join(tempfile.gettempdir(), "rehab_tts_cache")
     os.makedirs(cache_dir, exist_ok=True)
     return os.path.join(cache_dir, f"{h}.mp3")
 
-async def _synth_to_file(text: str, voice: str, out_path: str):
+async def _edge_synth(text: str, voice: str, out_path: str):
+    """Synthesise with Microsoft Edge neural voice."""
     communicate = edge_tts.Communicate(text=text, voice=voice)
     await communicate.save(out_path)
+
+def _gtts_synth(text: str, lang_code: str, out_path: str):
+    """Synthesise with Google TTS (gTTS). Works offline-ish, very reliable for CJK + Tamil."""
+    tts = gTTS(text=text, lang=lang_code, slow=False)
+    tts.save(out_path)
 
 @app.route("/api/tts", methods=["POST"])
 def api_tts():
@@ -193,6 +411,7 @@ def api_tts():
 
     text = (data.get("text") or "").strip()
     language = (data.get("language") or "English").strip()
+    gender = (data.get("gender") or "male").strip().lower()   # "male" for avatar/chatbot, "female" for sessions
 
     if isinstance(text, list):
         text = ". ".join(text)
@@ -200,27 +419,66 @@ def api_tts():
     if not text:
         return jsonify({"error": "text is required"}), 400
 
-    voice = VOICE_MAP.get(language, VOICE_MAP["English"])
-    out_path = _tts_cache_path(text, language)
+    # Translate if the TTS language differs from the source language
+    source_language = (data.get("source_language") or "").strip()
+    if source_language and source_language != language and CHATBOT_AVAILABLE:
+        try:
+            translated = translate_text_sync(text, language)
+            if translated and translated.strip():
+                text = translated.strip()
+                print(f"[TTS] Translated from {source_language} to {language}")
+        except Exception as e:
+            print(f"[TTS] Translation failed, using original text: {e}")
+
+    # ── Strategy: try edge_tts first → gTTS fallback → error ──
+    # Step 1: Try edge_tts (higher quality neural voices)
+    voice_map = EDGE_VOICE_MAP_FEMALE if gender == "female" else EDGE_VOICE_MAP_MALE
+    edge_voice = voice_map.get(language, voice_map["English"])
+    edge_path = _tts_cache_path(text, language + "_" + gender, "edge")
+
+    if os.path.exists(edge_path):
+        print(f"♻️  Cached edge TTS ({language})")
+        return send_file(edge_path, mimetype="audio/mpeg", as_attachment=False)
 
     try:
-        if not os.path.exists(out_path):
-            print("🔊 Generating new TTS file")
+        print(f"🔊 Edge-TTS generating: {language} ({edge_voice})")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(
+            asyncio.wait_for(_edge_synth(text, edge_voice, edge_path), timeout=8.0)
+        )
+        loop.close()
+        print(f"✅ Edge-TTS done for {language}")
+        return send_file(edge_path, mimetype="audio/mpeg", as_attachment=False)
+    except Exception as edge_err:
+        print(f"⚠️  Edge-TTS failed ({language}): {edge_err}")
+        # Clean up partial file if any
+        if os.path.exists(edge_path):
+            try: os.remove(edge_path)
+            except: pass
 
-            # SAFE asyncio call inside Flask
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(_synth_to_file(text, voice, out_path))
-            loop.close()
+    # Step 2: Fallback to gTTS (Google TTS) — especially reliable for non-English
+    if GTTS_AVAILABLE:
+        gtts_lang = GTTS_LANG_MAP.get(language, "en")
+        gtts_path = _tts_cache_path(text, language, "gtts")
 
-        else:
-            print("♻️ Using cached TTS")
+        if os.path.exists(gtts_path):
+            print(f"♻️  Cached gTTS ({language})")
+            return send_file(gtts_path, mimetype="audio/mpeg", as_attachment=False)
 
-        return send_file(out_path, mimetype="audio/mpeg", as_attachment=False)
+        try:
+            print(f"🔊 gTTS generating: {language} (lang={gtts_lang})")
+            _gtts_synth(text, gtts_lang, gtts_path)
+            print(f"✅ gTTS done for {language}")
+            return send_file(gtts_path, mimetype="audio/mpeg", as_attachment=False)
+        except Exception as gtts_err:
+            print(f"❌ gTTS also failed ({language}): {gtts_err}")
+            if os.path.exists(gtts_path):
+                try: os.remove(gtts_path)
+                except: pass
 
-    except Exception as e:
-        print("❌ TTS ERROR:", e)
-        return jsonify({"error": f"TTS failed: {type(e).__name__}: {e}"}), 500
+    print(f"❌ All TTS engines failed for {language}")
+    return jsonify({"error": "TTS service temporarily unavailable"}), 503
 
 @app.get("/health")
 def health():
@@ -453,30 +711,22 @@ def signup():
         
         # If patient, create patients record with optimization data
         if role == 'patient':
-            condition = request.form.get('condition', 'General Rehab')
+            condition = request.form.get('condition', '').strip()
+            # If no condition selected, assign a random one
+            if not condition or condition not in MSK_CONDITIONS:
+                condition = random.choice(MSK_CONDITIONS)
             urgency = request.form.get('urgency', 'Medium')
             max_distance = float(request.form.get('max_distance', 20))
             
             # Map condition to specialty needed
             condition_to_specialty = {
                 'Joint disorders': 'Orthopedic',
-                'Muscle injuries': 'Sports',
-                'Tendon & ligament disorders': 'Sports',
                 'Spine conditions': 'MSK',
-                'Nerve compression syndromes': 'Neuro',
-                'Post-surgical rehabilitation': 'Post-op',
-                'Sports & overuse injuries': 'Sports',
-                'Degenerative conditions': 'MSK',
-                'Inflammatory conditions': 'General',
-                'Balance & functional decline disorders': 'Neuro',
-                'Others': 'General',
-                'Knee Replacement': 'Post-op',
-                'Hip Replacement': 'Post-op',
-                'ACL Reconstruction': 'Sports',
-                'Shoulder Surgery': 'Post-op',
-                'Back Pain': 'MSK',
-                'Stroke Recovery': 'Neuro',
-                'General Rehab': 'General'
+                'Post-surgical rehab': 'Post-op',
+                'Sports injuries': 'Sports',
+                'Postural disorders': 'MSK',
+                'Muscle tightness': 'General',
+                'Neuromuscular rehab': 'Neuro',
             }
             specialty_needed = condition_to_specialty.get(condition, 'General')
             
@@ -524,6 +774,9 @@ def signup():
                         'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
                         (doctor['id'], user_id)
                     )
+            
+            # Auto-assign exercises based on patient condition
+            assign_patient_exercises(user_id, condition)
         
         # If doctor, create doctor records with optimization data
         elif role == 'doctor':
@@ -613,13 +866,28 @@ def patient_dashboard():
             one=True
         )
     
-    # Get patient's workouts
+    # Get patient's workouts — only exercises actively assigned/enabled for this patient
     workouts = query_db('''
         SELECT w.*, e.name as exercise_name, e.description
         FROM workouts w
         JOIN exercises e ON w.exercise_id = e.id
-        WHERE w.patient_id = ? AND w.is_active = 1
+        JOIN patient_exercises pe ON pe.patient_id = w.patient_id AND pe.exercise_id = w.exercise_id
+        WHERE w.patient_id = ? AND w.is_active = 1 AND pe.enabled = 1
     ''', (session['user_id'],))
+
+    # If no rows in workouts, build the list from patient_exercises (condition-based)
+    if not workouts:
+        workouts = query_db('''
+            SELECT pe.id, pe.patient_id, pe.exercise_id,
+                   e.name AS exercise_name, e.description,
+                   3 AS sets, 10 AS reps,
+                   'Daily' AS frequency,
+                   e.description AS instructions,
+                   1 AS is_active
+            FROM patient_exercises pe
+            JOIN exercises e ON pe.exercise_id = e.id
+            WHERE pe.patient_id = ? AND pe.enabled = 1
+        ''', (session['user_id'],))
     
     # Get recent sessions (last 5) — session-level with exercise details
     import json as _json
@@ -750,6 +1018,15 @@ def patient_dashboard():
         ORDER BY cr.requested_at DESC
     ''', (session['user_id'],))
 
+    adaptive_suggestions = query_db('''
+        SELECT aps.*, u.name AS doctor_name
+        FROM adaptive_plan_suggestions aps
+        LEFT JOIN users u ON aps.doctor_id = u.id
+        WHERE aps.patient_id = ?
+        ORDER BY aps.created_at DESC
+        LIMIT 10
+    ''', (session['user_id'],))
+
     return render_template('patient/dashboard.html',
                             user=user,
                             patient=patient_info,
@@ -764,6 +1041,7 @@ def patient_dashboard():
                             today_completed=today_completed,
                             today_session_id=today_session_id,
                             today_perc=today_perc,
+                            adaptive_suggestions=adaptive_suggestions if adaptive_suggestions else [],
                             chat_patient_id=None)
 
 
@@ -776,10 +1054,67 @@ def rehab_session():
         SELECT w.*, e.name as exercise_name, e.description, e.category
         FROM workouts w
         JOIN exercises e ON w.exercise_id = e.id
-        WHERE w.patient_id = ? AND w.is_active = 1
+        JOIN patient_exercises pe ON pe.patient_id = w.patient_id AND pe.exercise_id = w.exercise_id
+        WHERE w.patient_id = ? AND w.is_active = 1 AND pe.enabled = 1
     ''', (session['user_id'],))
+
+    # Get exercises assigned to this patient via patient_exercises
+    assigned_exercises = query_db('''
+        SELECT e.id, e.name as exercise_name, e.category, e.description
+        FROM patient_exercises pe
+        JOIN exercises e ON pe.exercise_id = e.id
+        WHERE pe.patient_id = ? AND pe.enabled = 1
+        ORDER BY e.category, e.name
+    ''', (session['user_id'],))
+    assigned_exercises = [dict(e) for e in assigned_exercises] if assigned_exercises else []
+
+    # Get patient condition for the personalized plan card
+    patient_info = query_db(
+        'SELECT condition FROM patients WHERE user_id = ?',
+        (session['user_id'],), one=True
+    )
+    patient_condition = patient_info['condition'] if patient_info and patient_info['condition'] else 'Your Condition'
     
-    return render_template('patient/session.html', workouts=workouts if workouts else [])
+    resp = make_response(render_template('patient/session.html',
+                                         workouts=workouts if workouts else [],
+                                         assigned_exercises=assigned_exercises,
+                                         patient_condition=patient_condition))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+
+@app.route('/api/patient/exercises', methods=['GET'])
+@login_required
+@role_required('patient')
+def api_patient_exercises():
+    """Return the exercises assigned to the current patient."""
+    exercises = query_db('''
+        SELECT e.id, e.name as exercise_name, e.category, pe.enabled
+        FROM patient_exercises pe
+        JOIN exercises e ON pe.exercise_id = e.id
+        WHERE pe.patient_id = ?
+        ORDER BY e.category, e.name
+    ''', (session['user_id'],))
+    return jsonify([dict(e) for e in exercises] if exercises else [])
+
+
+@app.route('/api/patient/exercises/toggle', methods=['POST'])
+@login_required
+@role_required('patient')
+def api_toggle_patient_exercise():
+    """Toggle an exercise enabled/disabled for the current patient."""
+    data = request.get_json()
+    exercise_id = data.get('exercise_id')
+    enabled = data.get('enabled', 1)
+    if not exercise_id:
+        return jsonify({'error': 'exercise_id required'}), 400
+    execute_db(
+        'UPDATE patient_exercises SET enabled = ? WHERE patient_id = ? AND exercise_id = ?',
+        (1 if enabled else 0, session['user_id'], exercise_id)
+    )
+    return jsonify({'ok': True})
 
 
 @app.route('/patient/checkin', methods=['GET', 'POST'])
@@ -788,6 +1123,12 @@ def rehab_session():
 def pain_checkin():
     """Pain & Effort Check-In — now handled via JS API calls. Keep route for direct access."""
     return render_template('patient/checkin.html')
+
+
+@app.route('/cam-test')
+def cam_test():
+    """Standalone camera diagnostic page"""
+    return render_template('cam_test.html')
 
 
 @app.route('/patient/summary')
@@ -852,11 +1193,121 @@ def session_summary(session_id=None):
                 except:
                     pass
 
+    # ── Recovery prediction ──
+    recovery_data = None
+    if RECOVERY_PREDICTOR_AVAILABLE:
+        try:
+            recovery_data = predict_recovery(session['user_id'], query_db)
+        except Exception as _rp_err:
+            print(f"[WARNING] Recovery prediction failed: {_rp_err}")
+
     return render_template('patient/summary.html',
                          session_data=sess,
                          exercises=exercises_list,
                          overall_duration=overall_duration,
-                         session_id=session_id)
+                         session_id=session_id,
+                         recovery=recovery_data)
+
+
+# ==================== PDF SESSION REPORT DOWNLOAD ====================
+
+@app.route('/api/session/report/<int:session_id>')
+@login_required
+@role_required('patient')
+def api_session_report(session_id):
+    """Generate and return a downloadable PDF report for a completed session."""
+    import json as _json
+
+    if not REPORT_AVAILABLE:
+        return jsonify({"error": "PDF report module not available (install reportlab)"}), 503
+
+    patient_id = session['user_id']
+
+    # ── session metadata ────────────────────────────────────────────────
+    sess = query_db(
+        'SELECT * FROM sessions WHERE id = ? AND patient_id = ?',
+        (session_id, patient_id), one=True,
+    )
+    if not sess:
+        return jsonify({"error": "Session not found"}), 404
+
+    # ── patient info ────────────────────────────────────────────────────
+    user_row = query_db('SELECT name FROM users WHERE id = ?', (patient_id,), one=True)
+    patient_name = user_row['name'] if user_row else 'Patient'
+    pat_row = query_db('SELECT condition FROM patients WHERE user_id = ?', (patient_id,), one=True)
+    patient_condition = pat_row['condition'] if pat_row else 'General'
+
+    # ── exercises ───────────────────────────────────────────────────────
+    exercises_raw = query_db('''
+        SELECT se.*, COALESCE(se.exercise_name, e.name) as exercise_name
+        FROM session_exercises se
+        LEFT JOIN workouts w ON se.workout_id = w.id
+        LEFT JOIN exercises e ON w.exercise_id = e.id
+        WHERE se.session_id = ?
+        ORDER BY se.exercise_start_time
+    ''', (session_id,))
+
+    exercises_list = []
+    for ex in (exercises_raw or []):
+        req = _json.loads(ex['sets_required']) if ex['sets_required'] else {}
+        comp = _json.loads(ex['sets_completed']) if ex['sets_completed'] else {}
+        total_req = sum(int(v) for v in req.values())
+        total_comp = sum(int(v) for v in comp.values())
+        ex_perc = round(total_comp / total_req * 100, 1) if total_req > 0 else 0
+        ex_duration = None
+        if ex['exercise_start_time'] and ex['exercise_end_time']:
+            try:
+                st = datetime.fromisoformat(ex['exercise_start_time'])
+                en = datetime.fromisoformat(ex['exercise_end_time'])
+                ex_duration = int((en - st).total_seconds())
+            except Exception:
+                pass
+        exercises_list.append({
+            "exercise_name": ex['exercise_name'],
+            "quality_score": ex['quality_score'],
+            "completion_perc": ex_perc,
+            "sets_required": req,
+            "sets_completed": comp,
+            "duration_seconds": ex_duration,
+        })
+
+    # ── overall duration ────────────────────────────────────────────────
+    overall_duration = None
+    if sess['started_at'] and sess['completed_at']:
+        try:
+            s = datetime.fromisoformat(sess['started_at'])
+            e = datetime.fromisoformat(sess['completed_at'])
+            overall_duration = int((e - s).total_seconds())
+        except Exception:
+            pass
+
+    # ── frame-level telemetry ──────────────────────────────────────────
+    frames_raw = query_db(
+        'SELECT * FROM session_frames WHERE session_id = ? ORDER BY timestamp',
+        (session_id,),
+    )
+
+    # Pass ALL frames to the report generator — the CV model may classify
+    # the exercise differently from the user-selected name (e.g. "squat"
+    # instead of "lifting_of_arms").  The report already handles skipping
+    # idle/no_pose frames and merges DB scores from session_exercises.
+    frames = list(frames_raw or [])
+
+    # ── generate PDF ────────────────────────────────────────────────────
+    pdf_bytes = generate_session_report(
+        patient_name=patient_name,
+        patient_condition=patient_condition,
+        session_data=dict(sess),
+        exercises=exercises_list,
+        frames=frames,
+        overall_duration=overall_duration,
+    )
+
+    response = make_response(pdf_bytes)
+    fname = f"rehab_session_{session_id}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{fname}"'
+    return response
 
 
 @app.route('/patient/profile')
@@ -1054,6 +1505,61 @@ def patient_book_appointment():
     return redirect(url_for('patient_appointments'))
 
 
+# ==================== AVATAR ROUTES ====================
+
+@app.route('/patient/avatar')
+@login_required
+@role_required('patient')
+def avatar_page():
+    """Avatar interaction page - Speak to Jimmy"""
+    user = get_current_user()
+    return render_template('patient/avatar.html', user=user)
+
+
+@app.route('/patient/avatar/chat', methods=['POST'])
+@login_required
+@role_required('patient')
+def avatar_chat():
+    """Handle avatar chat requests"""
+    try:
+        data = request.get_json()
+        user_message = data.get('message', '').strip()
+        history = data.get('history', [])
+        language = (data.get('language') or 'English').strip()
+        
+        if not user_message:
+            return jsonify({'error': 'No message provided'}), 400
+        
+        # Import avatar service
+        from meralion_avatar import get_avatar
+        
+        avatar = get_avatar()
+        
+        # Get avatar response with RAG and patient context
+        response = avatar.query_jimmy(
+            patient_id=session['user_id'],
+            user_message=user_message,
+            conversation_history=history,
+            include_rag=True,
+            include_performance=True,
+            preferred_language=language
+        )
+        
+        return jsonify({
+            'response': response,
+            'status': 'success'
+        })
+    
+    except Exception as e:
+        print(f"[AVATAR] Error in avatar_chat: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': str(e),
+            'status': 'error'
+        }), 500
+
+
 # ==================== CLINICIAN ROUTES ====================
 
 @app.route('/clinician/profile')
@@ -1157,53 +1663,224 @@ def clinician_dashboard():
         ORDER BY a.appointment_date, a.appointment_time
         LIMIT 5
     ''', (session['user_id'],))
+
+    pending_adaptive_suggestions = query_db('''
+        SELECT aps.*, u.name AS patient_name
+        FROM adaptive_plan_suggestions aps
+        JOIN users u ON aps.patient_id = u.id
+        WHERE aps.doctor_id = ? AND aps.status = 'pending'
+        ORDER BY aps.created_at DESC
+        LIMIT 20
+    ''', (session['user_id'],))
     
     return render_template('clinician/dashboard.html',
                          patients=patients,
                          total_patients=total_patients,
                          needs_attention=needs_attention,
                          avg_adherence=round(avg_adherence),
-                         upcoming_appointments=len(appointments) if appointments else 0)
+                         upcoming_appointments=len(appointments) if appointments else 0,
+                         pending_adaptive_suggestions=pending_adaptive_suggestions if pending_adaptive_suggestions else [])
+
+
+@app.route('/api/patient/plan-feedback', methods=['POST'])
+@login_required
+@role_required('patient')
+def api_patient_plan_feedback():
+    """Patient submits difficulty/error feedback to request plan adaptation."""
+    data = request.get_json(force=True) or {}
+
+    workout_id = data.get('workout_id')
+    issue_type = (data.get('issue_type') or 'too_hard').strip()
+    difficulty = int(data.get('difficulty', 7))
+    note = (data.get('note') or '').strip()
+
+    if not workout_id:
+        return jsonify({'ok': False, 'error': 'workout_id is required'}), 400
+
+    workout = query_db('''
+        SELECT w.*, e.name AS exercise_name
+        FROM workouts w
+        JOIN exercises e ON w.exercise_id = e.id
+        WHERE w.id = ? AND w.patient_id = ?
+    ''', (workout_id, session['user_id']), one=True)
+    if not workout:
+        return jsonify({'ok': False, 'error': 'Workout not found'}), 404
+
+    # Suggest lighter progression when difficulty is high.
+    suggested_sets = max(1, int(workout['sets']) - 1) if difficulty >= 8 else int(workout['sets'])
+    suggested_reps = max(5, int(workout['reps']) - 2) if difficulty >= 7 else int(workout['reps'])
+    suggested_frequency = '3x per week' if difficulty >= 8 else workout['frequency']
+
+    reason = f"Patient reported '{issue_type}' (difficulty {difficulty}/10)"
+    suggested_change = (
+        f"{workout['exercise_name']}: adjust to {suggested_sets} sets × {suggested_reps} reps"
+        f"; frequency {suggested_frequency}."
+    )
+
+    suggestion_id = create_adaptive_suggestion(
+        patient_id=session['user_id'],
+        source='patient_feedback',
+        reason=reason,
+        suggested_change=suggested_change,
+        severity='high' if difficulty >= 8 else 'medium',
+        workout_id=workout_id,
+        suggested_sets=suggested_sets,
+        suggested_reps=suggested_reps,
+        suggested_frequency=suggested_frequency,
+        patient_note=note,
+        app_confidence=0.75,
+    )
+
+    if not suggestion_id:
+        return jsonify({'ok': False, 'error': 'No assigned doctor found for this patient'}), 400
+
+    return jsonify({'ok': True, 'suggestion_id': suggestion_id})
+
+
+@app.route('/api/adaptive-suggestions/<int:suggestion_id>/approve', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_approve_adaptive_suggestion(suggestion_id):
+    """Doctor approves app/patient adaptive plan suggestion and applies workout updates."""
+    payload = request.get_json(silent=True) or {}
+    review_note = (payload.get('review_note') or '').strip()
+
+    suggestion = query_db('''
+        SELECT * FROM adaptive_plan_suggestions
+        WHERE id = ? AND doctor_id = ?
+    ''', (suggestion_id, session['user_id']), one=True)
+
+    if not suggestion:
+        return jsonify({'ok': False, 'error': 'Suggestion not found'}), 404
+    if suggestion['status'] != 'pending':
+        return jsonify({'ok': False, 'error': 'Suggestion already reviewed'}), 400
+
+    if suggestion['workout_id']:
+        execute_db('''
+            UPDATE workouts
+            SET sets = COALESCE(?, sets),
+                reps = COALESCE(?, reps),
+                frequency = COALESCE(?, frequency)
+            WHERE id = ? AND patient_id = ?
+        ''', (
+            suggestion['suggested_sets'],
+            suggestion['suggested_reps'],
+            suggestion['suggested_frequency'],
+            suggestion['workout_id'],
+            suggestion['patient_id'],
+        ))
+
+    execute_db('''
+        UPDATE adaptive_plan_suggestions
+        SET status = 'approved',
+            reviewed_at = CURRENT_TIMESTAMP,
+            reviewed_by = ?,
+            review_note = ?
+        WHERE id = ?
+    ''', (session['user_id'], review_note, suggestion_id))
+
+    return jsonify({'ok': True})
+
+
+@app.route('/api/adaptive-suggestions/<int:suggestion_id>/reject', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_reject_adaptive_suggestion(suggestion_id):
+    """Doctor rejects adaptive plan suggestion."""
+    payload = request.get_json(silent=True) or {}
+    review_note = (payload.get('review_note') or '').strip()
+
+    suggestion = query_db('''
+        SELECT id, status
+        FROM adaptive_plan_suggestions
+        WHERE id = ? AND doctor_id = ?
+    ''', (suggestion_id, session['user_id']), one=True)
+
+    if not suggestion:
+        return jsonify({'ok': False, 'error': 'Suggestion not found'}), 404
+    if suggestion['status'] != 'pending':
+        return jsonify({'ok': False, 'error': 'Suggestion already reviewed'}), 400
+
+    execute_db('''
+        UPDATE adaptive_plan_suggestions
+        SET status = 'rejected',
+            reviewed_at = CURRENT_TIMESTAMP,
+            reviewed_by = ?,
+            review_note = ?
+        WHERE id = ?
+    ''', (session['user_id'], review_note, suggestion_id))
+
+    return jsonify({'ok': True})
 
 
 @app.route('/clinician/patient/<int:patient_id>')
 @login_required
 @role_required('doctor')
 def patient_detail(patient_id):
-    """Patient Detail View"""
+    """Patient Detail View — comprehensive profile page"""
     patient = query_db('''
-        SELECT u.*, p.*
+        SELECT u.*, p.*,
+               u.id as user_id, u.name as name, u.email as email,
+               u.phone as phone, u.pincode as pincode, u.dob as dob,
+               p.condition as condition, p.surgery_date as surgery_date,
+               p.current_week as current_week, p.adherence_rate as adherence_rate,
+               p.avg_pain_level as avg_pain_level, p.avg_quality_score as avg_quality_score,
+               p.completed_sessions as completed_sessions, p.streak_days as streak_days
         FROM users u
         JOIN patients p ON u.id = p.user_id
         WHERE u.id = ?
     ''', (patient_id,), one=True)
-    
+
     if not patient:
         flash('Patient not found.', 'error')
         return redirect(url_for('clinician_dashboard'))
-    
+
+    # ── Assigned exercises (from patient_exercises, synced to workouts) ──
+    assigned_exercises = query_db('''
+        SELECT pe.id as pe_id, pe.enabled, e.id as exercise_id,
+               e.name as exercise_name, e.category, e.description
+        FROM patient_exercises pe
+        JOIN exercises e ON pe.exercise_id = e.id
+        WHERE pe.patient_id = ? AND pe.enabled = 1
+        ORDER BY e.category, e.name
+    ''', (patient_id,))
+    assigned_exercises = [dict(e) for e in assigned_exercises] if assigned_exercises else []
+
+    # Workouts with sets/reps details
     workouts = query_db('''
         SELECT w.*, e.name as exercise_name, e.category
         FROM workouts w
         JOIN exercises e ON w.exercise_id = e.id
         WHERE w.patient_id = ? AND w.is_active = 1
     ''', (patient_id,))
-    
+    workouts = [dict(w) for w in workouts] if workouts else []
+
+    # ── Session history (all completed sessions) ──
     sessions = query_db('''
-        SELECT s.*,
-               (SELECT GROUP_CONCAT(DISTINCT e.name)
+        SELECT s.id, s.quality_score, s.pain_before, s.pain_after,
+               s.effort_level, s.completed_perc, s.started_at, s.completed_at,
+               s.session_group_id,
+               (SELECT GROUP_CONCAT(DISTINCT se.exercise_name)
                 FROM session_exercises se
-                JOIN workouts w ON se.workout_id = w.id
-                JOIN exercises e ON w.exercise_id = e.id
-                WHERE se.session_id = s.id) as exercise_name
+                WHERE se.session_id = s.id) as exercise_names
         FROM sessions s
-        WHERE s.patient_id = ?
-        AND s.completed_at IS NOT NULL
+        WHERE s.patient_id = ? AND s.completed_at IS NOT NULL
         ORDER BY s.completed_at DESC
-        LIMIT 10
     ''', (patient_id,))
-    
-    # Get clinician notes for this patient
+    sessions = [dict(s) for s in sessions] if sessions else []
+
+    # ── Session dates for calendar view (distinct dates) ──
+    session_dates = []
+    for s in sessions:
+        if s.get('completed_at'):
+            try:
+                dt = s['completed_at'][:10]  # YYYY-MM-DD
+                if dt not in session_dates:
+                    session_dates.append(dt)
+            except:
+                pass
+
+    # ── Clinician notes ──
     notes = query_db('''
         SELECT cn.*, u.name as doctor_name
         FROM clinician_notes cn
@@ -1213,15 +1890,15 @@ def patient_detail(patient_id):
         LIMIT 20
     ''', (patient_id,))
 
-    # Get current caregivers for this patient
+    # ── Caregivers ──
     caregivers = query_db('''
-        SELECT u.name, u.email, cp.relationship
+        SELECT u.name, u.email, u.phone, cp.relationship
         FROM caregiver_patient cp
         JOIN users u ON cp.caregiver_id = u.id
         WHERE cp.patient_id = ?
     ''', (patient_id,))
 
-    # Get pending caregiver requests for this patient
+    # ── Pending caregiver requests ──
     pending_requests = query_db('''
         SELECT cr.id, u.name as caregiver_name, u.email as caregiver_email, cr.requested_at
         FROM caregiver_requests cr
@@ -1230,14 +1907,107 @@ def patient_detail(patient_id):
         ORDER BY cr.requested_at DESC
     ''', (patient_id,))
 
+    # ── Consultation / Appointment history ──
+    appointments = query_db('''
+        SELECT a.*, u.name as doctor_name
+        FROM appointments a
+        JOIN users u ON a.doctor_id = u.id
+        WHERE a.patient_id = ?
+        ORDER BY a.appointment_date DESC, a.appointment_time DESC
+        LIMIT 10
+    ''', (patient_id,))
+    appointments = [dict(a) for a in appointments] if appointments else []
+
+    # ── Patient preferred consultation time ──
+    time_prefs = query_db('''
+        SELECT t.day, t.time, t.label, pt.preference_score
+        FROM patient_time_preferences pt
+        JOIN timeslots t ON pt.timeslot_id = t.id
+        WHERE pt.patient_id = ?
+        ORDER BY pt.preference_score DESC
+        LIMIT 5
+    ''', (patient_id,))
+    time_prefs = [dict(t) for t in time_prefs] if time_prefs else []
+
+    # ── Distance from clinician ──
+    distance_info = None
+    patient_pincode = patient['pincode']
+    if patient_pincode:
+        # Get patient lat/lon from sg_postal
+        patient_loc = query_db(
+            'SELECT lat, lon FROM sg_postal WHERE postal_code = ? LIMIT 1',
+            (patient_pincode,), one=True
+        )
+        # Get clinician's pincode and lat/lon
+        doctor_pincode = query_db(
+            'SELECT pincode FROM users WHERE id = ?',
+            (session['user_id'],), one=True
+        )
+        if doctor_pincode and doctor_pincode['pincode']:
+            doctor_loc = query_db(
+                'SELECT lat, lon FROM sg_postal WHERE postal_code = ? LIMIT 1',
+                (doctor_pincode['pincode'],), one=True
+            )
+            if patient_loc and doctor_loc and patient_loc['lat'] and doctor_loc['lat']:
+                import math
+                lat1, lon1 = math.radians(patient_loc['lat']), math.radians(patient_loc['lon'])
+                lat2, lon2 = math.radians(doctor_loc['lat']), math.radians(doctor_loc['lon'])
+                dlat = lat2 - lat1
+                dlon = lon2 - lon1
+                a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+                c = 2 * math.asin(math.sqrt(a))
+                km = 6371 * c
+                distance_info = {
+                    'km': round(km, 1),
+                    'patient_postal': patient_pincode,
+                    'doctor_postal': doctor_pincode['pincode'],
+                }
+
+    # ── Re-injury risk analysis ──
+    risk_data = None
+    if REINJURY_RISK_AVAILABLE:
+        try:
+            risk_data = analyze_patient_risk(patient_id, query_db)
+        except Exception as _re:
+            print(f"[WARNING] Re-injury risk analysis failed for patient {patient_id}: {_re}")
+
+    # ── Compute aggregate metrics ──
+    total_sessions = len(sessions)
+    recent_sessions = sessions[:5]
+    avg_quality_recent = (sum(s['quality_score'] for s in recent_sessions if s.get('quality_score')) / len(recent_sessions)) if recent_sessions else 0
+    avg_pain_recent = (sum(s['pain_after'] for s in recent_sessions if s.get('pain_after') is not None) / len(recent_sessions)) if recent_sessions else 0
+
     return render_template('clinician/patient_detail.html',
                          patient=patient,
                          patient_id=patient_id,
-                         workouts=workouts if workouts else [],
-                         sessions=sessions if sessions else [],
+                         assigned_exercises=assigned_exercises,
+                         workouts=workouts,
+                         sessions=sessions,
+                         session_dates=session_dates,
+                         total_sessions=total_sessions,
+                         avg_quality_recent=round(avg_quality_recent, 1),
+                         avg_pain_recent=round(avg_pain_recent, 1),
                          notes=notes if notes else [],
                          caregivers=caregivers if caregivers else [],
-                         pending_caregiver_requests=pending_requests if pending_requests else [])
+                         pending_caregiver_requests=pending_requests if pending_requests else [],
+                         appointments=appointments,
+                         time_prefs=time_prefs,
+                         distance_info=distance_info,
+                         risk_data=risk_data)
+
+
+@app.route('/api/patient/<int:patient_id>/reinjury_risk', methods=['GET'])
+@login_required
+@role_required('doctor')
+def api_reinjury_risk(patient_id):
+    """Return re-injury risk analysis for a patient as JSON."""
+    if not REINJURY_RISK_AVAILABLE:
+        return jsonify({"error": "Risk engine not available"}), 503
+    try:
+        data = analyze_patient_risk(patient_id, query_db)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/clinician/patient/<int:patient_id>/add-note', methods=['POST'])
@@ -1283,8 +2053,33 @@ def plan_editor():
 
     patients = [dict(p) for p in patients] if patients else []
 
-    # For every patient, fetch their active workouts
+    # For every patient, sync patient_exercises → workouts, then fetch workouts
     for pat in patients:
+        # 1. Get exercises assigned via patient_exercises (condition-based defaults)
+        assigned = query_db('''
+            SELECT pe.exercise_id
+            FROM patient_exercises pe
+            WHERE pe.patient_id = ? AND pe.enabled = 1
+        ''', (pat['id'],))
+        assigned_ids = [a['exercise_id'] for a in assigned] if assigned else []
+
+        # 2. Get exercises already in workouts table (active)
+        existing_workout_exids = query_db('''
+            SELECT exercise_id FROM workouts
+            WHERE patient_id = ? AND is_active = 1
+        ''', (pat['id'],))
+        existing_ids = set(e['exercise_id'] for e in existing_workout_exids) if existing_workout_exids else set()
+
+        # 3. Auto-create workout entries for patient_exercises not yet in workouts
+        for ex_id in assigned_ids:
+            if ex_id not in existing_ids:
+                execute_db('''
+                    INSERT INTO workouts
+                    (patient_id, exercise_id, sets, reps, frequency, instructions, is_active)
+                    VALUES (?, ?, 3, 10, 'Daily', '', 1)
+                ''', (pat['id'], ex_id))
+
+        # 4. Now fetch the full workout list
         workouts = query_db('''
             SELECT w.id, w.exercise_id, w.sets, w.reps, w.frequency,
                    w.instructions, e.name AS exercise_name, e.category,
@@ -1321,6 +2116,17 @@ def api_plan_add_exercise():
 
     if not patient_id or not exercise_id:
         return jsonify({'error': 'Missing patient_id or exercise_id'}), 400
+
+    # Also ensure the exercise is tracked in patient_exercises
+    execute_db('''
+        INSERT OR IGNORE INTO patient_exercises (patient_id, exercise_id, enabled)
+        VALUES (?, ?, 1)
+    ''', (patient_id, exercise_id))
+    # Re-enable if it was previously disabled
+    execute_db('''
+        UPDATE patient_exercises SET enabled = 1
+        WHERE patient_id = ? AND exercise_id = ?
+    ''', (patient_id, exercise_id))
 
     execute_db('''
         INSERT INTO workouts
@@ -1368,8 +2174,16 @@ def api_plan_update_workout(workout_id):
 @login_required
 @role_required('doctor')
 def api_plan_remove_workout(workout_id):
-    """Soft-delete a workout from a patient's plan"""
+    """Soft-delete a workout from a patient's plan and disable in patient_exercises"""
+    # Get the exercise_id and patient_id before deactivating
+    w = query_db('SELECT patient_id, exercise_id FROM workouts WHERE id = ?', (workout_id,), one=True)
     execute_db('UPDATE workouts SET is_active = 0 WHERE id = ?', (workout_id,))
+    # Also disable in patient_exercises so it stays removed
+    if w:
+        execute_db('''
+            UPDATE patient_exercises SET enabled = 0
+            WHERE patient_id = ? AND exercise_id = ?
+        ''', (w['patient_id'], w['exercise_id']))
     return jsonify({'ok': True})
 
 
@@ -2290,13 +3104,27 @@ SESSION_STATE = {
     "cooldown_until": 0
 }
 
-# Initialize the CV pipeline
-try:
-    PIPELINE = WebRehabPipeline()
-    print("[INIT] WebRehabPipeline initialized successfully")
-except Exception as e:
+# Initialize the CV pipelines (enabled by default for local dev; set ENABLE_CV_PIPELINES=0 to skip)
+ENABLE_CV_PIPELINES = os.environ.get("ENABLE_CV_PIPELINES", "1") == "1"
+
+if ENABLE_CV_PIPELINES:
+    try:
+        PIPELINE = WebRehabPipeline()
+        print("[INIT] WebRehabPipeline (General Rehab) initialized successfully")
+    except Exception as e:
+        PIPELINE = None
+        print(f"[WARNING] WebRehabPipeline failed to initialize: {e}")
+
+    try:
+        KERAAL_PIPELINE = KeraalRehabPipeline()
+        print("[INIT] KeraalRehabPipeline (Low Back Pain) initialized successfully")
+    except Exception as e:
+        KERAAL_PIPELINE = None
+        print(f"[WARNING] KeraalRehabPipeline failed to initialize: {e}")
+else:
     PIPELINE = None
-    print(f"[WARNING] WebRehabPipeline failed to initialize: {e}")
+    KERAAL_PIPELINE = None
+    print("[INIT] CV pipelines skipped at startup (set ENABLE_CV_PIPELINES=1 to enable)")
 
 
 # ==================== SESSION LIFECYCLE APIs ====================
@@ -2324,6 +3152,9 @@ def api_session_create():
     )
     if not row:
         return jsonify({'ok': False, 'error': 'Failed to create session'}), 500
+
+    # Store in Flask session so frame endpoints can log telemetry
+    session['current_session_id'] = row['id']
 
     return jsonify({'ok': True, 'session_id': row['id']})
 
@@ -2422,6 +3253,66 @@ def api_session_complete():
                   session['user_id']))
     except Exception as e:
         print(f"[WARN] Could not update patient stats: {e}")
+
+    # Auto-adaptive suggestion trigger (no model changes; only when wrong form is detected)
+    try:
+        patient_id = session['user_id']
+        if count > 0:
+            wrong_stats = query_db('''
+                SELECT
+                    COUNT(*) AS total_frames,
+                    SUM(CASE WHEN UPPER(COALESCE(status, '')) IN ('WRONG', 'INCORRECT') THEN 1 ELSE 0 END) AS wrong_frames
+                FROM session_frames
+                WHERE session_id = ? AND patient_id = ?
+            ''', (session_id, patient_id), one=True)
+
+            total_frames = int(wrong_stats['total_frames'] or 0) if wrong_stats else 0
+            wrong_frames = int(wrong_stats['wrong_frames'] or 0) if wrong_stats else 0
+            has_wrong_form = wrong_frames > 0
+
+            if not has_wrong_form:
+                return jsonify({'ok': True, 'session_id': session_id})
+
+            severity = None
+            reason = None
+            if avg_quality < 25 or completed_perc < 50:
+                severity = 'high'
+                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames) with low quality ({avg_quality}/100) or low completion ({completed_perc}%)'
+            elif pain_after >= 7:
+                severity = 'high'
+                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames) and high pain after session ({pain_after}/10)'
+            elif avg_quality < 40:
+                severity = 'medium'
+                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames); quality below target ({avg_quality}/100)'
+
+            if reason:
+                workout = query_db('''
+                    SELECT id, sets, reps, frequency
+                    FROM workouts
+                    WHERE patient_id = ? AND is_active = 1
+                    ORDER BY id
+                    LIMIT 1
+                ''', (patient_id,), one=True)
+
+                suggested_sets = max(1, int(workout['sets']) - 1) if workout else None
+                suggested_reps = max(5, int(workout['reps']) - 2) if workout else None
+                suggested_frequency = '3x per week' if severity == 'high' else (workout['frequency'] if workout else None)
+
+                create_adaptive_suggestion(
+                    patient_id=patient_id,
+                    source='auto_session_analysis',
+                    reason=reason,
+                    suggested_change='Reduce short-term intensity and review form with clinician approval.',
+                    severity=severity,
+                    session_id=session_id,
+                    workout_id=(workout['id'] if workout else None),
+                    suggested_sets=suggested_sets,
+                    suggested_reps=suggested_reps,
+                    suggested_frequency=suggested_frequency,
+                    app_confidence=0.82 if severity == 'high' else 0.68,
+                )
+    except Exception as e:
+        print(f"[WARN] Adaptive suggestion auto-trigger failed: {e}")
 
     return jsonify({'ok': True, 'session_id': session_id})
 
@@ -2598,6 +3489,56 @@ def api_chat_clear():
     return jsonify({"ok": True})
 
 
+@app.route('/api/chat/transcribe', methods=['POST'])
+@login_required
+def api_chat_transcribe():
+    """Transcribe audio to text using MERaLiON API for voice chat input."""
+    if not CHATBOT_AVAILABLE:
+        return jsonify({"error": "Chatbot modules not available"}), 503
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+    audio_file = request.files['audio']
+
+    try:
+        audio_bytes = audio_file.read()
+        filename = audio_file.filename or "audio.webm"
+        print(f"[TRANSCRIBE] Audio size: {len(audio_bytes)} bytes, filename: {filename}")
+
+        if not audio_bytes:
+            return jsonify({"error": "Empty audio payload"}), 400
+
+        transcript = ""
+        provider_errors = []
+        if WHISPER_AVAILABLE:
+            try:
+                transcript = whisper_transcribe(audio_bytes, filename)
+                print(f"[Whisper] Transcript: '{transcript}'")
+            except Exception as whisper_err:
+                provider_errors.append(f"Whisper: {whisper_err}")
+                print(f"[Whisper] Failed, falling back to Meralion: {whisper_err}")
+
+        # Fallback to Meralion if Whisper unavailable or returned empty
+        if not transcript and CHATBOT_AVAILABLE:
+            try:
+                print("[TRANSCRIBE] Falling back to Meralion transcription")
+                transcript = transcribe_audio(audio_bytes, filename)
+                print(f"[Meralion] Transcript: '{transcript}'")
+            except Exception as mer_err:
+                provider_errors.append(f"Meralion: {mer_err}")
+                print(f"[Meralion] Failed: {mer_err}")
+
+        if not transcript:
+            return jsonify({
+                "error": "Transcription unavailable",
+                "detail": " ; ".join(provider_errors) if provider_errors else "No speech detected"
+            }), 502
+
+        return jsonify({"transcript": transcript})
+    except Exception as e:
+        print(f"[TRANSCRIBE ERROR] {e}")
+        return jsonify({"error": "Transcription failed", "detail": str(e)}), 500
+
+
 @app.route('/api/chat', methods=['POST'])
 @login_required
 def api_chat():
@@ -2672,10 +3613,13 @@ def api_chat():
             patient_context = f"""
 Name: {patient_user['name']}
 Condition: {patient_info['condition']}
-Week: {patient_info['current_week']}
+Surgery Date: {patient_info['surgery_date'] or 'N/A'}
+Current Rehab Week: {patient_info['current_week']}
 Adherence Rate: {patient_info['adherence_rate']}%
 Avg Pain Level: {patient_info['avg_pain_level']}/10
 Avg Quality Score: {patient_info['avg_quality_score']}/100
+Completed Sessions: {patient_info['completed_sessions']}
+Streak Days: {patient_info['streak_days']}
 """
             if recent_sessions_db:
                 patient_context += "\nRecent Sessions:\n"
@@ -2684,11 +3628,104 @@ Avg Quality Score: {patient_info['avg_quality_score']}/100
 
         # Get workouts for exercise plan context
         workouts = query_db('''
-            SELECT e.name FROM workouts w
+            SELECT e.name, e.category, w.sets, w.reps, w.frequency, w.instructions FROM workouts w
             JOIN exercises e ON w.exercise_id = e.id
             WHERE w.patient_id = ? AND w.is_active = 1
         ''', (patient_id,))
         current_plan = ", ".join([w['name'] for w in workouts]) if workouts else "general fitness plan"
+        if workouts:
+            patient_context += "\nActive Exercise Plan:\n"
+            for w in workouts:
+                patient_context += f"- {w['name']} ({w['category'] or 'general'}): {w['sets']}x{w['reps']} {w['frequency']}"
+                if w['instructions']:
+                    patient_context += f" — {w['instructions']}"
+                patient_context += "\n"
+
+        # Get upcoming appointments
+        upcoming_appts = query_db('''
+            SELECT a.appointment_date, a.appointment_time, a.status, u.name as doctor_name
+            FROM appointments a JOIN users u ON a.doctor_id = u.id
+            WHERE a.patient_id = ? AND a.status = 'scheduled'
+            ORDER BY a.appointment_date ASC LIMIT 3
+        ''', (patient_id,))
+        if upcoming_appts:
+            patient_context += "\nUpcoming Appointments:\n"
+            for a in upcoming_appts:
+                patient_context += f"- {a['appointment_date']} {a['appointment_time']} with {a['doctor_name']} ({a['status']})\n"
+
+        # Get recent clinician notes
+        recent_notes = query_db('''
+            SELECT cn.note_text, cn.created_at, u.name as doctor_name
+            FROM clinician_notes cn JOIN users u ON cn.doctor_id = u.id
+            WHERE cn.patient_id = ? ORDER BY cn.created_at DESC LIMIT 3
+        ''', (patient_id,))
+        if recent_notes:
+            patient_context += "\nRecent Clinician Notes:\n"
+            for n in recent_notes:
+                patient_context += f"- Dr. {n['doctor_name']} ({n['created_at']}): {n['note_text'][:200]}\n"
+
+        # Get assigned doctor info
+        doctor_info = query_db('''
+            SELECT u.name, u.email, u.phone FROM doctor_patient dp
+            JOIN users u ON dp.doctor_id = u.id WHERE dp.patient_id = ?
+        ''', (patient_id,))
+        if doctor_info:
+            patient_context += "\nAssigned Doctor(s): " + ", ".join([d['name'] for d in doctor_info]) + "\n"
+
+        # Get caregiver info
+        caregiver_info = query_db('''
+            SELECT u.name, cp.relationship FROM caregiver_patient cp
+            JOIN users u ON cp.caregiver_id = u.id WHERE cp.patient_id = ?
+        ''', (patient_id,))
+        if caregiver_info:
+            patient_context += "Caregiver(s): " + ", ".join([f"{c['name']} ({c['relationship']})" for c in caregiver_info]) + "\n"
+
+        # -- Full session reports for all completed sessions --
+        all_sessions = query_db('''
+            SELECT s.id, s.started_at, s.completed_at, s.pain_before, s.pain_after,
+                   s.effort_level, s.quality_score, s.completed_perc, s.notes
+            FROM sessions s
+            WHERE s.patient_id = ? AND s.completed_at IS NOT NULL
+            ORDER BY s.completed_at DESC
+            LIMIT 20
+        ''', (patient_id,))
+        if all_sessions:
+            patient_context += "\n=== FULL SESSION REPORTS (most recent 20) ===\n"
+            for sess in all_sessions:
+                patient_context += f"\nSession #{sess['id']} ({sess['completed_at']}):\n"
+                patient_context += f"  Quality: {sess['quality_score']}/100, Completion: {sess['completed_perc']}%\n"
+                patient_context += f"  Pain: {sess['pain_before']}/10 before → {sess['pain_after']}/10 after\n"
+                patient_context += f"  Effort Level: {sess['effort_level']}/10\n"
+                if sess['notes']:
+                    patient_context += f"  Notes: {sess['notes'][:150]}\n"
+
+                # Get exercises for this session
+                sess_exercises = query_db('''
+                    SELECT se.exercise_name, se.quality_score, se.sets_required, se.sets_completed,
+                           se.exercise_start_time, se.exercise_end_time
+                    FROM session_exercises se
+                    WHERE se.session_id = ?
+                ''', (sess['id'],))
+                if sess_exercises:
+                    for se in sess_exercises:
+                        ex_name = se['exercise_name'] or 'Unknown'
+                        patient_context += f"    - {ex_name}: Quality {se['quality_score']}/100"
+                        if se['sets_required'] and se['sets_completed']:
+                            patient_context += f", Sets required: {se['sets_required']}, completed: {se['sets_completed']}"
+                        patient_context += "\n"
+
+                # Get frame-level summary for this session
+                frame_summary = query_db('''
+                    SELECT exercise_name, COUNT(*) as frame_count,
+                           AVG(score) as avg_score, MAX(rep_count) as max_reps
+                    FROM session_frames
+                    WHERE session_id = ?
+                    GROUP BY exercise_name
+                ''', (sess['id'],))
+                if frame_summary:
+                    for fr in frame_summary:
+                        if fr['exercise_name']:
+                            patient_context += f"    [Telemetry] {fr['exercise_name']}: {fr['frame_count']} frames, avg score {fr['avg_score']:.1f}, max reps {fr['max_reps']}\n"
 
         # 3. Risk scoring - build simple session objects for the risk engine
         class SimpleSession:
@@ -2932,6 +3969,43 @@ def ensure_tables_exist():
             FOREIGN KEY (patient_id) REFERENCES users(id),
             FOREIGN KEY (resolved_by) REFERENCES users(id)
         );
+
+        CREATE TABLE IF NOT EXISTS patient_exercises (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            exercise_id INTEGER NOT NULL,
+            enabled INTEGER DEFAULT 1,
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            FOREIGN KEY (exercise_id) REFERENCES exercises(id),
+            UNIQUE(patient_id, exercise_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS adaptive_plan_suggestions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            doctor_id INTEGER NOT NULL,
+            session_id INTEGER,
+            workout_id INTEGER,
+            source TEXT NOT NULL DEFAULT 'auto_session_analysis',
+            reason TEXT NOT NULL,
+            suggested_change TEXT NOT NULL,
+            severity TEXT NOT NULL DEFAULT 'medium',
+            suggested_sets INTEGER,
+            suggested_reps INTEGER,
+            suggested_frequency TEXT,
+            patient_note TEXT,
+            app_confidence REAL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at TIMESTAMP,
+            reviewed_by INTEGER,
+            review_note TEXT,
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            FOREIGN KEY (doctor_id) REFERENCES users(id),
+            FOREIGN KEY (session_id) REFERENCES sessions(id),
+            FOREIGN KEY (workout_id) REFERENCES workouts(id),
+            FOREIGN KEY (reviewed_by) REFERENCES users(id)
+        );
     ''')
     conn.commit()
     
@@ -3036,6 +4110,36 @@ def ensure_tables_exist():
             UNIQUE(patient_id, timeslot_id)
         )
     ''')
+
+    # ── Frame-level session telemetry ──────────────────────────────────
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS session_frames (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            timestamp TEXT NOT NULL,
+            program TEXT NOT NULL DEFAULT 'general',
+            exercise_name TEXT NOT NULL DEFAULT '',
+            score REAL NOT NULL DEFAULT 0.0,
+            status TEXT NOT NULL DEFAULT '',
+            rep_count INTEGER NOT NULL DEFAULT 0,
+            set_count INTEGER NOT NULL DEFAULT 1,
+            asymmetry_pct REAL,
+            rom_angle REAL,
+            FOREIGN KEY (session_id) REFERENCES sessions(id),
+            FOREIGN KEY (patient_id) REFERENCES users(id)
+        )
+    ''')
+    # Index for fast lookup by session
+    try:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_session_frames_session ON session_frames(session_id)')
+    except Exception:
+        pass
+    try:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_adaptive_suggestions_doctor_status ON adaptive_plan_suggestions(doctor_id, status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_adaptive_suggestions_patient_created ON adaptive_plan_suggestions(patient_id, created_at)')
+    except Exception:
+        pass
     
     # Add optimization columns to patients table if they don't exist
     optimization_columns = [
@@ -3102,12 +4206,67 @@ def ensure_tables_exist():
         )
         print(f"[INIT] Created {len(timeslot_data)} timeslots")
     
+    # ---- Seed / update exercises table with canonical list ----
+    CANONICAL_EXERCISES = [
+        ('Lifting of Arms', 'Shoulder', 'Stand upright, raise both arms from your sides to above your head, then slowly lower. Keep elbows slightly bent.'),
+        ('Lateral Trunk Tilt', 'Spine', 'Stand with feet shoulder-width apart. Slowly tilt your trunk to one side, return to center, then tilt to the other side.'),
+        ('Trunk Rotation', 'Spine', 'Stand with arms relaxed. Rotate your upper body to the left, return to center, then rotate right. Keep hips facing forward.'),
+        ('Squat', 'Knee', 'Stand with feet shoulder-width apart. Lower your hips by bending your knees, keeping your back straight. Rise slowly.'),
+        ('Trunk Rotation & Target Touch', 'Spine', 'Stand upright, rotate your trunk and reach toward targets at various positions. Combine trunk rotation with arm extension.'),
+        ('Pelvis Rotation', 'Hip', 'Stand upright and gently rotate your pelvis in a controlled circular motion while keeping your upper body stable.'),
+        ('Forward Flexion', 'Spine', 'Stand upright, slowly bend forward from your hips keeping your back straight. Reach towards your toes, then return upright.'),
+        ('Flank Stretch', 'Spine', 'Stand upright, raise one arm overhead and slowly stretch to the opposite side. Alternate sides.'),
+        ('Torso Rotation', 'Spine', 'Stand with feet apart, rotate your trunk gently to each side. Keep your lower body stable throughout.'),
+    ]
+    canonical_names = [e[0] for e in CANONICAL_EXERCISES]
+
+    # Remove any exercises NOT in the canonical list
+    placeholders = ','.join('?' * len(canonical_names))
+    cursor.execute(f"DELETE FROM exercises WHERE name NOT IN ({placeholders})", canonical_names)
+
+    # Insert/update canonical exercises
+    for ex_name, ex_category, ex_desc in CANONICAL_EXERCISES:
+        cursor.execute("SELECT id FROM exercises WHERE name = ?", (ex_name,))
+        row = cursor.fetchone()
+        if row:
+            cursor.execute("UPDATE exercises SET category = ?, description = ? WHERE name = ?", (ex_category, ex_desc, ex_name))
+        else:
+            cursor.execute(
+                "INSERT INTO exercises (name, category, description, difficulty) VALUES (?, ?, ?, 1)",
+                (ex_name, ex_category, ex_desc)
+            )
+    print(f"[INIT] Exercises table seeded with {len(CANONICAL_EXERCISES)} canonical exercises")
+
     conn.commit()
     conn.close()
 
 
 # Ensure tables exist on startup
 ensure_tables_exist()
+
+
+def assign_patient_exercises(patient_user_id, condition):
+    """
+    Assign exercises to a patient based on their MSK condition.
+    Inserts rows into patient_exercises for each mapped exercise.
+    """
+    exercise_names = CONDITION_EXERCISE_MAP.get(condition, [])
+    if not exercise_names:
+        # Fallback: assign all exercises
+        exercise_names = [
+            'Lifting of Arms', 'Lateral Trunk Tilt', 'Trunk Rotation',
+            'Squat', 'Trunk Rotation & Target Touch', 'Pelvis Rotation',
+            'Forward Flexion', 'Flank Stretch', 'Torso Rotation',
+        ]
+
+    for ex_name in exercise_names:
+        ex_row = query_db('SELECT id FROM exercises WHERE name = ?', (ex_name,), one=True)
+        if ex_row:
+            execute_db(
+                'INSERT OR IGNORE INTO patient_exercises (patient_id, exercise_id, enabled) VALUES (?, ?, 1)',
+                (patient_user_id, ex_row['id'])
+            )
+
 
 @app.route("/api/live_feedback_old", methods=["POST"])
 def api_live_feedback_old():
@@ -3275,6 +4434,49 @@ def api_live_feedback_v3():
 
     return jsonify(out)
 
+
+# ==================== FRAME TELEMETRY HELPER ====================
+
+def _log_frame_telemetry(out: dict, program: str = 'general'):
+    """Insert one row into session_frames for every processed frame.
+    
+    Silently skips if no active session or user is not logged in.
+    Skips warmup / idle / no-pose frames that carry no useful score data.
+    """
+    try:
+        patient_id = session.get('user_id')
+        session_id = session.get('current_session_id')
+        if not patient_id or not session_id:
+            return  # not inside a tracked session
+
+        form_status = out.get('form_status', '') or ''
+        # Skip frames with no real scoring data
+        if form_status in ('WARMUP', 'NO_POSE', 'IDLE', 'ERROR', ''):
+            return
+
+        exercise_name = out.get('exercise_name', '') or ''
+        # Prefer aggregated_score (stable, matches what user sees) over raw frame_score
+        score = float(out.get('aggregated_score') or out.get('frame_score', 0.0) or 0.0)
+        rep_info = out.get('rep_info') or {}
+        rep_count = int(rep_info.get('rep_now', 0))
+        set_count = int(rep_info.get('set_now', 1))
+        asymmetry_pct = out.get('asymmetry_pct')   # may be None
+        rom_angle     = out.get('joint_angle')       # may be None
+        ts = datetime.utcnow().isoformat()
+
+        execute_db(
+            '''INSERT INTO session_frames
+               (session_id, patient_id, timestamp, program, exercise_name,
+                score, status, rep_count, set_count, asymmetry_pct, rom_angle)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (session_id, patient_id, ts, program, exercise_name,
+             score, form_status, rep_count, set_count, asymmetry_pct, rom_angle),
+        )
+    except Exception as e:
+        # Never let logging break the real-time pipeline
+        print(f"[FRAME_LOG] Error: {e}")
+
+
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():
     if PIPELINE is None:
@@ -3289,6 +4491,7 @@ def api_live_feedback():
     language = data.get("language", "English")
     mode = data.get("mode", "auto")
     manual_exercise = data.get("manual_exercise", None)
+    exercise_hint = data.get("exercise_hint", "")
     
     PIPELINE.language = language  # keep it simple
     
@@ -3297,8 +4500,22 @@ def api_live_feedback():
             frame_b64,
             language=language,
             mode=mode,
-            manual_exercise=manual_exercise
+            manual_exercise=manual_exercise,
+            exercise_hint=exercise_hint
         )
+        
+        # Store landmarks for frontend polling
+        global LATEST_LANDMARKS
+        if 'landmarks' in out and out['landmarks']:
+            LATEST_LANDMARKS['kimore'] = {
+                'landmarks': out['landmarks'],
+                'exercise_name': out.get('exercise_name', ''),
+                'timestamp': time.time()
+            }
+
+        # ── Log frame telemetry to session_frames ──────────────────
+        _log_frame_telemetry(out, program='general')
+        
         return jsonify(out)
     except Exception as e:
         print(f"❌ API Error: {e}")
@@ -3319,6 +4536,137 @@ def api_live_feedback():
             },
         }), 500
 
+
+# ==================== KERAAL LOW BACK PAIN PIPELINE API ====================
+
+@app.route("/api/live_feedback_keraal", methods=["POST"])
+def api_live_feedback_keraal():
+    """KERAAL-specific endpoint for low back pain rehabilitation"""
+    if KERAAL_PIPELINE is None:
+        return jsonify({"error": "KERAAL pipeline not available"}), 503
+
+    data = request.get_json(force=True) or {}
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"error": "frame_b64 missing"}), 400
+
+    language = data.get("language", "English")
+    exercise_hint = data.get("exercise_hint", "")
+    
+    try:
+        out = KERAAL_PIPELINE.process_frame_dataurl_keraal(
+            frame_b64,
+            language=language,
+            exercise_hint=exercise_hint
+        )
+        
+        # Store landmarks for frontend polling
+        global LATEST_LANDMARKS
+        if 'landmarks' in out and out['landmarks']:
+            LATEST_LANDMARKS['keraal'] = {
+                'landmarks': out['landmarks'],
+                'exercise_name': out.get('exercise_name', ''),
+                'timestamp': time.time()
+            }
+
+        # ── Log frame telemetry to session_frames ──────────────────
+        _log_frame_telemetry(out, program='low_back_pain')
+        
+        return jsonify(out)
+    except Exception as e:
+        print(f"❌ KERAAL API Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "frame_score": 0.0,
+            "form_status": "ERROR",
+            "llm_feedback": [f"KERAAL error: {str(e)}"],
+            "exercise_name": "error",
+            "exercise_confidence": 0.0,
+            "pipeline": "keraal",
+            "rep_info": {
+                "rep_now": 0,
+                "rep_target": 10,
+                "set_now": 1,
+                "set_target": 3,
+                "rep_incremented": False,
+                "set_completed": False,
+                "exercise_completed": False,
+            },
+        }), 500
+
+
+@app.route("/api/session/landmarks", methods=["GET"])
+def get_session_landmarks():
+    """
+    Get latest landmarks for skeleton visualization.
+    Called by frontend for real-time pose rendering (every 200ms).
+    Returns 33 landmarks with [x, y, z] coordinates.
+    """
+    global LATEST_LANDMARKS
+    
+    # Try KIMORE first, then KERAAL
+    landmarks_data = LATEST_LANDMARKS.get('kimore') or LATEST_LANDMARKS.get('keraal')
+    
+    if landmarks_data:
+        return jsonify({
+            "ok": True,
+            "landmarks": landmarks_data['landmarks'],
+            "exercise_name": landmarks_data['exercise_name'],
+            "timestamp": landmarks_data['timestamp']
+        })
+    else:
+        return jsonify({
+            "ok": False,
+            "landmarks": [],
+            "exercise_name": "",
+            "timestamp": 0
+        }), 204  # No Content
+
+
+@app.route("/api/session/start/keraal", methods=["POST"])
+@login_required
+@role_required('patient')
+def api_session_start_keraal():
+    """Start a KERAAL (low back pain) session"""
+    if KERAAL_PIPELINE is None:
+        return jsonify({"ok": False, "error": "KERAAL pipeline not available"}), 503
+    
+    data = request.get_json(force=True) or {}
+    language = data.get("language", "English")
+    
+    try:
+        KERAAL_PIPELINE.reset()
+        KERAAL_PIPELINE.language = language
+        return jsonify({
+            "ok": True,
+            "pipeline": "keraal",
+            "message": "KERAAL session started"
+        })
+    except Exception as e:
+        print(f"❌ KERAAL Session Start Error: {e}")
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route("/api/session/stop/keraal", methods=["POST"])
+@login_required
+@role_required('patient')
+def api_session_stop_keraal():
+    """Stop a KERAAL session"""
+    if KERAAL_PIPELINE is None:
+        return jsonify({"ok": True, "warning": "KERAAL pipeline not available"})
+    
+    try:
+        KERAAL_PIPELINE.reset()
+        return jsonify({"ok": True, "pipeline": "keraal"})
+    except Exception as e:
+        print(f"❌ KERAAL Session Stop Error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.post("/api/session/stop")
 def api_session_stop():  # sourcery skip: use-contextlib-suppress
     global PIPELINE
@@ -3333,4 +4681,6 @@ def api_session_stop():  # sourcery skip: use-contextlib-suppress
 if __name__ == '__main__':
     #start_openpose_server()
     print("Database tables verified via ensure_tables_exist().")
-    app.run(host="127.0.0.1", port=5050, debug=True)
+    port = int(os.environ.get("PORT", "5050"))
+    debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)
