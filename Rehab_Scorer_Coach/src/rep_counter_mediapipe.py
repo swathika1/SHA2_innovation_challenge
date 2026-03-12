@@ -194,12 +194,13 @@ EXERCISE_PROFILES = {
     },
 
     # TORSO ROTATION: shoulder/hip width ratio
-    # Facing camera: shoulders wider than hips, ratio ~1.2-1.6
-    # Rotated: shoulders compress, ratio drops to ~0.8-1.1
+    # Facing camera: shoulders wider than hips, ratio ~1.3-2.0
+    # Rotated: shoulders compress, ratio drops
+    # Thresholds widened for rehab patients doing gentle rotations
     "torso_rotation": {
         "joints": "rotation",
-        "rest_threshold": 1.15,
-        "peak_threshold": 1.0,
+        "rest_threshold": 1.50,
+        "peak_threshold": 1.25,
         "direction": "down",
         "min_rep_sec": 0.5,
     },

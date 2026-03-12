@@ -261,6 +261,8 @@ _NAME_MAP: Dict[str, str] = {
     "lateral_trunk_tilt_with_arms_in_extension": "lateral_trunk_tilt",
     "trunk_rotation": "trunk_rotation",
     "trunk rotation": "trunk_rotation",
+    "torso_rotation": "trunk_rotation",
+    "torso rotation": "trunk_rotation",
     "pelvis_rotation": "pelvis_rotation",
     "pelvis rotation": "pelvis_rotation",
     "squat": "squat",
