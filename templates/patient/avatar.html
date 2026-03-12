@@ -1269,26 +1269,7 @@
         if (currentMode !== 'avatar') return;
 
         if (isListening) {
-            isListening = false;
-            voiceMicBtn.classList.remove('active');
-            voiceNote.textContent = 'Processing speech…';
-            setAvatarState('thinking');
-
-            const ctx = stopRecording();
-            const sampleRate = ctx ? ctx.sampleRate : 16000;
-            if (ctx) ctx.close();
-
-            const totalSamples = pcmChunks.reduce((acc, c) => acc + c.length, 0);
-            if (totalSamples < 800) {
-                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
-                setAvatarState('idle');
-                return;
-            }
-            const merged = new Float32Array(totalSamples);
-            let offset = 0;
-            for (const chunk of pcmChunks) { merged.set(chunk, offset); offset += chunk.length; }
-            pcmChunks = [];
-            processVoiceBlob(encodeWAV(merged, sampleRate));
+            // Already handled by auto-VAD, do nothing
             return;
         }
 
@@ -1304,15 +1285,59 @@
                 recAudioCtx = new AudioContext();
                 recSource = recAudioCtx.createMediaStreamSource(stream);
                 recProcessor = recAudioCtx.createScriptProcessor(4096, 1, 1);
+                
+                // VAD variables
+                let silenceStart = Date.now();
+                let hasSpoken = false;
+                let vadTriggered = false;
+                
                 recProcessor.onaudioprocess = e => {
-                    pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+                    const data = e.inputBuffer.getChannelData(0);
+                    pcmChunks.push(new Float32Array(data));
+                    
+                    // Calculate RMS (volume level)
+                    let sum = 0;
+                    for (let i = 0; i < data.length; i++) {
+                        sum += data[i] * data[i];
+                    }
+                    const rms = Math.sqrt(sum / data.length);
+                    
+                    // Detect speech
+                    if (rms > 0.02) {  // Threshold for speech detection
+                        hasSpoken = true;
+                        silenceStart = Date.now();
+                    } else if (hasSpoken && Date.now() - silenceStart > 800 && !vadTriggered) {
+                        // Speech ended (silence for 800ms) - auto-process
+                        vadTriggered = true;
+                        isListening = false;
+                        voiceMicBtn.classList.remove('active');
+                        voiceNote.textContent = 'Processing speech…';
+                        setAvatarState('thinking');
+                        
+                        const ctx = stopRecording();
+                        const sampleRate = ctx ? ctx.sampleRate : 16000;
+                        if (ctx) ctx.close();
+                        
+                        const totalSamples = pcmChunks.reduce((acc, c) => acc + c.length, 0);
+                        if (totalSamples < 800) {
+                            voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
+                            setAvatarState('idle');
+                            return;
+                        }
+                        const merged = new Float32Array(totalSamples);
+                        let offset = 0;
+                        for (const chunk of pcmChunks) { merged.set(chunk, offset); offset += chunk.length; }
+                        pcmChunks = [];
+                        processVoiceBlob(encodeWAV(merged, sampleRate));
+                    }
                 };
+                
                 recSource.connect(recProcessor);
                 recProcessor.connect(recAudioCtx.destination);
 
                 isListening = true;
                 voiceMicBtn.classList.add('active');
-                voiceNote.textContent = 'Listening… Tap mic again when done speaking.';
+                voiceNote.textContent = 'Listening... Stop talking when done (auto-response will start).';
                 setAvatarState('listening');
             })
             .catch(err => {

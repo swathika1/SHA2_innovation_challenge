@@ -311,6 +311,15 @@ class KeraalRehabPipeline:
         except Exception:
             self._rag_engine = None
         
+        # LLM for feedback generation
+        try:
+            from Rehab_Scorer_Coach.src.llm_groq import GroqLLM
+            self.llm = GroqLLM()
+            print("  ✅ Groq LLM initialized with GROQ_API_KEY from environment")
+        except Exception as e:
+            print(f"  ❌ Groq LLM failed to initialize: {e}")
+            self.llm = None
+        
         print("✅ KeraalRehabPipeline Ready")
     
     
@@ -461,9 +470,10 @@ class KeraalRehabPipeline:
         """
         feedback = []
         
-        # ONLY generate feedback when form is INCORRECT
-        if form_status != "INCORRECT":
-            return feedback  # Return empty for correct form
+        # ✅ FIX: Also allow feedback when score indicates poor form (even if status is CORRECT)
+        # Generate feedback for INCORRECT form OR low scores that suggest poor execution
+        if form_status != "INCORRECT" and aggregated_score >= 27.5:
+            return feedback  # Return empty for correct form with good score
         
         # Cooldown: only generate feedback every 10-15 seconds
         self.llm_feedback_cooldown -= 1
@@ -492,10 +502,6 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
 
             # Use Groq LLM
             try:
-                from Rehab_Scorer_Coach.src.llm_groq import GroqLLM
-                llm = GroqLLM()
-                
-                # Enhanced pose summary from landmarks
                 pose_parts = []
                 if landmarks is not None and len(landmarks) >= 33:
                     try:
@@ -576,14 +582,18 @@ CRITICAL: Respond ONLY in {language}. Do NOT use any other language."""
                     rag_context = f"Standard rehabilitation guidance for {exercise_name}: Maintain proper alignment, move slowly and controlled, avoid compensatory movements."
                     print(f"   ℹ️  Using fallback RAG context for {exercise_name}")
                 
-                feedback = llm.generate_feedback(
-                    exercise_name=exercise_name,
-                    language=language,
-                    rag_context=rag_context,
-                    numeric_summary=f"score={aggregated_score:.1f}/50",
-                    pose_summary=pose_summary
-                )
-                print(f"✅ LLM feedback in {language} (RAG-enhanced): {feedback}")
+                # Use self.llm if available
+                if self.llm:
+                    feedback = self.llm.generate_feedback(
+                        exercise_name=exercise_name,
+                        language=language,
+                        rag_context=rag_context,
+                        numeric_summary=f"score={aggregated_score:.1f}/50",
+                        pose_summary=pose_summary
+                    )
+                    print(f"✅ LLM feedback in {language} (RAG-enhanced): {feedback}")
+                else:
+                    raise RuntimeError("LLM not initialized")
             except Exception as e:
                 print(f"⚠️  LLM failed: {e}")
                 # Fallback feedback

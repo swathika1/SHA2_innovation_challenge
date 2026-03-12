@@ -56,22 +56,22 @@
     <a href="{{ url_for('plan_editor') }}" class="btn" style="background: #28a745;"><i class="fa-solid fa-pen-to-square"></i> Create Rehab Plan</a>
 </div>
 
-<!-- Adaptive Rehab Alerts -->
+<!-- Patient Concern Notifications -->
 <div class="card" style="margin-bottom: 20px;">
     <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
-        <span><i class="fa-solid fa-lightbulb"></i> Adaptive Rehab Suggestions</span>
-        <span style="font-size:0.82rem; background:#fff3cd; color:#856404; padding:4px 10px; border-radius:999px;">
-            {{ pending_adaptive_suggestions|length if pending_adaptive_suggestions else 0 }} pending
+        <span><i class="fa-solid fa-bell"></i> Patient Concern Notifications</span>
+        <span style="font-size:0.82rem; background:#fee2e2; color:#991b1b; padding:4px 10px; border-radius:999px;">
+            {{ pending_patient_concerns|length if pending_patient_concerns else 0 }} pending
         </span>
     </div>
-    {% if pending_adaptive_suggestions %}
-        {% for s in pending_adaptive_suggestions %}
+    {% if pending_patient_concerns %}
+        {% for s in pending_patient_concerns %}
         <div style="padding: 12px 14px; border-bottom: 1px solid #f0f0f0;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
                 <div>
                     <strong>{{ s.patient_name }}</strong>
-                    <span style="font-size:0.78rem; color:#6b7280; margin-left:6px;">{{ s.source }}</span>
-                    <div style="font-size:0.9rem; margin-top:2px;">{{ s.reason }}</div>
+                    <span style="font-size:0.78rem; color:#6b7280; margin-left:6px;">raised concern</span>
+                    <div style="font-size:0.9rem; margin-top:2px;"><strong>Concern:</strong> {{ s.reason }}</div>
                     <div style="font-size:0.85rem; color:#4b5563; margin-top:3px;">{{ s.suggested_change }}</div>
                     {% if s.patient_note %}
                     <div style="font-size:0.82rem; color:#6b7280; margin-top:2px;">Patient note: {{ s.patient_note }}</div>
@@ -86,7 +86,7 @@
         </div>
         {% endfor %}
     {% else %}
-        <p style="color:#666; text-align:center; padding:16px; margin:0;">No pending adaptive plan suggestions.</p>
+        <p style="color:#666; text-align:center; padding:16px; margin:0;">No pending patient concerns.</p>
     {% endif %}
 </div>
 
@@ -116,6 +116,7 @@
                     <span class="risk-flag low"><i class="fa-solid fa-circle-check"></i> On Track</span>
                 {% endif %}
                 <span style="color: #666;">{{ patient.adherence_rate or 0 }}% adherence</span>
+                <a href="{{ url_for('plan_editor') }}?patient_id={{ patient.id }}" class="btn" style="background:#4361ee;color:white;"><i class="fa-solid fa-dumbbell"></i> Edit Plan</a>
                 <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="btn">View Details</a>
             </div>
         </div>

@@ -95,10 +95,10 @@ class WebRehabPipeline:
         
         try:
             self.llm = GroqLLM()
-            print("  ✅ Groq LLM initialized with API key")
+            print("  ✅ Groq LLM initialized with GROQ_API_KEY from environment")
         except Exception as e:
-            print(f"  ⚠️  Groq LLM failed to initialize: {e}")
-            print(f"     Please ensure GROQ_API_KEY is set: export GROQ_API_KEY='your-key'")
+            print(f"  ❌ Groq LLM failed to initialize: {e}")
+            print(f"     ERROR\n{str(e)}")
             self.llm = None
 
         self.last_llm_time = 0.0

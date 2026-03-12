@@ -4,9 +4,21 @@ os.environ["USE_TF"] = "0"
 os.environ["KERAS_BACKEND"] = "torch"  # Use PyTorch backend (TF not supported on Python 3.14)
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # Fall back to CPU for unsupported MPS ops
 
-# Load environment variables from .env file
+# Load environment variables from .env file (explicit path to ensure it loads)
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
+
+# Load from explicit .env path in current directory
+env_path = Path(__file__).parent / ".env"
+load_dotenv(env_path)
+
+# Verify critical keys are loaded
+_groq_key = os.environ.get("GROQ_API_KEY", "")
+_meralion_key = os.environ.get("MERILION_API_KEY", "")
+if not _groq_key:
+    print("⚠️  WARNING: GROQ_API_KEY not found in .env - AI feedback may not work")
+if not _meralion_key:
+    print("⚠️  WARNING: MERILION_API_KEY not found in .env - Meralion API may not work")
 
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file, make_response
@@ -169,17 +181,19 @@ app.secret_key = 'your-secret-key-change-this-in-production'  # Required for ses
 # ==================== CONDITIONS & EXERCISE MAPPING ====================
 
 MSK_CONDITIONS = [
-    'Joint disorders',
-    'Spine conditions',
-    'Post-surgical rehab',
-    'Sports injuries',
-    'Postural disorders',
-    'Muscle tightness',
-    'Neuromuscular rehab',
+    'General Rehabilitation',
+    'Spine & MSK',
+    'Post-Surgical Recovery',
+    'Sports Injury',
+    'Neurological Rehab',
+    'Orthopaedic Rehab',
 ]
 
+# Doctor specialties use the same vocabulary as patient conditions
+DOCTOR_SPECIALTIES = MSK_CONDITIONS
+
 CONDITION_EXERCISE_MAP = {
-    'Spine conditions': [
+    'Spine & MSK': [
         'Lateral Trunk Tilt',
         'Trunk Rotation',
         'Forward Flexion',
@@ -187,36 +201,32 @@ CONDITION_EXERCISE_MAP = {
         'Torso Rotation',
         'Trunk Rotation & Target Touch',
     ],
-    'Joint disorders': [
+    'Orthopaedic Rehab': [
         'Squat',
         'Pelvis Rotation',
         'Lifting of Arms',
     ],
-    'Post-surgical rehab': [
+    'Post-Surgical Recovery': [
         'Lifting of Arms',
         'Squat',
         'Pelvis Rotation',
         'Trunk Rotation',
     ],
-    'Sports injuries': [
+    'Sports Injury': [
         'Squat',
         'Pelvis Rotation',
         'Lifting of Arms',
     ],
-    'Postural disorders': [
+    'General Rehabilitation': [
         'Lateral Trunk Tilt',
         'Trunk Rotation',
         'Torso Rotation',
         'Flank Stretch',
     ],
-    'Muscle tightness': [
-        'Forward Flexion',
-        'Flank Stretch',
-        'Lateral Trunk Tilt',
-    ],
-    'Neuromuscular rehab': [
+    'Neurological Rehab': [
         'Trunk Rotation & Target Touch',
         'Trunk Rotation',
+        'Forward Flexion',
     ],
 }
 
@@ -296,6 +306,7 @@ def create_adaptive_suggestion(
     source: str,
     reason: str,
     suggested_change: str,
+    doctor_id_override=None,
     severity: str = "medium",
     session_id=None,
     workout_id=None,
@@ -306,7 +317,7 @@ def create_adaptive_suggestion(
     app_confidence=None,
 ):
     """Create a pending adaptive rehab suggestion for doctor review."""
-    doctor_id = get_primary_doctor_id_for_patient(patient_id)
+    doctor_id = doctor_id_override or get_primary_doctor_id_for_patient(patient_id)
     if not doctor_id:
         return None
 
@@ -479,6 +490,66 @@ def api_tts():
 
     print(f"❌ All TTS engines failed for {language}")
     return jsonify({"error": "TTS service temporarily unavailable"}), 503
+
+
+def _tts_to_base64(text: str, language: str = "English", gender: str = "male") -> str:
+    """
+    Generate TTS audio and return as base64-encoded MP3.
+    Used for avatar voice responses.
+    
+    Args:
+        text: Text to synthesize
+        language: Language (English, Chinese, Malay, Tamil, Singlish)
+        gender: Voice gender (male/female)
+    
+    Returns:
+        Base64-encoded MP3 audio or error message
+    """
+    try:
+        # Try edge_tts first
+        voice_map = EDGE_VOICE_MAP_FEMALE if gender == "female" else EDGE_VOICE_MAP_MALE
+        edge_voice = voice_map.get(language, voice_map["English"])
+        edge_path = _tts_cache_path(text, language + "_" + gender, "edge")
+        
+        if os.path.exists(edge_path):
+            with open(edge_path, 'rb') as f:
+                return base64.b64encode(f.read()).decode()
+        
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(
+                asyncio.wait_for(_edge_synth(text, edge_voice, edge_path), timeout=8.0)
+            )
+            loop.close()
+            
+            with open(edge_path, 'rb') as f:
+                return base64.b64encode(f.read()).decode()
+        except Exception as edge_err:
+            print(f"[TTS] Edge-TTS failed: {edge_err}")
+            if os.path.exists(edge_path):
+                try: os.remove(edge_path)
+                except: pass
+        
+        # Fallback to gTTS
+        if GTTS_AVAILABLE:
+            gtts_lang = GTTS_LANG_MAP.get(language, "en")
+            gtts_path = _tts_cache_path(text, language, "gtts")
+            
+            if os.path.exists(gtts_path):
+                with open(gtts_path, 'rb') as f:
+                    return base64.b64encode(f.read()).decode()
+            
+            _gtts_synth(text, gtts_lang, gtts_path)
+            with open(gtts_path, 'rb') as f:
+                return base64.b64encode(f.read()).decode()
+        
+        return ""  # Failed to generate TTS
+    
+    except Exception as e:
+        print(f"[TTS-BASE64] Error: {e}")
+        return ""
+
 
 @app.get("/health")
 def health():
@@ -767,16 +838,10 @@ def signup():
                     (int(selected_doctor_id), user_id)
                 )
             else:
-                # Fallback: assign to first available doctor
-                doctor = query_db('SELECT id FROM users WHERE role = ? LIMIT 1', ('doctor',), one=True)
-                if doctor:
-                    execute_db(
-                        'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
-                        (doctor['id'], user_id)
-                    )
+                # No doctor selected — patient waits to be claimed by a specialist
+                pass
             
-            # Auto-assign exercises based on patient condition
-            assign_patient_exercises(user_id, condition)
+            # Exercises NOT auto-assigned; doctor assigns via Plan Editor.
         
         # If doctor, create doctor records with optimization data
         elif role == 'doctor':
@@ -961,14 +1026,25 @@ def patient_dashboard():
     ''', (session['user_id'],))
     chart_sessions = [dict(cs) for cs in chart_sessions_raw] if chart_sessions_raw else []
 
-    # Get upcoming appointments (simpler query - just get all scheduled)
+    # Get upcoming appointments — future only
     upcoming_appointments = query_db('''
         SELECT a.*, u.name as doctor_name
         FROM appointments a
         JOIN users u ON a.doctor_id = u.id
         WHERE a.patient_id = ? AND a.status = 'scheduled'
+          AND a.appointment_date >= date('now')
         ORDER BY a.appointment_date, a.appointment_time
         LIMIT 3
+    ''', (session['user_id'],))
+
+    # Recent past appointments for dashboard (last 5)
+    recent_past_appointments = query_db('''
+        SELECT a.*, u.name as doctor_name
+        FROM appointments a
+        JOIN users u ON a.doctor_id = u.id
+        WHERE a.patient_id = ? AND a.status IN ('completed', 'missed', 'cancelled')
+        ORDER BY a.appointment_date DESC, a.appointment_time DESC
+        LIMIT 5
     ''', (session['user_id'],))
     
     # Calculate dynamic statistics from sessions
@@ -1027,9 +1103,12 @@ def patient_dashboard():
         LIMIT 10
     ''', (session['user_id'],))
 
+    exercises_assigned = bool(workouts)
+
     return render_template('patient/dashboard.html',
                             user=user,
                             patient=patient_info,
+                            exercises_assigned=exercises_assigned,
                             workouts=workouts if workouts else [],
                             recent_sessions=recent_sessions,
                             chart_sessions=chart_sessions if chart_sessions else [],
@@ -1042,6 +1121,7 @@ def patient_dashboard():
                             today_session_id=today_session_id,
                             today_perc=today_perc,
                             adaptive_suggestions=adaptive_suggestions if adaptive_suggestions else [],
+                            recent_past_appointments=recent_past_appointments if recent_past_appointments else [],
                             chat_patient_id=None)
 
 
@@ -1428,36 +1508,51 @@ def progress_history():
 @role_required('patient')
 def patient_appointments():
     """Patient's Appointments View"""
-    # Get all upcoming appointments
+    # Real-time: mark any appointments whose time has now passed as 'missed'
+    _mark_missed_appointments()
+
+    # Upcoming — only future appointments (real-time: exclude today's past-time slots too)
     appointments = query_db('''
         SELECT a.*, u.name as doctor_name
         FROM appointments a
         JOIN users u ON a.doctor_id = u.id
         WHERE a.patient_id = ? AND a.status = 'scheduled'
+          AND (
+            a.appointment_date > date('now')
+            OR (a.appointment_date = date('now')
+                AND a.appointment_time > strftime('%H:%M', 'now', 'localtime'))
+          )
         ORDER BY a.appointment_date, a.appointment_time
     ''', (session['user_id'],))
-    
-    # Get past appointments
+
+    # Past appointments — completed, missed, cancelled
     past_appointments = query_db('''
         SELECT a.*, u.name as doctor_name
         FROM appointments a
         JOIN users u ON a.doctor_id = u.id
-        WHERE a.patient_id = ? AND (a.status = 'completed' OR a.status = 'cancelled')
+        WHERE a.patient_id = ? AND a.status IN ('completed', 'missed', 'cancelled')
         ORDER BY a.appointment_date DESC, a.appointment_time DESC
-        LIMIT 10
+        LIMIT 20
     ''', (session['user_id'],))
-    
+
     # Get patient scheduling preferences
     patient_prefs = query_db(
         'SELECT * FROM patients WHERE user_id = ?',
         (session['user_id'],),
         one=True
     )
-    
+
+    # Plain-dict calendar events for JSON serialisation in template
+    cal_events = (
+        [{'date': r['appointment_date'], 'status': 'upcoming'} for r in (appointments or [])] +
+        [{'date': r['appointment_date'], 'status': r['status']} for r in (past_appointments or [])]
+    )
+
     return render_template('patient/appointments.html',
                          appointments=appointments if appointments else [],
                          past_appointments=past_appointments if past_appointments else [],
-                         patient_prefs=patient_prefs)
+                         patient_prefs=patient_prefs,
+                         cal_events=cal_events)
 
 
 @app.route('/patient/book-appointment', methods=['POST'])
@@ -1560,6 +1655,91 @@ def avatar_chat():
         }), 500
 
 
+@app.route('/patient/avatar/voice', methods=['POST'])
+@login_required
+@role_required('patient')
+def avatar_voice():
+    """
+    Real-time voice interaction with Jimmy avatar.
+    Handles:
+    1. Voice activity detection (knows when you stop talking)
+    2. Automatic transcription
+    3. Jimmy response generation
+    4. Text-to-speech response audio
+    
+    Expects JSON:
+    {
+        "audio": "base64-encoded 16-bit PCM audio at 16kHz",
+        "language": "English|Chinese|Malay|Tamil|Singlish",
+        "history": [previous conversation messages]
+    }
+    
+    Returns JSON:
+    {
+        "transcribed_text": "what you said",
+        "response": "what Jimmy says",
+        "response_audio": "base64-encoded MP3 audio",
+        "status": "success|error"
+    }
+    """
+    try:
+        data = request.get_json()
+        audio_b64 = data.get('audio', '').strip()
+        language = (data.get('language') or 'English').strip()
+        history = data.get('history', [])
+        
+        if not audio_b64:
+            return jsonify({'error': 'No audio provided'}), 400
+        
+        # Check if webrtcvad is available
+        try:
+            import webrtcvad
+            vad_available = True
+        except ImportError:
+            vad_available = False
+            print("[AVATAR-VOICE] webrtcvad not installed - installing...")
+            # Try to install
+            import subprocess
+            try:
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'webrtcvad', '-q'])
+                vad_available = True
+            except:
+                vad_available = False
+        
+        # Process audio with voice activity detection
+        from avatar_voice_processor import process_avatar_audio_stream
+        
+        transcribed_text, jimmy_response, response_audio = process_avatar_audio_stream(
+            audio_base64=audio_b64,
+            patient_id=session['user_id'],
+            language=language,
+            history=history
+        )
+        
+        if not jimmy_response:
+            return jsonify({
+                'error': response_audio or 'Could not process audio',
+                'status': 'error'
+            }), 400
+        
+        return jsonify({
+            'transcribed_text': transcribed_text,
+            'response': jimmy_response,
+            'response_audio': response_audio,  # Base64-encoded MP3
+            'vad_available': vad_available,
+            'status': 'success'
+        })
+    
+    except Exception as e:
+        print(f"[AVATAR-VOICE] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': str(e),
+            'status': 'error'
+        }), 500
+
+
 # ==================== CLINICIAN ROUTES ====================
 
 @app.route('/clinician/profile')
@@ -1611,13 +1791,19 @@ def clinician_profile():
         today = date.today()
         age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
+    # Doctor's specialties
+    spec_rows = query_db('SELECT specialty FROM doctor_specialties WHERE doctor_id = ?', (doctor_id,))
+    doctor_specialties = [dict(r)['specialty'] for r in spec_rows] if spec_rows else []
+
     return render_template('clinician/profile.html',
                          user_info=user_info,
                          patients=patients_with_caregivers,
                          total_patients=total_patients,
                          patients_with_cg=patients_with_cg,
                          avg_adherence=avg_adherence,
-                         age=age)
+                         age=age,
+                         doctor_specialties=doctor_specialties,
+                         all_specialties=DOCTOR_SPECIALTIES)
 
 
 @app.route('/clinician/dashboard')
@@ -1660,6 +1846,7 @@ def clinician_dashboard():
         FROM appointments a
         JOIN users u ON a.patient_id = u.id
         WHERE a.doctor_id = ? AND a.status = 'scheduled'
+          AND a.appointment_date >= date('now')
         ORDER BY a.appointment_date, a.appointment_time
         LIMIT 5
     ''', (session['user_id'],))
@@ -1672,25 +1859,60 @@ def clinician_dashboard():
         ORDER BY aps.created_at DESC
         LIMIT 20
     ''', (session['user_id'],))
+
+    pending_patient_concerns = query_db('''
+        SELECT aps.*, u.name AS patient_name
+        FROM adaptive_plan_suggestions aps
+        JOIN users u ON aps.patient_id = u.id
+        WHERE aps.doctor_id = ?
+          AND aps.status = 'pending'
+          AND aps.source = 'patient_feedback'
+        ORDER BY aps.created_at DESC
+        LIMIT 20
+    ''', (session['user_id'],))
     
+    # ── Specialty-matched new patients ──────────────────────────────────────
+    doc_spec_rows = query_db(
+        'SELECT specialty FROM doctor_specialties WHERE doctor_id = ?',
+        (session['user_id'],)
+    )
+    doctor_specialties_list = [dict(r)['specialty'] for r in doc_spec_rows] if doc_spec_rows else []
+    no_specialties_set = not bool(doctor_specialties_list)
+
+    if doctor_specialties_list:
+        _ph = ','.join('?' * len(doctor_specialties_list))
+        new_matched_patients = query_db(f'''
+            SELECT u.id, u.name, u.email, p.condition, p.specialty_needed
+            FROM users u
+            JOIN patients p ON u.id = p.user_id
+            WHERE p.specialty_needed IN ({_ph})
+              AND u.id NOT IN (SELECT patient_id FROM doctor_patient WHERE doctor_id = ?)
+            ORDER BY u.name
+        ''', doctor_specialties_list + [session['user_id']])
+    else:
+        # No specialties set → show ALL unassigned patients so doctor can claim them
+        new_matched_patients = query_db('''
+            SELECT u.id, u.name, u.email, p.condition, p.specialty_needed
+            FROM users u
+            JOIN patients p ON u.id = p.user_id
+            WHERE u.id NOT IN (SELECT patient_id FROM doctor_patient)
+            ORDER BY u.name
+        ''')
+
+    new_matched_patients = [dict(r) for r in new_matched_patients] if new_matched_patients else []
+
     return render_template('clinician/dashboard.html',
                          patients=patients,
                          total_patients=total_patients,
                          needs_attention=needs_attention,
                          avg_adherence=round(avg_adherence),
                          upcoming_appointments=len(appointments) if appointments else 0,
-                         pending_adaptive_suggestions=pending_adaptive_suggestions if pending_adaptive_suggestions else [])
-
-
-@app.route('/api/patient/plan-feedback', methods=['POST'])
-@login_required
-@role_required('patient')
-def api_patient_plan_feedback():
-    """Patient submits difficulty/error feedback to request plan adaptation."""
-    data = request.get_json(force=True) or {}
-
-    workout_id = data.get('workout_id')
-    issue_type = (data.get('issue_type') or 'too_hard').strip()
+                         pending_adaptive_suggestions=pending_adaptive_suggestions if pending_adaptive_suggestions else [],
+                         pending_patient_concerns=pending_patient_concerns if pending_patient_concerns else [],
+                         new_matched_patients=new_matched_patients,
+                         no_specialties_set=no_specialties_set,
+                         doctor_specialties=doctor_specialties_list,
+                         all_specialties=DOCTOR_SPECIALTIES)
     difficulty = int(data.get('difficulty', 7))
     note = (data.get('note') or '').strip()
 
@@ -1705,6 +1927,7 @@ def api_patient_plan_feedback():
     ''', (workout_id, session['user_id']), one=True)
     if not workout:
         return jsonify({'ok': False, 'error': 'Workout not found'}), 404
+    workout = dict(workout)
 
     # Suggest lighter progression when difficulty is high.
     suggested_sets = max(1, int(workout['sets']) - 1) if difficulty >= 8 else int(workout['sets'])
@@ -1717,11 +1940,35 @@ def api_patient_plan_feedback():
         f"; frequency {suggested_frequency}."
     )
 
+    target_doctor_id = workout.get('assigned_by_doctor_id')
+    if not target_doctor_id:
+        # Legacy rows may not have workout ownership; pick most recently assigned doctor on this patient's active plan.
+        owner_row = query_db('''
+            SELECT assigned_by_doctor_id
+            FROM workouts
+            WHERE patient_id = ?
+              AND is_active = 1
+              AND assigned_by_doctor_id IS NOT NULL
+            ORDER BY id DESC
+            LIMIT 1
+        ''', (session['user_id'],), one=True)
+        owner_row = dict(owner_row) if owner_row else None
+        if owner_row and owner_row.get('assigned_by_doctor_id'):
+            target_doctor_id = owner_row.get('assigned_by_doctor_id')
+
+    if target_doctor_id and not workout.get('assigned_by_doctor_id'):
+        execute_db('''
+            UPDATE workouts
+            SET assigned_by_doctor_id = ?
+            WHERE id = ? AND patient_id = ?
+        ''', (target_doctor_id, workout_id, session['user_id']))
+
     suggestion_id = create_adaptive_suggestion(
         patient_id=session['user_id'],
         source='patient_feedback',
         reason=reason,
         suggested_change=suggested_change,
+        doctor_id_override=target_doctor_id,
         severity='high' if difficulty >= 8 else 'medium',
         workout_id=workout_id,
         suggested_sets=suggested_sets,
@@ -2029,29 +2276,79 @@ def add_clinician_note(patient_id):
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
 
+@app.route('/api/doctor/specialties', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_doctor_specialties():
+    """Save doctor specialty selections."""
+    data = request.get_json(force=True) or {}
+    specialties = data.get('specialties', [])
+    # Validate against known list
+    valid = [s for s in specialties if s in DOCTOR_SPECIALTIES]
+    doctor_id = session['user_id']
+    execute_db('DELETE FROM doctor_specialties WHERE doctor_id = ?', (doctor_id,))
+    for spec in valid:
+        execute_db(
+            'INSERT INTO doctor_specialties (doctor_id, specialty) VALUES (?, ?)',
+            (doctor_id, spec)
+        )
+    return jsonify({'ok': True, 'saved': valid})
+
+
 @app.route('/clinician/plan-editor', methods=['GET'])
 @login_required
 @role_required('doctor')
 def plan_editor():
     """Rehab Plan Editor — all patients' plans in one view"""
-    # Get patients assigned to this doctor
-    patients = query_db('''
+    doctor_id = session['user_id']
+
+    # Patients already assigned to this doctor
+    assigned_patients = query_db('''
         SELECT u.id, u.name, p.condition
         FROM users u
         JOIN patients p ON u.id = p.user_id
         JOIN doctor_patient dp ON p.user_id = dp.patient_id
         WHERE dp.doctor_id = ?
-    ''', (session['user_id'],))
+    ''', (doctor_id,))
+    assigned_patients = [dict(p) for p in assigned_patients] if assigned_patients else []
+    assigned_ids = {p['id'] for p in assigned_patients}
 
-    # If no assigned patients, show ALL patients
-    if not patients:
-        patients = query_db('''
+    # Specialty-matched unassigned patients (show so doctor can assign to them)
+    spec_rows = query_db('SELECT specialty FROM doctor_specialties WHERE doctor_id = ?', (doctor_id,))
+    doctor_specialties_list = [dict(r)['specialty'] for r in spec_rows] if spec_rows else []
+
+    if doctor_specialties_list:
+        _ph = ','.join('?' * len(doctor_specialties_list))
+        unassigned_matches = query_db(f'''
             SELECT u.id, u.name, p.condition
             FROM users u
             JOIN patients p ON u.id = p.user_id
+            WHERE p.specialty_needed IN ({_ph})
+              AND u.id NOT IN (SELECT patient_id FROM doctor_patient WHERE doctor_id = ?)
+        ''', doctor_specialties_list + [doctor_id])
+    else:
+        # No specialties set — show ALL unassigned so doctor can claim them
+        unassigned_matches = query_db('''
+            SELECT u.id, u.name, p.condition
+            FROM users u
+            JOIN patients p ON u.id = p.user_id
+            WHERE u.id NOT IN (SELECT patient_id FROM doctor_patient)
         ''')
+    unassigned_matches = [dict(p) for p in unassigned_matches] if unassigned_matches else []
 
-    patients = [dict(p) for p in patients] if patients else []
+    # Merge: assigned first, then unmatched-unassigned (dedup by id)
+    seen = set(assigned_ids)
+    extra = [p for p in unassigned_matches if p['id'] not in seen]
+    all_patients = assigned_patients + extra
+
+    # If a specific patient_id is requested, show only that patient
+    selected_patient_id = request.args.get('patient_id', type=int)
+    if selected_patient_id:
+        patients = [p for p in all_patients if p['id'] == selected_patient_id]
+        if not patients:
+            patients = all_patients  # fallback if not found
+    else:
+        patients = all_patients
 
     # For every patient, sync patient_exercises → workouts, then fetch workouts
     for pat in patients:
@@ -2075,9 +2372,9 @@ def plan_editor():
             if ex_id not in existing_ids:
                 execute_db('''
                     INSERT INTO workouts
-                    (patient_id, exercise_id, sets, reps, frequency, instructions, is_active)
-                    VALUES (?, ?, 3, 10, 'Daily', '', 1)
-                ''', (pat['id'], ex_id))
+                    (patient_id, exercise_id, assigned_by_doctor_id, sets, reps, frequency, instructions, is_active)
+                    VALUES (?, ?, ?, 3, 10, 'Daily', '', 1)
+                ''', (pat['id'], ex_id, get_primary_doctor_id_for_patient(pat['id'])))
 
         # 4. Now fetch the full workout list
         workouts = query_db('''
@@ -2096,7 +2393,8 @@ def plan_editor():
 
     return render_template('clinician/plan_editor.html',
                            patients=patients,
-                           exercises=exercises)
+                           exercises=exercises,
+                           selected_patient_id=selected_patient_id)
 
 
 # ---------- Plan-Editor API endpoints (JSON) ----------
@@ -2117,6 +2415,12 @@ def api_plan_add_exercise():
     if not patient_id or not exercise_id:
         return jsonify({'error': 'Missing patient_id or exercise_id'}), 400
 
+    # Ensure this doctor is linked to the patient they are editing.
+    execute_db(
+        'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
+        (session['user_id'], patient_id)
+    )
+
     # Also ensure the exercise is tracked in patient_exercises
     execute_db('''
         INSERT OR IGNORE INTO patient_exercises (patient_id, exercise_id, enabled)
@@ -2130,9 +2434,9 @@ def api_plan_add_exercise():
 
     execute_db('''
         INSERT INTO workouts
-        (patient_id, exercise_id, sets, reps, frequency, instructions)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (patient_id, exercise_id, sets, reps, frequency, instructions))
+        (patient_id, exercise_id, assigned_by_doctor_id, sets, reps, frequency, instructions)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (patient_id, exercise_id, session['user_id'], sets, reps, frequency, instructions))
 
     # Return the newly-created workout
     new_w = query_db('''
@@ -2158,14 +2462,23 @@ def api_plan_update_workout(workout_id):
     frequency = data.get('frequency')
     instructions = data.get('instructions')
 
+    # Resolve patient and enforce doctor-patient link for ownership routing.
+    workout_row = query_db('SELECT patient_id FROM workouts WHERE id = ?', (workout_id,), one=True)
+    if workout_row:
+        execute_db(
+            'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
+            (session['user_id'], workout_row['patient_id'])
+        )
+
     execute_db('''
         UPDATE workouts
         SET sets = COALESCE(?, sets),
             reps = COALESCE(?, reps),
             frequency = COALESCE(?, frequency),
-            instructions = COALESCE(?, instructions)
+            instructions = COALESCE(?, instructions),
+            assigned_by_doctor_id = ?
         WHERE id = ?
-    ''', (sets, reps, frequency, instructions, workout_id))
+    ''', (sets, reps, frequency, instructions, session['user_id'], workout_id))
 
     return jsonify({'ok': True})
 
@@ -2177,6 +2490,11 @@ def api_plan_remove_workout(workout_id):
     """Soft-delete a workout from a patient's plan and disable in patient_exercises"""
     # Get the exercise_id and patient_id before deactivating
     w = query_db('SELECT patient_id, exercise_id FROM workouts WHERE id = ?', (workout_id,), one=True)
+    if w:
+        execute_db(
+            'INSERT OR IGNORE INTO doctor_patient (doctor_id, patient_id) VALUES (?, ?)',
+            (session['user_id'], w['patient_id'])
+        )
     execute_db('UPDATE workouts SET is_active = 0 WHERE id = ?', (workout_id,))
     # Also disable in patient_exercises so it stays removed
     if w:
@@ -2230,30 +2548,45 @@ def consultation():
 
     print('[DEBUG] Consultation patients:', patients)
 
+    # Real-time: mark any appointments whose time has now passed as 'missed'
+    _mark_missed_appointments()
+
     appointments = query_db('''
         SELECT a.*, u.name as patient_name, p.condition, p.adherence_rate, p.avg_pain_level, p.avg_quality_score
         FROM appointments a
         JOIN users u ON a.patient_id = u.id
         LEFT JOIN patients p ON u.id = p.user_id
         WHERE a.doctor_id = ? AND a.status = 'scheduled'
+          AND (
+            a.appointment_date > date('now')
+            OR (a.appointment_date = date('now')
+                AND a.appointment_time > strftime('%H:%M', 'now', 'localtime'))
+          )
         ORDER BY a.appointment_date, a.appointment_time
     ''', (session['user_id'],))
 
-    # Past completed/cancelled appointments
+    # Past completed/missed/cancelled appointments
     past_appointments = query_db('''
         SELECT a.*, u.name as patient_name, p.condition
         FROM appointments a
         JOIN users u ON a.patient_id = u.id
         LEFT JOIN patients p ON u.id = p.user_id
-        WHERE a.doctor_id = ? AND a.status IN ('completed', 'cancelled')
+        WHERE a.doctor_id = ? AND a.status IN ('completed', 'missed', 'cancelled')
         ORDER BY a.appointment_date DESC, a.appointment_time DESC
-        LIMIT 15
+        LIMIT 20
     ''', (session['user_id'],))
+
+    # Plain-dict calendar events for JSON serialisation in template
+    cal_events = (
+        [{'date': r['appointment_date'], 'status': 'upcoming'} for r in (appointments or [])] +
+        [{'date': r['appointment_date'], 'status': r['status']} for r in (past_appointments or [])]
+    )
 
     return render_template('clinician/consultation.html',
                          patients=patients if patients else [],
                          appointments=appointments if appointments else [],
-                         past_appointments=past_appointments if past_appointments else [])
+                         past_appointments=past_appointments if past_appointments else [],
+                         cal_events=cal_events)
 
 
 # ==================== VIDEO CALL ROUTES ====================
@@ -3882,6 +4215,7 @@ def ensure_tables_exist():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             patient_id INTEGER NOT NULL,
             exercise_id INTEGER NOT NULL,
+            assigned_by_doctor_id INTEGER,
             sets INTEGER DEFAULT 3,
             reps INTEGER DEFAULT 10,
             frequency TEXT DEFAULT 'Daily',
@@ -3889,7 +4223,8 @@ def ensure_tables_exist():
             is_active INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (patient_id) REFERENCES users(id),
-            FOREIGN KEY (exercise_id) REFERENCES exercises(id)
+            FOREIGN KEY (exercise_id) REFERENCES exercises(id),
+            FOREIGN KEY (assigned_by_doctor_id) REFERENCES users(id)
         );
         
         CREATE TABLE IF NOT EXISTS sessions (
@@ -4015,6 +4350,7 @@ def ensure_tables_exist():
         ("sessions", "session_group_id", "TEXT"),
         ("sessions", "started_at", "TIMESTAMP"),
         ("sessions", "completed_perc", "REAL DEFAULT 0"),
+        ("workouts", "assigned_by_doctor_id", "INTEGER"),
     ]
     for table, col, col_type in migrations:
         try:
@@ -4243,6 +4579,22 @@ def ensure_tables_exist():
 
 # Ensure tables exist on startup
 ensure_tables_exist()
+
+
+def _mark_missed_appointments():
+    """Auto-mark any 'scheduled' appointment whose date+time has passed as 'missed'."""
+    with app.app_context():
+        execute_db("""
+            UPDATE appointments
+            SET status = 'missed'
+            WHERE status = 'scheduled'
+              AND (
+                appointment_date < date('now')
+                OR (appointment_date = date('now') AND appointment_time < strftime('%H:%M', 'now', 'localtime'))
+              )
+        """)
+
+_mark_missed_appointments()
 
 
 def assign_patient_exercises(patient_user_id, condition):

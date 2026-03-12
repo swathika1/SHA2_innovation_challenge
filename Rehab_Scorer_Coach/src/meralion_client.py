@@ -1,15 +1,24 @@
 import requests
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 BASE_URL = "https://api.cr8lab.com/process"
 
 class MeralionClient:
-    def __init__(self, api_key: str, timeout: int = 60):
-        self.api_key = api_key
+    def __init__(self, api_key: str = None, timeout: int = 60):
+        # Load from environment if not provided
+        self.api_key = api_key or os.environ.get("MERILION_API_KEY", "")
         self.timeout = timeout
+        if not self.api_key:
+            raise ValueError("MERILION_API_KEY not set in environment or provided")
 
     def _headers(self):
+        # Use x-api-key header (correct authentication method)
         return {
-            "Authorization": f"Bearer {self.api_key}",
+            "x-api-key": self.api_key,
             "Accept": "application/json",
         }
 

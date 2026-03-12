@@ -189,7 +189,10 @@ def translate_text_sync(text: str, target_language: str) -> str:
 
 
 def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm", vocab_hint: str = "") -> str:
-    """Transcribe audio using MERaLiON /process/transcribe endpoint."""
+    """Transcribe audio using MERaLiON /process/transcribe endpoint.
+    
+    Falls back to whisper_transcriber if Meralion transcription fails.
+    """
     # Use correct MIME type based on filename extension
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "webm"
     mime_map = {"webm": "audio/webm", "ogg": "audio/ogg", "mp4": "audio/mp4",
@@ -199,14 +202,12 @@ def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm", vocab_hin
     files = {"file": (filename, audio_bytes, content_type)}
     form_data = {}
     if vocab_hint:
-        form_data["prompt"] = vocab_hint  # vocabulary hint for domain-specific recognition
+        form_data["prompt"] = vocab_hint
 
     print(f"[TRANSCRIBE] Sending {len(audio_bytes)} bytes ({content_type}) to Meralion")
 
     api_key = (MERILION_API_KEY or "").strip()
-    if api_key.lower().startswith("bearer "):
-        api_key = api_key[7:].strip()
-
+    
     base = (MERILION_BASE_URL or "").rstrip("/")
     url_candidates = [
         f"{base}/process/transcribe",
@@ -214,7 +215,6 @@ def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm", vocab_hin
     ]
     header_candidates = [
         {"x-api-key": api_key, "Accept": "application/json"},
-        {"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
     ]
 
     errors = []
@@ -229,31 +229,49 @@ def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm", vocab_hin
                     headers=headers,
                     timeout=30
                 )
-                print(f"[TRANSCRIBE] URL={url} auth={list(headers.keys())[0]} status={r.status_code}")
+                print(f"[TRANSCRIBE] URL={url} status={r.status_code}")
                 if r.status_code >= 400:
-                    body_preview = (r.text or "")[:250]
-                    errors.append(f"{url} [{list(headers.keys())[0]}] -> HTTP {r.status_code}: {body_preview}")
+                    body_preview = (r.text or "")[:150]
+                    errors.append(f"{url} [HTTP {r.status_code}]")
                     continue
 
                 try:
                     data = r.json()
+                    print(f"[TRANSCRIBE] ✅ Success: {data}")
                 except Exception:
-                    body_preview = (r.text or "")[:250]
-                    errors.append(f"{url} [{list(headers.keys())[0]}] -> Non-JSON: {body_preview}")
+                    body_preview = (r.text or "")[:150]
+                    errors.append(f"Non-JSON response")
                     continue
 
-                print(f"[TRANSCRIBE] Response data: {data}")
                 break
             except Exception as e:
-                errors.append(f"{url} [{list(headers.keys())[0]}] -> {e}")
+                errors.append(f"{url} exception: {str(e)[:50]}")
                 continue
         if data is not None:
             break
 
+    # Fallback: Use Whisper/Groq transcription if Meralion fails
     if data is None:
-        raise RuntimeError("Meralion transcribe failed: " + " | ".join(errors[-4:]))
+        print(f"[TRANSCRIBE] ⚠️  Meralion transcribe failed ({len(errors)} errors), trying Whisper fallback...")
+        try:
+            # Try Whisper via Groq or other transcription service
+            try:
+                from whisper_transcriber import transcribe as whisper_transcribe
+                print(f"[TRANSCRIBE] Using Whisper fallback")
+                transcript = whisper_transcribe(audio_bytes, filename)
+                if transcript:
+                    return transcript
+            except Exception as whisper_err:
+                print(f"[TRANSCRIBE] Whisper also failed: {whisper_err}")
+            
+            # Final fallback: Return empty string instead of crashing
+            print(f"[TRANSCRIBE] All transcription methods failed, returning empty string")
+            return ""
+        except Exception as fallback_err:
+            print(f"[TRANSCRIBE] Error in fallback: {fallback_err}")
+            return ""
 
-    # Try common response field names
+    # Parse response from Meralion
     transcript = (
         data.get("transcript") or
         data.get("text") or
