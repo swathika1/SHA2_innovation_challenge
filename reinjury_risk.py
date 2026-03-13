@@ -169,7 +169,7 @@ def _risk_label(level: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
+def analyze_patient_risk(patient_id: int | list[int] | tuple[int, ...] | set[int], query_fn: "Callable") -> dict:
     """
     Run the full re-injury risk analysis for a single patient.
 
@@ -191,19 +191,24 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
         has_data        : bool (False when not enough sessions to judge)
     """
 
+    patient_ids = list(patient_id) if isinstance(patient_id, (list, tuple, set)) else [patient_id]
+    if not patient_ids:
+        patient_ids = [0]
+    placeholders = ", ".join("?" for _ in patient_ids)
+
     # ------------------------------------------------------------------ #
     # 1. Pull recent sessions (last 8 completed)
     # ------------------------------------------------------------------ #
     recent_sessions = query_fn(
-        """
+        f"""
         SELECT quality_score, pain_before, pain_after, effort_level, completed_at
         FROM sessions
-        WHERE patient_id = ?
+        WHERE patient_id IN ({placeholders})
           AND completed_at IS NOT NULL
         ORDER BY completed_at ASC
         LIMIT 8
         """,
-        (patient_id,)
+        tuple(patient_ids)
     ) or []
 
     if len(recent_sessions) < 3:
@@ -236,13 +241,13 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
     from collections import defaultdict
 
     last_3_session_ids = query_fn(
-        """
+        f"""
         SELECT id FROM sessions
-        WHERE patient_id = ? AND completed_at IS NOT NULL
+        WHERE patient_id IN ({placeholders}) AND completed_at IS NOT NULL
         ORDER BY completed_at DESC
         LIMIT 3
         """,
-        (patient_id,)
+        tuple(patient_ids)
     ) or []
 
     fatigue_drop_pct = None
@@ -256,11 +261,11 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
             f"""
             SELECT session_id, score, asymmetry_pct, rom_angle
             FROM session_frames
-            WHERE patient_id = ?
+                        WHERE patient_id IN ({placeholders})
               AND session_id IN ({id_list})
             ORDER BY session_id, id
             """,
-            (patient_id,)
+                        tuple(patient_ids)
         ) or []
 
         session_data: dict[int, dict] = defaultdict(lambda: {"scores": [], "asym": [], "rom": []})
@@ -376,11 +381,11 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
         "has_data":       True,
         # Individual signal breakdown (useful for detailed views)
         "_signals": {
-            "form":      {"pts": pts_form,    "slope": round(form_slope, 2)},
-            "asymmetry": {"pts": pts_asym,    "avg_pct": round(asym_avg, 1) if asym_avg is not None else None, "slope": round(asym_slope, 2)},
-            "pain":      {"pts": pts_pain,    "slope": round(pain_slope, 2)},
-            "rom":       {"pts": pts_rom,     "avg_angle": round(rom_avg, 1) if rom_avg is not None else None, "slope": round(rom_slope, 2)},
-            "fatigue":   {"pts": pts_fatigue, "drop_pct": round(fatigue_drop_pct, 1) if fatigue_drop_pct is not None else None},
-            "gap":       {"pts": pts_gap,     "effort_avg": round(effort_avg, 1), "quality_avg": round(quality_avg, 1)},
+              "form":      {"pts": pts_form,    "slope": round(form_slope, 2),     "msg": msg_form    or "Stable"},
+              "asymmetry": {"pts": pts_asym,    "avg_pct": round(asym_avg, 1) if asym_avg is not None else None, "slope": round(asym_slope, 2), "msg": msg_asym or "Balanced"},
+              "pain":      {"pts": pts_pain,    "slope": round(pain_slope, 2),     "msg": msg_pain    or "Stable"},
+              "rom":       {"pts": pts_rom,     "avg_angle": round(rom_avg, 1) if rom_avg is not None else None, "slope": round(rom_slope, 2), "msg": msg_rom or "Normal range"},
+              "fatigue":   {"pts": pts_fatigue, "drop_pct": round(fatigue_drop_pct, 1) if fatigue_drop_pct is not None else None, "msg": msg_fatigue or "No fatigue detected"},
+              "gap":       {"pts": pts_gap,     "effort_avg": round(effort_avg, 1), "quality_avg": round(quality_avg, 1), "msg": msg_gap or f"Effort {effort_avg:.1f}/10, form {quality_avg:.0f}/100 — well matched"},
         }
     }

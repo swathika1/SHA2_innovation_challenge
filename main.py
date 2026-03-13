@@ -285,6 +285,93 @@ def get_current_user():
     return None
 
 
+def normalize_email(email):
+    """Return a canonical email form for lookups and duplicate detection."""
+    return (email or '').strip().lower()
+
+
+def _build_in_clause_params(values):
+    """Return (?, ?, ...) SQL placeholders for a non-empty iterable."""
+    if not values:
+        return '?'
+    return ', '.join('?' for _ in values)
+
+
+def get_linked_patient_user_ids(patient_id: int):
+    """Return patient user ids linked by a case-insensitive email match."""
+    patient_user = query_db(
+        'SELECT id, email FROM users WHERE id = ? AND role = ?',
+        (patient_id, 'patient'),
+        one=True,
+    )
+    if not patient_user:
+        return [patient_id]
+
+    normalized_email = normalize_email(patient_user['email'])
+    if not normalized_email:
+        return [patient_id]
+
+    linked_rows = query_db(
+        '''
+        SELECT id
+        FROM users
+        WHERE role = 'patient'
+          AND LOWER(TRIM(COALESCE(email, ''))) = ?
+        ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, id
+        ''',
+        (normalized_email, patient_id),
+    )
+    linked_ids = [row['id'] for row in (linked_rows or [])]
+    if patient_id not in linked_ids:
+        linked_ids.insert(0, patient_id)
+    return linked_ids or [patient_id]
+
+
+def get_patient_session_metrics(patient_id: int):
+    """Aggregate patient metrics across any duplicate patient accounts sharing the same email."""
+    linked_ids = get_linked_patient_user_ids(patient_id)
+    placeholders = _build_in_clause_params(linked_ids)
+
+    stats = query_db(
+        f'''
+        SELECT
+            COUNT(*) AS completed_sessions,
+            AVG(quality_score) AS avg_quality_score,
+            AVG(pain_after) AS avg_pain_level,
+            AVG(completed_perc) AS adherence_rate
+        FROM sessions
+        WHERE patient_id IN ({placeholders})
+          AND completed_at IS NOT NULL
+        ''',
+        tuple(linked_ids),
+        one=True,
+    )
+
+    return {
+        'linked_patient_ids': linked_ids,
+        'completed_sessions': int((stats['completed_sessions'] or 0) if stats else 0),
+        'avg_quality_score': round(float(stats['avg_quality_score'] or 0), 1) if stats else 0.0,
+        'avg_pain_level': round(float(stats['avg_pain_level'] or 0), 1) if stats else 0.0,
+        'adherence_rate': round(float(stats['adherence_rate'] or 0), 1) if stats else 0.0,
+    }
+
+
+def hydrate_patient_metrics(patient_row):
+    """Overlay session-derived metrics onto a patient row for clinician-facing views."""
+    patient = dict(patient_row)
+    patient_user_id = patient.get('user_id') or patient.get('id')
+    metrics = get_patient_session_metrics(patient_user_id)
+
+    if metrics['completed_sessions'] > 0:
+        patient['completed_sessions'] = metrics['completed_sessions']
+        patient['avg_quality_score'] = metrics['avg_quality_score']
+        patient['avg_pain_level'] = metrics['avg_pain_level']
+        patient['adherence_rate'] = metrics['adherence_rate']
+
+    patient['linked_patient_ids'] = metrics['linked_patient_ids']
+    return patient
+
+
 def get_primary_doctor_id_for_patient(patient_id: int):
     """Return the assigned doctor_id for a patient (if any)."""
     row = query_db(
@@ -568,11 +655,15 @@ def landing():
 def login():
     """Login Page"""
     if request.method == 'POST':
-        email = request.form['email']
+        email = normalize_email(request.form['email'])
         password = request.form['password']
         
         # Find user by email
-        user = query_db('SELECT * FROM users WHERE email = ?', (email,), one=True)
+        user = query_db(
+            'SELECT * FROM users WHERE LOWER(TRIM(email)) = ?',
+            (email,),
+            one=True,
+        )
         
         if user:
             password_match = check_password_hash(user['password'], password)
@@ -610,13 +701,17 @@ def login():
 def api_login():
     """API Login endpoint"""
     data = request.get_json()
-    email = data.get('email_id') or data.get('email')
+    email = normalize_email(data.get('email_id') or data.get('email'))
     password = data.get('password')
     
     if not email or not password:
         return jsonify({'success': False, 'message': 'Email and password required'}), 400
     
-    user = query_db('SELECT * FROM users WHERE email = ?', (email,), one=True)
+    user = query_db(
+        'SELECT * FROM users WHERE LOWER(TRIM(email)) = ?',
+        (email,),
+        one=True,
+    )
     
     if not user:
         return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
@@ -736,7 +831,7 @@ def postal_search():
 def signup():
     """Signup Page"""
     if request.method == 'POST':
-        email = request.form['email']
+        email = normalize_email(request.form['email'])
         password = request.form['password']
         first_name = request.form.get('first_name', '')
         last_name = request.form.get('last_name', '')
@@ -768,7 +863,11 @@ def signup():
                 return redirect(url_for('signup'))
 
         # Check if email already exists
-        existing_user = query_db('SELECT id FROM users WHERE email = ?', (email,), one=True)
+        existing_user = query_db(
+            'SELECT id FROM users WHERE LOWER(TRIM(email)) = ?',
+            (email,),
+            one=True,
+        )
         if existing_user:
             flash('Email already registered. Please log in.', 'error')
             return redirect(url_for('login'))
@@ -1452,9 +1551,10 @@ def update_profile():
             if field == 'email':
                 if not val or '@' not in val:
                     return jsonify({'success': False, 'error': 'Invalid email address'}), 400
+                val = normalize_email(val)
                 # Check uniqueness
                 existing = query_db(
-                    'SELECT id FROM users WHERE email = ? AND id != ?',
+                    'SELECT id FROM users WHERE LOWER(TRIM(email)) = ? AND id != ?',
                     (val, user_id), one=True
                 )
                 if existing:
@@ -1775,7 +1875,7 @@ def clinician_profile():
         ORDER BY u.name
     ''', (doctor_id,))
 
-    patients_with_caregivers = patients_with_caregivers if patients_with_caregivers else []
+    patients_with_caregivers = [hydrate_patient_metrics(p) for p in (patients_with_caregivers or [])]
 
     # Summary stats
     total_patients = len(patients_with_caregivers)
@@ -1836,7 +1936,7 @@ def clinician_dashboard():
             ORDER BY p.adherence_rate ASC
         ''')
     
-    patients = patients if patients else []
+    patients = [hydrate_patient_metrics(p) for p in (patients or [])]
     total_patients = len(patients)
     needs_attention = sum(1 for p in patients if p['adherence_rate'] < 50 or p['avg_pain_level'] > 6)
     avg_adherence = sum(p['adherence_rate'] for p in patients) / total_patients if total_patients > 0 else 0
@@ -2082,6 +2182,10 @@ def patient_detail(patient_id):
         flash('Patient not found.', 'error')
         return redirect(url_for('clinician_dashboard'))
 
+    patient = hydrate_patient_metrics(patient)
+    linked_patient_ids = patient.get('linked_patient_ids') or [patient_id]
+    linked_placeholders = _build_in_clause_params(linked_patient_ids)
+
     # ── Assigned exercises (from patient_exercises, synced to workouts) ──
     assigned_exercises = query_db('''
         SELECT pe.id as pe_id, pe.enabled, e.id as exercise_id,
@@ -2103,7 +2207,7 @@ def patient_detail(patient_id):
     workouts = [dict(w) for w in workouts] if workouts else []
 
     # ── Session history (all completed sessions) ──
-    sessions = query_db('''
+    sessions = query_db(f'''
         SELECT s.id, s.quality_score, s.pain_before, s.pain_after,
                s.effort_level, s.completed_perc, s.started_at, s.completed_at,
                s.session_group_id,
@@ -2111,9 +2215,9 @@ def patient_detail(patient_id):
                 FROM session_exercises se
                 WHERE se.session_id = s.id) as exercise_names
         FROM sessions s
-        WHERE s.patient_id = ? AND s.completed_at IS NOT NULL
+        WHERE s.patient_id IN ({linked_placeholders}) AND s.completed_at IS NOT NULL
         ORDER BY s.completed_at DESC
-    ''', (patient_id,))
+    ''', tuple(linked_patient_ids))
     sessions = [dict(s) for s in sessions] if sessions else []
 
     # ── Session dates for calendar view (distinct dates) ──
@@ -2214,7 +2318,7 @@ def patient_detail(patient_id):
     risk_data = None
     if REINJURY_RISK_AVAILABLE:
         try:
-            risk_data = analyze_patient_risk(patient_id, query_db)
+            risk_data = analyze_patient_risk(linked_patient_ids, query_db)
         except Exception as _re:
             print(f"[WARNING] Re-injury risk analysis failed for patient {patient_id}: {_re}")
 
@@ -2251,7 +2355,7 @@ def api_reinjury_risk(patient_id):
     if not REINJURY_RISK_AVAILABLE:
         return jsonify({"error": "Risk engine not available"}), 503
     try:
-        data = analyze_patient_risk(patient_id, query_db)
+        data = analyze_patient_risk(get_linked_patient_user_ids(patient_id), query_db)
         return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2587,6 +2691,160 @@ def consultation():
                          appointments=appointments if appointments else [],
                          past_appointments=past_appointments if past_appointments else [],
                          cal_events=cal_events)
+
+
+# ==================== CLINICAL PROGRESS DASHBOARD ====================
+
+@app.route('/clinician/progress-dashboard')
+@login_required
+@role_required('doctor')
+def clinician_progress_dashboard():
+    """Multi-Session Clinical Progress Dashboard — all patients at a glance."""
+    doctor_id = session['user_id']
+
+    # Get patients assigned to this doctor (fall back to all patients for demo)
+    patients = query_db('''
+        SELECT u.id, u.name, u.email,
+               p.condition, p.current_week, p.adherence_rate,
+               p.avg_pain_level, p.avg_quality_score, p.completed_sessions,
+               p.streak_days
+        FROM users u
+        JOIN patients p ON u.id = p.user_id
+        JOIN doctor_patient dp ON p.user_id = dp.patient_id
+        WHERE dp.doctor_id = ?
+        ORDER BY u.name
+    ''', (doctor_id,))
+
+    if not patients:
+        patients = query_db('''
+            SELECT u.id, u.name, u.email,
+                   p.condition, p.current_week, p.adherence_rate,
+                   p.avg_pain_level, p.avg_quality_score, p.completed_sessions,
+                   p.streak_days
+            FROM users u
+            JOIN patients p ON u.id = p.user_id
+            ORDER BY u.name
+        ''')
+
+    patients = [hydrate_patient_metrics(p) for p in (patients or [])]
+
+    # Overall aggregates
+    total_patients = len(patients)
+    avg_adherence = round(sum(p['adherence_rate'] or 0 for p in patients) / total_patients, 1) if total_patients else 0
+    avg_quality = round(sum(p['avg_quality_score'] or 0 for p in patients) / total_patients, 1) if total_patients else 0
+    avg_pain = round(sum(p['avg_pain_level'] or 0 for p in patients) / total_patients, 1) if total_patients else 0
+    total_sessions_all = sum(p['completed_sessions'] or 0 for p in patients)
+    high_risk = sum(1 for p in patients if (p['adherence_rate'] or 0) < 50 or (p['avg_pain_level'] or 0) > 6)
+
+    return render_template('clinician/progress_dashboard.html',
+                           patients=patients,
+                           total_patients=total_patients,
+                           avg_adherence=avg_adherence,
+                           avg_quality=avg_quality,
+                           avg_pain=avg_pain,
+                           total_sessions_all=total_sessions_all,
+                           high_risk=high_risk)
+
+
+@app.route('/api/clinician/progress-dashboard/patient/<int:patient_id>')
+@login_required
+@role_required('doctor')
+def api_progress_patient_detail(patient_id):
+    """Return session-by-session data for a patient (JSON for charts)."""
+    import json as _json
+
+    sessions_data = query_db('''
+        SELECT s.id, s.quality_score, s.pain_before, s.pain_after,
+               s.effort_level, s.completed_perc, s.started_at, s.completed_at,
+               (SELECT GROUP_CONCAT(DISTINCT se.exercise_name)
+                FROM session_exercises se WHERE se.session_id = s.id) as exercise_names
+        FROM sessions s
+        WHERE s.patient_id = ? AND s.completed_at IS NOT NULL
+        ORDER BY s.completed_at ASC
+    ''', (patient_id,))
+    sessions_data = [dict(s) for s in sessions_data] if sessions_data else []
+
+    # Per-exercise breakdown
+    ex_data = query_db('''
+        SELECT se.exercise_name,
+               AVG(se.quality_score) as avg_score,
+               COUNT(*) as session_count
+        FROM session_exercises se
+        WHERE se.patient_id = ?
+        GROUP BY se.exercise_name
+        ORDER BY avg_score DESC
+    ''', (patient_id,))
+    ex_data = [dict(e) for e in ex_data] if ex_data else []
+
+    # Patient info
+    patient = query_db('''
+        SELECT u.name, p.condition, p.adherence_rate, p.avg_quality_score,
+               p.avg_pain_level, p.completed_sessions, p.streak_days, p.current_week
+        FROM users u JOIN patients p ON u.id = p.user_id
+        WHERE u.id = ?
+    ''', (patient_id,), one=True)
+    patient = dict(patient) if patient else {}
+
+    return jsonify({
+        'ok': True,
+        'patient': patient,
+        'sessions': sessions_data,
+        'exercises': ex_data,
+    })
+
+
+@app.route('/api/clinician/progress-dashboard/overview')
+@login_required
+@role_required('doctor')
+def api_progress_overview():
+    """Return aggregate cohort trend data (JSON for overview charts)."""
+    doctor_id = session['user_id']
+
+    # Weekly avg quality & pain across all patients for this doctor (last 12 weeks)
+    weekly = query_db('''
+        SELECT strftime('%%Y-W%%W', s.completed_at) AS week_label,
+               AVG(s.quality_score) AS avg_quality,
+               AVG(s.pain_after) AS avg_pain,
+               COUNT(DISTINCT s.patient_id) AS active_patients,
+               COUNT(*) AS session_count
+        FROM sessions s
+        WHERE s.patient_id IN (
+            SELECT dp.patient_id FROM doctor_patient dp WHERE dp.doctor_id = ?
+            UNION
+            SELECT p.user_id FROM patients p
+            WHERE NOT EXISTS (SELECT 1 FROM doctor_patient)
+        )
+        AND s.completed_at IS NOT NULL
+        GROUP BY week_label
+        ORDER BY week_label DESC
+        LIMIT 12
+    ''', (doctor_id,))
+    weekly = [dict(w) for w in weekly] if weekly else []
+    weekly.reverse()
+
+    # Exercise popularity
+    exercise_pop = query_db('''
+        SELECT se.exercise_name, COUNT(*) as times_done,
+               AVG(se.quality_score) as avg_score
+        FROM session_exercises se
+        WHERE se.patient_id IN (
+            SELECT dp.patient_id FROM doctor_patient dp WHERE dp.doctor_id = ?
+            UNION
+            SELECT p.user_id FROM patients p
+            WHERE NOT EXISTS (SELECT 1 FROM doctor_patient)
+        )
+        AND se.exercise_name IS NOT NULL AND se.exercise_name != ''
+        GROUP BY se.exercise_name
+        ORDER BY times_done DESC
+        LIMIT 10
+    ''', (doctor_id,))
+    exercise_pop = [dict(e) for e in exercise_pop] if exercise_pop else []
+
+    return jsonify({
+        'ok': True,
+        'weekly_trends': weekly,
+        'exercise_popularity': exercise_pop,
+    })
 
 
 # ==================== VIDEO CALL ROUTES ====================

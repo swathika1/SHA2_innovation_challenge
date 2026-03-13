@@ -1,0 +1,691 @@
+{% extends 'base.html' %}
+
+{% block title %}Clinical Progress Dashboard — RehabCoach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1><a href="{{ url_for('clinician_dashboard') }}"><i class="fa-solid fa-user-doctor"></i> RehabCoach</a></h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('clinician_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('clinician_progress_dashboard') }}" class="active">Progress</a>
+        <a href="{{ url_for('plan_editor') }}">Plan Editor</a>
+        <a href="{{ url_for('consultation') }}">Consultations</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>Dr. {{ session.get('user_name', 'Doctor') }}</strong></div>
+                    <a href="{{ url_for('clinician_profile') }}"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<style>
+/* ===== Progress Dashboard Styles ===== */
+.pd-back { display: inline-flex; align-items: center; gap: 6px; color: #6366f1; font-size: 0.88rem; text-decoration: none; margin-bottom: 16px; }
+.pd-back:hover { text-decoration: underline; }
+
+.pd-title-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+}
+.pd-title-bar h2 { margin: 0; font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
+.pd-title-bar h2 i { color: #6366f1; }
+.pd-subtitle { color: #6b7280; font-size: 0.88rem; margin: 0; }
+
+/* ===== Cohort KPI Row ===== */
+.pd-kpi-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+    gap: 14px; margin-bottom: 24px;
+}
+.pd-kpi {
+    background: #fff; border-radius: 14px; padding: 20px 18px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.06); text-align: center;
+    position: relative; overflow: hidden;
+}
+.pd-kpi::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+}
+.pd-kpi.kpi-patients::before { background: linear-gradient(90deg, #6366f1, #818cf8); }
+.pd-kpi.kpi-adherence::before { background: linear-gradient(90deg, #22c55e, #4ade80); }
+.pd-kpi.kpi-quality::before { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.pd-kpi.kpi-pain::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.pd-kpi.kpi-sessions::before { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.pd-kpi.kpi-risk::before { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+.pd-kpi-value { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+.pd-kpi-label { font-size: 0.73rem; color: #6b7280; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+
+/* ===== Tabs ===== */
+.pd-tabs {
+    display: flex; gap: 4px; margin-bottom: 20px;
+    border-bottom: 2px solid #e5e7eb; padding-bottom: 0;
+}
+.pd-tab {
+    padding: 10px 20px; border: none; background: none; cursor: pointer;
+    font-size: 0.9rem; font-weight: 600; color: #6b7280;
+    border-bottom: 3px solid transparent; margin-bottom: -2px;
+    transition: all 0.2s;
+}
+.pd-tab:hover { color: #6366f1; }
+.pd-tab.active { color: #6366f1; border-bottom-color: #6366f1; }
+
+/* ===== Tab Panels ===== */
+.pd-panel { display: none; }
+.pd-panel.active { display: block; }
+
+/* ===== Charts grid ===== */
+.pd-charts-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 20px; margin-bottom: 24px;
+}
+.pd-chart-card {
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.06); overflow: hidden;
+}
+.pd-chart-header {
+    padding: 14px 20px; border-bottom: 1px solid #f0f0f0;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.pd-chart-header h3 {
+    margin: 0; font-size: 0.92rem; display: flex; align-items: center; gap: 8px;
+}
+.pd-chart-header h3 i { color: #6366f1; font-size: 0.85rem; }
+.pd-chart-body { padding: 20px; }
+.pd-chart-body canvas { max-height: 280px; }
+
+/* ===== Patient Table ===== */
+.pd-table-card {
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.06); overflow: hidden;
+    margin-bottom: 24px;
+}
+.pd-table-header {
+    padding: 16px 20px; border-bottom: 1px solid #f0f0f0;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+}
+.pd-table-header h3 {
+    margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;
+}
+.pd-table-header h3 i { color: #6366f1; }
+.pd-search {
+    padding: 8px 14px; border: 1px solid #e5e7eb; border-radius: 10px;
+    font-size: 0.85rem; width: 240px; outline: none; transition: border-color 0.2s;
+}
+.pd-search:focus { border-color: #6366f1; }
+
+.pd-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.pd-table th {
+    text-align: left; padding: 10px 14px; color: #6b7280; font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 2px solid #f0f0f0;
+    cursor: pointer; user-select: none; white-space: nowrap;
+}
+.pd-table th:hover { color: #6366f1; }
+.pd-table th .sort-icon { margin-left: 4px; font-size: 0.65rem; }
+.pd-table td { padding: 12px 14px; border-bottom: 1px solid #f8f8f8; vertical-align: middle; }
+.pd-table tbody tr { cursor: pointer; transition: background 0.15s; }
+.pd-table tbody tr:hover { background: #fafbff; }
+.pd-table tbody tr.selected { background: #eff1ff; }
+
+.pd-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 99px; font-size: 0.73rem; font-weight: 600; white-space: nowrap;
+}
+.pd-badge.on-track { background: #dcfce7; color: #166534; }
+.pd-badge.at-risk { background: #fef3c7; color: #92400e; }
+.pd-badge.critical { background: #fee2e2; color: #991b1b; }
+
+.pd-bar {
+    height: 6px; border-radius: 99px; background: #e5e7eb;
+    overflow: hidden; width: 80px; display: inline-block; vertical-align: middle; margin-left: 6px;
+}
+.pd-bar-fill { height: 100%; border-radius: 99px; transition: width 0.3s; }
+
+/* ===== Patient Detail Drawer ===== */
+.pd-drawer-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3);
+    z-index: 900; animation: fadeIn 0.2s;
+}
+.pd-drawer-overlay.open { display: block; }
+.pd-drawer {
+    position: fixed; top: 0; right: -520px; width: 500px; max-width: 90vw;
+    height: 100vh; background: #fff; z-index: 901;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.12); transition: right 0.3s cubic-bezier(0.4,0,0.2,1);
+    overflow-y: auto;
+}
+.pd-drawer.open { right: 0; }
+.pd-drawer-close {
+    position: absolute; top: 12px; right: 14px; background: none; border: none;
+    font-size: 1.2rem; cursor: pointer; color: #6b7280; z-index: 10;
+}
+.pd-drawer-body { padding: 24px 20px; }
+
+.pd-drawer-hero {
+    background: linear-gradient(135deg, #1e1b4b, #312e81, #4338ca);
+    border-radius: 14px; padding: 20px 22px; color: #fff; margin-bottom: 20px;
+}
+.pd-drawer-hero h3 { margin: 0 0 6px; font-size: 1.2rem; }
+.pd-drawer-hero .meta {
+    display: flex; flex-wrap: wrap; gap: 6px; font-size: 0.78rem;
+}
+.pd-drawer-hero .meta span {
+    background: rgba(255,255,255,0.15); padding: 2px 10px; border-radius: 99px;
+}
+
+.pd-drawer-stats {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;
+}
+.pd-drawer-stat {
+    text-align: center; padding: 12px 8px; background: #f9fafb; border-radius: 10px;
+}
+.pd-drawer-stat .val { font-size: 1.3rem; font-weight: 700; }
+.pd-drawer-stat .lbl { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; }
+
+.pd-drawer-chart-area { margin-bottom: 18px; }
+.pd-drawer-chart-area h4 {
+    font-size: 0.85rem; margin: 0 0 8px; display: flex; align-items: center; gap: 6px; color: #374151;
+}
+.pd-drawer-chart-area h4 i { color: #6366f1; font-size: 0.8rem; }
+.pd-drawer-chart-area canvas { max-height: 200px; }
+
+.pd-drawer-exercises { margin-bottom: 18px; }
+.pd-drawer-exercises h4 { font-size: 0.85rem; margin: 0 0 8px; color: #374151; }
+.pd-ex-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid #f3f4f6; font-size: 0.85rem;
+}
+.pd-ex-row:last-child { border: none; }
+.pd-ex-name { font-weight: 600; color: #1f2937; }
+.pd-ex-score { color: #6b7280; }
+
+.pd-drawer-actions {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px;
+}
+.pd-drawer-actions .btn-sm {
+    padding: 8px 16px; border-radius: 10px; border: none; cursor: pointer;
+    font-size: 0.82rem; font-weight: 600; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.pd-drawer-actions .btn-sm:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+
+/* ===== Responsive ===== */
+@media (max-width: 900px) {
+    .pd-charts-grid { grid-template-columns: 1fr; }
+    .pd-drawer { width: 100%; max-width: 100vw; }
+    .pd-drawer-stats { grid-template-columns: 1fr 1fr; }
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+</style>
+
+<!-- Back to Dashboard -->
+<a href="{{ url_for('clinician_dashboard') }}" class="pd-back"><i class="fa-solid fa-arrow-left"></i> Back to Dashboard</a>
+
+<!-- Title -->
+<div class="pd-title-bar">
+    <div>
+        <h2><i class="fa-solid fa-chart-line"></i> Clinical Progress Dashboard</h2>
+        <p class="pd-subtitle">Multi-session overview of all patients' rehabilitation progress</p>
+    </div>
+    <div style="display:flex; gap:10px;">
+        <button class="btn" style="background:#6366f1;color:#fff;" onclick="loadOverview()">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh
+        </button>
+    </div>
+</div>
+
+<!-- Cohort KPIs -->
+<div class="pd-kpi-row">
+    <div class="pd-kpi kpi-patients">
+        <div class="pd-kpi-value" style="color:#6366f1;">{{ total_patients }}</div>
+        <div class="pd-kpi-label">Total Patients</div>
+    </div>
+    <div class="pd-kpi kpi-adherence">
+        <div class="pd-kpi-value" style="color:{% if avg_adherence >= 70 %}#22c55e{% elif avg_adherence >= 40 %}#f59e0b{% else %}#ef4444{% endif %};">{{ avg_adherence }}%</div>
+        <div class="pd-kpi-label">Avg Adherence</div>
+    </div>
+    <div class="pd-kpi kpi-quality">
+        <div class="pd-kpi-value" style="color:{% if avg_quality >= 35 %}#3b82f6{% elif avg_quality >= 20 %}#f59e0b{% else %}#ef4444{% endif %};">{{ avg_quality }}</div>
+        <div class="pd-kpi-label">Avg Quality /50</div>
+    </div>
+    <div class="pd-kpi kpi-pain">
+        <div class="pd-kpi-value" style="color:{% if avg_pain <= 3 %}#22c55e{% elif avg_pain <= 6 %}#f59e0b{% else %}#ef4444{% endif %};">{{ avg_pain }}</div>
+        <div class="pd-kpi-label">Avg Pain Level</div>
+    </div>
+    <div class="pd-kpi kpi-sessions">
+        <div class="pd-kpi-value" style="color:#8b5cf6;">{{ total_sessions_all }}</div>
+        <div class="pd-kpi-label">Total Sessions</div>
+    </div>
+    <div class="pd-kpi kpi-risk">
+        <div class="pd-kpi-value" style="color:#ef4444;">{{ high_risk }}</div>
+        <div class="pd-kpi-label">High Risk</div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div class="pd-tabs">
+    <button class="pd-tab active" data-tab="overview">
+        <i class="fa-solid fa-chart-pie"></i> Cohort Overview
+    </button>
+    <button class="pd-tab" data-tab="patients">
+        <i class="fa-solid fa-users"></i> Patient Tracker
+    </button>
+</div>
+
+<!-- ===== TAB: Cohort Overview ===== -->
+<div class="pd-panel active" id="tab-overview">
+    <div class="pd-charts-grid">
+        <div class="pd-chart-card">
+            <div class="pd-chart-header">
+                <h3><i class="fa-solid fa-chart-line"></i> Weekly Quality Trend</h3>
+            </div>
+            <div class="pd-chart-body">
+                <canvas id="chartWeeklyQuality"></canvas>
+            </div>
+        </div>
+        <div class="pd-chart-card">
+            <div class="pd-chart-header">
+                <h3><i class="fa-solid fa-heart-pulse"></i> Weekly Pain Trend</h3>
+            </div>
+            <div class="pd-chart-body">
+                <canvas id="chartWeeklyPain"></canvas>
+            </div>
+        </div>
+        <div class="pd-chart-card">
+            <div class="pd-chart-header">
+                <h3><i class="fa-solid fa-ranking-star"></i> Exercise Popularity</h3>
+            </div>
+            <div class="pd-chart-body">
+                <canvas id="chartExercisePop"></canvas>
+            </div>
+        </div>
+        <div class="pd-chart-card">
+            <div class="pd-chart-header">
+                <h3><i class="fa-solid fa-users"></i> Active Patients / Week</h3>
+            </div>
+            <div class="pd-chart-body">
+                <canvas id="chartActivePatients"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== TAB: Patient Tracker ===== -->
+<div class="pd-panel" id="tab-patients">
+    <div class="pd-table-card">
+        <div class="pd-table-header">
+            <h3><i class="fa-solid fa-table-list"></i> All Patients (click row to expand)</h3>
+            <input class="pd-search" id="patientSearch" type="text" placeholder="Search by name or condition…">
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="pd-table" id="patientTable">
+                <thead>
+                    <tr>
+                        <th data-sort="name">Patient <span class="sort-icon"><i class="fa-solid fa-sort"></i></span></th>
+                        <th data-sort="condition">Condition</th>
+                        <th data-sort="adherence">Adherence <span class="sort-icon"><i class="fa-solid fa-sort"></i></span></th>
+                        <th data-sort="quality">Quality <span class="sort-icon"><i class="fa-solid fa-sort"></i></span></th>
+                        <th data-sort="pain">Pain <span class="sort-icon"><i class="fa-solid fa-sort"></i></span></th>
+                        <th data-sort="sessions">Sessions</th>
+                        <th data-sort="week">Week</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in patients %}
+                    <tr data-pid="{{ p.id }}"
+                        data-name="{{ p.name|lower }}"
+                        data-condition="{{ (p.condition or '')|lower }}"
+                        data-adherence="{{ p.adherence_rate or 0 }}"
+                        data-quality="{{ p.avg_quality_score or 0 }}"
+                        data-pain="{{ p.avg_pain_level or 0 }}"
+                        data-sessions="{{ p.completed_sessions or 0 }}"
+                        data-week="{{ p.current_week or 1 }}">
+                        <td><strong>{{ p.name }}</strong><br><span style="font-size:0.75rem;color:#9ca3af;">#{{ p.id }}</span></td>
+                        <td>{{ p.condition or 'General Rehab' }}</td>
+                        <td>
+                            {{ (p.adherence_rate or 0)|round(0)|int }}%
+                            <div class="pd-bar"><div class="pd-bar-fill" style="width:{{ p.adherence_rate or 0 }}%;background:{% if (p.adherence_rate or 0) >= 70 %}#22c55e{% elif (p.adherence_rate or 0) >= 40 %}#f59e0b{% else %}#ef4444{% endif %};"></div></div>
+                        </td>
+                        <td style="color:{% if (p.avg_quality_score or 0) >= 35 %}#22c55e{% elif (p.avg_quality_score or 0) >= 20 %}#f59e0b{% else %}#ef4444{% endif %};font-weight:600;">
+                            {{ (p.avg_quality_score or 0)|round(1) }}
+                        </td>
+                        <td style="color:{% if (p.avg_pain_level or 0) <= 3 %}#22c55e{% elif (p.avg_pain_level or 0) <= 6 %}#f59e0b{% else %}#ef4444{% endif %};">
+                            {{ (p.avg_pain_level or 0)|round(1) }}
+                        </td>
+                        <td>{{ p.completed_sessions or 0 }}</td>
+                        <td>{{ p.current_week or 1 }}</td>
+                        <td>
+                            {% if (p.adherence_rate or 0) < 50 or (p.avg_pain_level or 0) > 6 %}
+                                <span class="pd-badge critical"><i class="fa-solid fa-triangle-exclamation"></i> At Risk</span>
+                            {% elif (p.avg_quality_score or 0) < 25 %}
+                                <span class="pd-badge at-risk"><i class="fa-solid fa-exclamation"></i> Needs Attention</span>
+                            {% else %}
+                                <span class="pd-badge on-track"><i class="fa-solid fa-circle-check"></i> On Track</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Patient Detail Drawer ===== -->
+<div class="pd-drawer-overlay" id="drawerOverlay"></div>
+<div class="pd-drawer" id="drawerPanel">
+    <button class="pd-drawer-close" id="drawerClose"><i class="fa-solid fa-xmark"></i></button>
+    <div class="pd-drawer-body" id="drawerContent">
+        <!-- Populated dynamically -->
+    </div>
+</div>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+// ===== Tabs =====
+document.querySelectorAll('.pd-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.pd-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.pd-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    });
+});
+
+// ===== Search =====
+document.getElementById('patientSearch').addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('#patientTable tbody tr').forEach(row => {
+        const match = row.dataset.name.includes(q) || row.dataset.condition.includes(q);
+        row.style.display = match ? '' : 'none';
+    });
+});
+
+// ===== Sort =====
+let sortDir = {};
+document.querySelectorAll('#patientTable th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        sortDir[key] = !sortDir[key];
+        const tbody = document.querySelector('#patientTable tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a, b) => {
+            let va = a.dataset[key] || '';
+            let vb = b.dataset[key] || '';
+            const numA = parseFloat(va); const numB = parseFloat(vb);
+            if (!isNaN(numA) && !isNaN(numB)) {
+                return sortDir[key] ? numA - numB : numB - numA;
+            }
+            return sortDir[key] ? va.localeCompare(vb) : vb.localeCompare(va);
+        });
+        rows.forEach(r => tbody.appendChild(r));
+    });
+});
+
+// ===== Drawer =====
+const overlay = document.getElementById('drawerOverlay');
+const drawer = document.getElementById('drawerPanel');
+const drawerContent = document.getElementById('drawerContent');
+let drawerQualityChart = null;
+let drawerPainChart = null;
+
+function openDrawer(pid) {
+    overlay.classList.add('open');
+    drawer.classList.add('open');
+    drawerContent.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
+
+    fetch(`/api/clinician/progress-dashboard/patient/${pid}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) { drawerContent.innerHTML = '<p>Error loading data</p>'; return; }
+            renderDrawer(data, pid);
+        })
+        .catch(() => { drawerContent.innerHTML = '<p>Failed to load patient data.</p>'; });
+}
+
+function closeDrawer() {
+    overlay.classList.remove('open');
+    drawer.classList.remove('open');
+    if (drawerQualityChart) { drawerQualityChart.destroy(); drawerQualityChart = null; }
+    if (drawerPainChart) { drawerPainChart.destroy(); drawerPainChart = null; }
+}
+overlay.addEventListener('click', closeDrawer);
+document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+
+document.querySelectorAll('#patientTable tbody tr').forEach(row => {
+    row.addEventListener('click', () => openDrawer(row.dataset.pid));
+});
+
+function renderDrawer(data, pid) {
+    const p = data.patient;
+    const sessions = data.sessions;
+    const exercises = data.exercises;
+    const adherence = p.adherence_rate || 0;
+    const quality = p.avg_quality_score || 0;
+    const pain = p.avg_pain_level || 0;
+
+    let html = `
+        <div class="pd-drawer-hero">
+            <h3>${p.name || 'Patient'}</h3>
+            <div class="meta">
+                <span><i class="fa-solid fa-heart-pulse"></i> ${p.condition || 'General Rehab'}</span>
+                <span><i class="fa-solid fa-calendar-week"></i> Week ${p.current_week || 1}</span>
+                ${p.streak_days ? `<span><i class="fa-solid fa-fire"></i> ${p.streak_days}-day streak</span>` : ''}
+            </div>
+        </div>
+
+        <div class="pd-drawer-stats">
+            <div class="pd-drawer-stat">
+                <div class="val" style="color:${adherence >= 70 ? '#22c55e' : adherence >= 40 ? '#f59e0b' : '#ef4444'}">${Math.round(adherence)}%</div>
+                <div class="lbl">Adherence</div>
+            </div>
+            <div class="pd-drawer-stat">
+                <div class="val" style="color:${quality >= 35 ? '#3b82f6' : quality >= 20 ? '#f59e0b' : '#ef4444'}">${quality.toFixed(1)}</div>
+                <div class="lbl">Avg Quality</div>
+            </div>
+            <div class="pd-drawer-stat">
+                <div class="val" style="color:${pain <= 3 ? '#22c55e' : pain <= 6 ? '#f59e0b' : '#ef4444'}">${pain.toFixed(1)}</div>
+                <div class="lbl">Avg Pain</div>
+            </div>
+        </div>
+
+        <div class="pd-drawer-chart-area">
+            <h4><i class="fa-solid fa-chart-line"></i> Quality Score Over Sessions</h4>
+            <canvas id="drawerQualityChart" height="180"></canvas>
+        </div>
+
+        <div class="pd-drawer-chart-area">
+            <h4><i class="fa-solid fa-heart-pulse"></i> Pain Before vs After</h4>
+            <canvas id="drawerPainChart" height="180"></canvas>
+        </div>
+    `;
+
+    if (exercises.length > 0) {
+        html += `<div class="pd-drawer-exercises"><h4><i class="fa-solid fa-dumbbell"></i> Exercise Breakdown</h4>`;
+        exercises.forEach(ex => {
+            const score = (ex.avg_score || 0).toFixed(1);
+            const col = ex.avg_score >= 35 ? '#22c55e' : ex.avg_score >= 20 ? '#f59e0b' : '#ef4444';
+            html += `<div class="pd-ex-row">
+                <span class="pd-ex-name">${ex.exercise_name || 'Unknown'}</span>
+                <span class="pd-ex-score" style="color:${col};">${score}/50 <small>(${ex.session_count} sess)</small></span>
+            </div>`;
+        });
+        html += `</div>`;
+    }
+
+    html += `
+        <div class="pd-drawer-actions">
+            <a href="/clinician/patient/${pid}" class="btn-sm" style="background:#6366f1;color:#fff;">
+                <i class="fa-solid fa-eye"></i> Full Profile
+            </a>
+            <a href="/clinician/plan-editor?patient_id=${pid}" class="btn-sm" style="background:#22c55e;color:#fff;">
+                <i class="fa-solid fa-pen-to-square"></i> Edit Plan
+            </a>
+        </div>
+    `;
+
+    drawerContent.innerHTML = html;
+
+    // Render session quality chart
+    if (sessions.length > 0) {
+        const labels = sessions.map((s, i) => {
+            if (s.completed_at) {
+                const d = new Date(s.completed_at);
+                return `${d.getMonth()+1}/${d.getDate()}`;
+            }
+            return `#${i+1}`;
+        });
+        const qualityData = sessions.map(s => s.quality_score || 0);
+        const ctx1 = document.getElementById('drawerQualityChart').getContext('2d');
+        drawerQualityChart = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Quality Score',
+                    data: qualityData,
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99,102,241,0.1)',
+                    fill: true, tension: 0.3, pointRadius: 3,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { y: { min: 0, max: 50, title: { display: true, text: 'Score /50' } } },
+                plugins: { legend: { display: false } },
+            }
+        });
+
+        // Pain chart
+        const painBefore = sessions.map(s => s.pain_before || 0);
+        const painAfter = sessions.map(s => s.pain_after || 0);
+        const ctx2 = document.getElementById('drawerPainChart').getContext('2d');
+        drawerPainChart = new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Pain Before', data: painBefore, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', fill: false, tension: 0.3, pointRadius: 3, borderDash: [5,3] },
+                    { label: 'Pain After', data: painAfter, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', fill: false, tension: 0.3, pointRadius: 3 },
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { y: { min: 0, max: 10, title: { display: true, text: 'Pain /10' } } },
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+            }
+        });
+    }
+}
+
+// ===== Overview Charts (cohort level) =====
+let weeklyQChart, weeklyPChart, exPopChart, activePChart;
+
+function loadOverview() {
+    fetch('/api/clinician/progress-dashboard/overview')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) return;
+            renderOverviewCharts(data);
+        })
+        .catch(err => console.error('Overview load failed:', err));
+}
+
+function renderOverviewCharts(data) {
+    const wk = data.weekly_trends;
+    const ep = data.exercise_popularity;
+
+    // Destroy old charts
+    [weeklyQChart, weeklyPChart, exPopChart, activePChart].forEach(c => { if(c) c.destroy(); });
+
+    const weekLabels = wk.map(w => w.week_label || '');
+
+    // Weekly Quality
+    weeklyQChart = new Chart(document.getElementById('chartWeeklyQuality').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: weekLabels,
+            datasets: [{
+                label: 'Avg Quality',
+                data: wk.map(w => (w.avg_quality || 0).toFixed(1)),
+                borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)',
+                fill: true, tension: 0.35, pointRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { y: { min: 0, max: 50, title: { display: true, text: 'Quality /50' } } },
+            plugins: { legend: { display: false } },
+        }
+    });
+
+    // Weekly Pain
+    weeklyPChart = new Chart(document.getElementById('chartWeeklyPain').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: weekLabels,
+            datasets: [{
+                label: 'Avg Pain After',
+                data: wk.map(w => (w.avg_pain || 0).toFixed(1)),
+                borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)',
+                fill: true, tension: 0.35, pointRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { y: { min: 0, max: 10, title: { display: true, text: 'Pain /10' } } },
+            plugins: { legend: { display: false } },
+        }
+    });
+
+    // Exercise popularity (horizontal bar)
+    exPopChart = new Chart(document.getElementById('chartExercisePop').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: ep.map(e => e.exercise_name || 'Unknown'),
+            datasets: [{
+                label: 'Times Performed',
+                data: ep.map(e => e.times_done || 0),
+                backgroundColor: '#818cf8', borderRadius: 6, barThickness: 22,
+            }]
+        },
+        options: {
+            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            scales: { x: { beginAtZero: true, title: { display: true, text: '# Sessions' } } },
+            plugins: { legend: { display: false } },
+        }
+    });
+
+    // Active patients per week
+    activePChart = new Chart(document.getElementById('chartActivePatients').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: weekLabels,
+            datasets: [{
+                label: 'Active Patients',
+                data: wk.map(w => w.active_patients || 0),
+                backgroundColor: '#a78bfa', borderRadius: 6, barThickness: 28,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, title: { display: true, text: 'Patients' } } },
+            plugins: { legend: { display: false } },
+        }
+    });
+}
+
+// Load overview on page ready
+document.addEventListener('DOMContentLoaded', loadOverview);
+</script>
+{% endblock %}

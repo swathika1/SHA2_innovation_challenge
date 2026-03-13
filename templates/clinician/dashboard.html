@@ -7,6 +7,7 @@
     <h1><a href="{{ url_for('clinician_dashboard') }}"><i class="fa-solid fa-user-doctor"></i> RehabCoach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('clinician_dashboard') }}" class="active">Dashboard</a>
+        <a href="{{ url_for('clinician_progress_dashboard') }}">Progress</a>
         <a href="{{ url_for('plan_editor') }}">Plan Editor</a>
         <a href="{{ url_for('consultation') }}">Consultations</a>
         <div class="nav-user">
@@ -26,8 +27,8 @@
 
 {% block content %}
 <div class="dashboard-header">
-    <h2>Patient Overview</h2>
-    <span>Welcome, Dr. {{ session.get('user_name', 'Doctor') }}</span>
+    <h2 style="color: #f1f5f9;">Patient Overview</h2>
+    <span style="color: #cbd5e1;">Welcome, Dr. {{ session.get('user_name', 'Doctor') }}</span>
 </div>
 
 <!-- Quick Stats -->
@@ -52,6 +53,7 @@
 
 <!-- Quick Actions -->
 <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+    <a href="{{ url_for('clinician_progress_dashboard') }}" class="btn" style="background: #6366f1;"><i class="fa-solid fa-chart-line"></i> Progress Dashboard</a>
     <a href="{{ url_for('consultation') }}" class="btn" style="background: #17a2b8;"><i class="fa-solid fa-video"></i> Schedule Video Call</a>
     <a href="{{ url_for('plan_editor') }}" class="btn" style="background: #28a745;"><i class="fa-solid fa-pen-to-square"></i> Create Rehab Plan</a>
 </div>
@@ -115,7 +117,7 @@
                 {% else %}
                     <span class="risk-flag low"><i class="fa-solid fa-circle-check"></i> On Track</span>
                 {% endif %}
-                <span style="color: #666;">{{ patient.adherence_rate or 0 }}% adherence</span>
+                <span style="color: #cbd5e1;">{{ patient.adherence_rate or 0 }}% adherence</span>
                 <a href="{{ url_for('plan_editor') }}?patient_id={{ patient.id }}" class="btn" style="background:#4361ee;color:white;"><i class="fa-solid fa-dumbbell"></i> Edit Plan</a>
                 <a href="{{ url_for('patient_detail', patient_id=patient.id) }}" class="btn">View Details</a>
             </div>
@@ -124,7 +126,7 @@
     {% else %}
         <div class="patient-item" style="text-align: center; padding: 40px;">
             <h4>No patients assigned yet</h4>
-            <p style="color: #666;">When patients register and select you as their doctor, they will appear here.</p>
+            <p style="color: #cbd5e1;">When patients register and select you as their doctor, they will appear here.</p>
         </div>
     {% endif %}
 </div>

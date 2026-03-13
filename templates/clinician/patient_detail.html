@@ -7,6 +7,7 @@
     <h1><a href="{{ url_for('clinician_dashboard') }}"><i class="fa-solid fa-user-doctor"></i> RehabCoach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('clinician_dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('clinician_progress_dashboard') }}">Progress</a>
         <a href="{{ url_for('plan_editor') }}">Plan Editor</a>
         <a href="{{ url_for('consultation') }}">Consultations</a>
         <div class="nav-user">
@@ -428,20 +429,24 @@
             <p style="margin:0;color:{{ c.text }};font-size:0.88rem;line-height:1.5;">{{ risk_data.explanation }}</p>
         </div>
         {% if risk_data.has_data and risk_data._signals is defined %}
-        <div style="display:flex;flex-direction:column;gap:5px;min-width:180px;">
-            {% for label, pts, icon in [
-                ('Form Trend',      risk_data._signals.form.pts,      'fa-chart-line'),
-                ('Asymmetry',       risk_data._signals.asymmetry.pts, 'fa-scale-unbalanced'),
-                ('Pain Trend',      risk_data._signals.pain.pts,      'fa-face-grimace'),
-                ('ROM',             risk_data._signals.rom.pts,       'fa-arrows-left-right'),
-                ('Session Fatigue', risk_data._signals.fatigue.pts,   'fa-battery-half'),
-                ('Effort-Quality',  risk_data._signals.gap.pts,       'fa-dumbbell')
+        <div style="display:flex;flex-direction:column;gap:6px;min-width:260px;max-width:340px;">
+            {% set signals_config = [
+                ('Form Trend',      'form',      'fa-chart-line'),
+                ('Asymmetry',       'asymmetry', 'fa-scale-unbalanced'),
+                ('Pain Trend',      'pain',      'fa-face-grimace'),
+                ('ROM',             'rom',       'fa-arrows-left-right'),
+                ('Session Fatigue', 'fatigue',   'fa-battery-half'),
+                ('Effort-Quality',  'gap',       'fa-dumbbell')
             ] %}
-            {% set pill_color = '#22c55e' if pts == 0 else ('#eab308' if pts == 1 else ('#f97316' if pts == 2 else '#ef4444')) %}
-            <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.6);border-radius:6px;padding:4px 10px;font-size:0.78rem;">
-                <i class="fa-solid {{ icon }}" style="width:14px;color:{{ pill_color }};"></i>
-                <span style="flex:1;color:#333;">{{ label }}</span>
-                <span style="font-weight:700;color:{{ pill_color }};">{% if pts == 0 %}OK{% elif pts == 1 %}!{% elif pts == 2 %}!!{% else %}!!!{% endif %}</span>
+            {% for label, key, icon in signals_config %}
+            {% set sig = risk_data._signals[key] %}
+            {% set dot_color = '#22c55e' if sig.pts == 0 else ('#eab308' if sig.pts == 1 else ('#f97316' if sig.pts == 2 else '#ef4444')) %}
+            <div style="background:rgba(255,255,255,0.65);border-radius:7px;padding:5px 10px;font-size:0.78rem;border-left:3px solid {{ dot_color }};">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:1px;">
+                    <i class="fa-solid {{ icon }}" style="width:13px;color:{{ dot_color }};"></i>
+                    <span style="font-weight:600;color:#222;">{{ label }}</span>
+                </div>
+                <div style="color:#555;padding-left:19px;line-height:1.3;">{{ sig.msg }}</div>
             </div>
             {% endfor %}
         </div>
