@@ -73,6 +73,7 @@
     .video-container { position: relative; width: 100%; }
     .video-container video { width: 100%; display: block; }
     .video-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .framing-guide-canvas { pointer-events: none; z-index: 3; }
     .video-placeholder {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         min-height: 380px; color: #aaa;
@@ -189,6 +190,11 @@
         border: none; border-radius: 10px; font-size: 1rem; cursor: pointer;
     }
     .btn-next:hover { background: #218838; }
+    .session-controls .btn:disabled,
+    .btn-next:disabled,
+    .camera-continue-btn:disabled {
+        opacity: .55; cursor: not-allowed; filter: grayscale(.15);
+    }
 
     /* Audio indicator */
     .audio-indicator {
@@ -206,6 +212,64 @@
         width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid #ddd; font-size: .9rem;
     }
     .sidebar-mini-card label { font-size: .85rem; cursor: pointer; }
+
+    /* Camera setup assistant */
+    .camera-setup-panel {
+        margin-top: 14px; background: linear-gradient(180deg,#fff,#f8fbff);
+        border: 1px solid #d9e8ff; border-radius: 14px; padding: 18px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, .08);
+    }
+    .camera-setup-panel.compact { padding-bottom: 14px; }
+    .camera-setup-head {
+        display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+        margin-bottom: 14px;
+    }
+    .camera-setup-head h4 { margin: 0 0 4px; font-size: 1rem; color: #163a6b; }
+    .camera-setup-head p { margin: 0; color: #5b6b83; font-size: .9rem; }
+    .camera-ready-pill {
+        display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px;
+        font-size: .82rem; font-weight: 700; background: #e2e8f0; color: #334155;
+    }
+    .camera-ready-pill.ready { background: #dcfce7; color: #166534; }
+    .camera-ready-pill.warning { background: #fef3c7; color: #92400e; }
+    .camera-setup-grid {
+        display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start;
+    }
+    @media (max-width: 760px) {
+        .camera-setup-grid { grid-template-columns: 1fr; }
+    }
+    .camera-score-card {
+        background: #0f172a; color: #fff; border-radius: 14px; padding: 18px;
+        min-height: 100%;
+    }
+    .camera-score-label {
+        font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.68);
+    }
+    .camera-score-value { font-size: 2rem; font-weight: 900; margin: 8px 0 4px; }
+    .camera-score-note { font-size: .85rem; color: rgba(255,255,255,.72); margin-bottom: 14px; }
+    .camera-continue-btn {
+        width: 100%; padding: 11px 14px; border: none; border-radius: 10px;
+        background: linear-gradient(135deg,#16a34a,#0f766e); color: #fff; font-weight: 800; cursor: pointer;
+    }
+    .camera-checklist {
+        display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px;
+    }
+    @media (max-width: 560px) {
+        .camera-checklist { grid-template-columns: 1fr; }
+    }
+    .camera-check-item {
+        border-radius: 12px; padding: 10px 12px; border: 1px solid #dbe7f5; background: #fff;
+        font-size: .88rem; color: #415066; display: flex; align-items: center; gap: 8px;
+    }
+    .camera-check-item.ok { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+    .camera-check-item.missing { border-color: #fde68a; background: #fffbeb; color: #92400e; }
+    .camera-message-list { margin-top: 12px; display: grid; gap: 8px; }
+    .camera-message {
+        padding: 10px 12px; border-radius: 10px; background: #eef6ff; color: #17406f;
+        border-left: 4px solid #3b82f6; font-size: .88rem;
+    }
+    .camera-message.warning { background: #fff7ed; color: #9a3412; border-left-color: #f97316; }
+    .camera-message.error { background: #fef2f2; color: #b91c1c; border-left-color: #ef4444; }
 
     /* ===== Post-session overlay ===== */
     .post-overlay {
@@ -1001,12 +1065,42 @@
                 <div class="fps-overlay" id="fpsOverlay">-- FPS</div>
                 <div class="video-container" id="videoContainer" style="display:none;">
                     <video id="webcamVideo" autoplay playsinline muted style="width:100%;display:block;"></video>
+                    <canvas id="framingGuideCanvas" class="framing-guide-canvas"></canvas>
                 </div>
                 <div class="video-placeholder" id="videoPlaceholder">
                     <div class="icon"><i class="fa-solid fa-video"></i></div>
                     <p id="cameraStatusMsg">Camera will start when session begins</p>
                     <div id="cameraDebugInfo" style="font-size:.72rem;color:#666;margin-top:8px;text-align:left;max-width:420px;"></div>
                     <button id="retryCamera" style="display:none;margin-top:10px;padding:8px 20px;border-radius:8px;border:2px solid #3b82f6;background:#3b82f6;color:#fff;cursor:pointer;font-weight:600;font-size:.9rem;" onclick="retryCameraManual()">🔄 Retry Camera</button>
+                </div>
+            </div>
+
+            <div class="camera-setup-panel" id="cameraSetupPanel">
+                <div class="camera-setup-head">
+                    <div>
+                        <h4 id="cameraSetupTitle">📷 Camera Setup</h4>
+                        <p id="cameraSetupSubtitle">Stand where your full body is visible to the camera before we begin.</p>
+                    </div>
+                    <div class="camera-ready-pill warning" id="cameraSetupPill">Waiting for pose detection</div>
+                </div>
+                <div class="camera-setup-grid">
+                    <div class="camera-score-card">
+                        <div class="camera-score-label">Camera Setup Score</div>
+                        <div class="camera-score-value" id="cameraSetupScore">0 / 5</div>
+                        <div class="camera-score-note" id="cameraSetupSummary">We need head, shoulders, hips, knees, and ankles visible.</div>
+                    </div>
+                    <div>
+                        <div class="camera-checklist" id="cameraSetupChecklist">
+                            <div class="camera-check-item missing">⚠ Head not detected</div>
+                            <div class="camera-check-item missing">⚠ Shoulders not detected</div>
+                            <div class="camera-check-item missing">⚠ Hips not detected</div>
+                            <div class="camera-check-item missing">⚠ Knees not detected</div>
+                            <div class="camera-check-item missing">⚠ Ankles not detected</div>
+                        </div>
+                        <div class="camera-message-list" id="cameraSetupMessages">
+                            <div class="camera-message">Open your camera and make sure your full body is visible.</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1570,6 +1664,23 @@ let sessionStartTs = null;
 let exerciseStartTs = null;
 let sessionTimerInterval = null;
 let exerciseTimerInterval = null;
+let sessionStarted = false;
+let pendingPainBefore = 0;
+let calibrationPollTimer = null;
+let calibrationInflight = false;
+let calibrationStablePasses = 0;
+let latestCameraSetup = null;
+let autoStartingSession = false;
+
+const CAMERA_READY_STABLE_PASSES = 1;
+const CAMERA_CALIBRATION_INTERVAL_MS = 700;
+const CAMERA_JOINT_GROUPS = [
+    { key: 'head', label: 'Head', joints: [0] },
+    { key: 'shoulders', label: 'Shoulders', joints: [11, 12] },
+    { key: 'hips', label: 'Hips', joints: [23, 24] },
+    { key: 'knees', label: 'Knees', joints: [25, 26] },
+    { key: 'ankles', label: 'Ankles', joints: [27, 28] },
+];
 
 // TTS
 let ttsAudio = null;
@@ -1577,7 +1688,10 @@ let isSpeaking = false;
 let ttsQueue = [];
 let lastSpokenHash = "";
 let lastSpokenAt = 0;
+let lastCameraSetupSpeechHash = "";
+let lastCameraSetupSpeechAt = 0;
 const SPEAK_COOLDOWN_MS = 3000;
+const CAMERA_SETUP_SPEAK_COOLDOWN_MS = 4000;
 
 // CV feedback persistence
 let LAST_FEEDBACK = null;
@@ -1687,6 +1801,235 @@ function switchPipelineForCurrentExercise() {
     console.log(`🔀 Pipeline switched to: ${selectedPipeline} for exercise "${WORKOUTS[currentExIndex]?.name}"`);
 }
 
+/* ===================== CAMERA SETUP ASSISTANT ===================== */
+function getVisibleLandmark(landmarks, idx) {
+    const lm = landmarks && landmarks[idx];
+    if (!Array.isArray(lm) || lm.length < 2) return null;
+    const x = Number(lm[0]);
+    const y = Number(lm[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return { x, y };
+}
+
+function getAverageLandmark(landmarks, indices) {
+    const points = indices.map(idx => getVisibleLandmark(landmarks, idx)).filter(Boolean);
+    if (!points.length) return null;
+    const total = points.reduce((acc, point) => {
+        acc.x += point.x;
+        acc.y += point.y;
+        return acc;
+    }, { x: 0, y: 0 });
+    return { x: total.x / points.length, y: total.y / points.length };
+}
+
+function dedupeMessages(messages) {
+    return [...new Set((messages || []).filter(Boolean))];
+}
+
+function analyzeCameraFraming(landmarks, frameWidth, frameHeight) {
+    const checks = {};
+    CAMERA_JOINT_GROUPS.forEach(group => {
+        checks[group.key] = group.joints.every(idx => !!getVisibleLandmark(landmarks, idx));
+    });
+
+    const visiblePoints = (landmarks || [])
+        .map((_, idx) => getVisibleLandmark(landmarks, idx))
+        .filter(Boolean);
+
+    if (!visiblePoints.length || !frameWidth || !frameHeight) {
+        return {
+            poseDetected: false,
+            checks,
+            score: 0,
+            ready: false,
+            messages: ['Stand in front of the camera so your full body is visible.'],
+            bbox: null,
+        };
+    }
+
+    const xs = visiblePoints.map(point => point.x * frameWidth);
+    const ys = visiblePoints.map(point => point.y * frameHeight);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const bbox = { left: minX, top: minY, right: maxX, bottom: maxY, width: maxX - minX, height: maxY - minY };
+
+    const messages = [];
+
+    if (!checks.head) messages.push('Tilt camera up slightly so your head is visible.');
+    if (!checks.shoulders) messages.push('Center your shoulders in the frame.');
+    if (!checks.hips) messages.push('Center yourself so your hips are visible.');
+    if (!checks.knees) messages.push('Make sure your knees are visible.');
+    if (!checks.ankles) messages.push('Tilt camera down slightly so your feet are visible.');
+
+    const score = Object.values(checks).filter(Boolean).length;
+    const ready = score === CAMERA_JOINT_GROUPS.length;
+
+    return {
+        poseDetected: true,
+        checks,
+        score,
+        ready,
+        messages: dedupeMessages(messages),
+        bbox,
+    };
+}
+
+function setSessionControlState(enabled) {
+    ['pauseBtn', 'nextExerciseBtn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !enabled;
+    });
+    document.querySelectorAll('.session-controls .btn').forEach(btn => {
+        btn.disabled = !enabled;
+    });
+}
+
+function setPipelineWaitingState() {
+    const kimBadge = document.getElementById('kimoreStatusBadge');
+    const kerBadge = document.getElementById('keraalStatusBadge');
+    const kimScore = document.getElementById('kimoreScoreDisplay');
+    const kerScore = document.getElementById('keraalScoreDisplay');
+    if (kimBadge) { kimBadge.textContent = '📷 Camera setup'; kimBadge.className = 'pipeline-badge analyzing'; }
+    if (kerBadge) { kerBadge.textContent = '📷 Camera setup'; kerBadge.className = 'pipeline-badge analyzing'; }
+    if (kimScore) kimScore.textContent = '-- / 50';
+    if (kerScore) kerScore.textContent = '-- / 50';
+}
+
+function drawFramingGuide(analysis) {
+    const video = document.getElementById('webcamVideo');
+    const canvas = document.getElementById('framingGuideCanvas');
+    if (!video || !canvas) return;
+
+    const width = video.clientWidth || video.videoWidth;
+    const height = video.clientHeight || video.videoHeight;
+    if (!width || !height) return;
+
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, width, height);
+}
+
+function speakCameraSetupFeedback(analysis) {
+    if (!audioEnabled || sessionStarted || !analysis || !webcamStream) return;
+
+    let message = '';
+    if (!analysis.poseDetected) {
+        message = 'Stand where your full body is visible to the camera.';
+    } else if (analysis.ready) {
+        message = 'Camera setup complete. Starting exercise now.';
+    } else if (analysis.messages && analysis.messages.length) {
+        message = analysis.messages[0];
+    }
+
+    if (!message) return;
+
+    const now = Date.now();
+    if (message === lastCameraSetupSpeechHash && (now - lastCameraSetupSpeechAt) < CAMERA_SETUP_SPEAK_COOLDOWN_MS) {
+        return;
+    }
+    if ((now - lastCameraSetupSpeechAt) < CAMERA_SETUP_SPEAK_COOLDOWN_MS) {
+        return;
+    }
+
+    lastCameraSetupSpeechHash = message;
+    lastCameraSetupSpeechAt = now;
+    addFeedback(analysis.ready ? 'success' : 'info', 'Camera setup: ' + message);
+    queueSpeech(message);
+}
+
+function renderCameraSetup(analysis) {
+    const title = document.getElementById('cameraSetupTitle');
+    const subtitle = document.getElementById('cameraSetupSubtitle');
+    const pill = document.getElementById('cameraSetupPill');
+    const score = document.getElementById('cameraSetupScore');
+    const summary = document.getElementById('cameraSetupSummary');
+    const checklist = document.getElementById('cameraSetupChecklist');
+    const messages = document.getElementById('cameraSetupMessages');
+    const panel = document.getElementById('cameraSetupPanel');
+
+    if (!analysis || !pill || !score || !summary || !checklist || !messages || !panel) return;
+
+    if (title) title.textContent = sessionStarted ? '📷 Live Camera Assistant' : '📷 Camera Setup';
+    if (subtitle) {
+        subtitle.textContent = sessionStarted
+            ? 'We will keep watching your framing while you exercise.'
+            : 'Stand where your full body is visible to the camera before we begin.';
+    }
+
+    if (sessionStarted) {
+        pill.className = 'camera-ready-pill ready';
+        pill.textContent = 'Setup complete';
+        summary.textContent = 'Camera setup passed. Starting exercise automatically.';
+    } else {
+        pill.className = 'camera-ready-pill ' + (analysis.ready ? 'ready' : 'warning');
+        if (!analysis.poseDetected) {
+            pill.textContent = 'Waiting for pose detection';
+            summary.textContent = 'We need head, shoulders, hips, knees, and ankles visible.';
+        } else if (analysis.ready) {
+            pill.textContent = 'Ready';
+            summary.textContent = 'All 5 body checkpoints are visible. Starting exercise automatically.';
+        } else {
+            pill.textContent = 'Adjust camera';
+            summary.textContent = analysis.score + ' / 5 body checkpoints are visible.';
+        }
+    }
+
+    score.textContent = analysis.score + ' / ' + CAMERA_JOINT_GROUPS.length;
+
+    checklist.innerHTML = CAMERA_JOINT_GROUPS.map(group => {
+        const ok = !!analysis.checks[group.key];
+        return '<div class="camera-check-item ' + (ok ? 'ok' : 'missing') + '">' +
+            (ok ? '✔ ' : '⚠ ') + group.label + (ok ? ' detected' : ' missing') +
+            '</div>';
+    }).join('');
+
+    const list = sessionStarted
+        ? ['Camera setup complete. No more setup checks are needed.']
+        : (analysis.messages.length ? analysis.messages : ['Make sure your full body is visible to the camera.']);
+    messages.innerHTML = list.map(message => {
+        const level = sessionStarted ? 'camera-message' : 'camera-message warning';
+        return '<div class="' + level + '">' + message + '</div>';
+    }).join('');
+
+    panel.classList.toggle('compact', sessionStarted);
+    drawFramingGuide(analysis);
+    speakCameraSetupFeedback(analysis);
+}
+
+function applyCameraSetupFromLandmarks(landmarks, frameWidth, frameHeight, source = 'setup') {
+    const analysis = analyzeCameraFraming(landmarks, frameWidth, frameHeight);
+    latestCameraSetup = analysis;
+
+    if (!sessionStarted && source === 'setup') {
+        calibrationStablePasses = analysis.ready
+            ? Math.min(CAMERA_READY_STABLE_PASSES, calibrationStablePasses + 1)
+            : 0;
+    }
+
+    renderCameraSetup(analysis);
+    if (analysis.poseDetected && landmarks && landmarks.length) {
+        drawSkeleton(landmarks);
+    }
+    if (!sessionStarted && !autoStartingSession && analysis.ready && calibrationStablePasses >= CAMERA_READY_STABLE_PASSES) {
+        autoStartingSession = true;
+        setTimeout(() => { beginSessionAfterCalibration(); }, 150);
+    }
+}
+
+function resetCameraSetupAssistant() {
+    calibrationStablePasses = 0;
+    latestCameraSetup = null;
+    autoStartingSession = false;
+    lastCameraSetupSpeechHash = "";
+    lastCameraSetupSpeechAt = 0;
+    renderCameraSetup(analyzeCameraFraming([], 0, 0));
+    drawFramingGuide(null);
+}
+
 /* ===================== SKELETON DRAWING (separate canvas) ===================== */
 const POSE_CONNECTIONS = [
     [0,1],[1,2],[2,3],[3,7],[0,4],[4,5],[5,6],[6,8],[9,10],
@@ -1700,9 +2043,23 @@ let skeletonPollTimer = null;
 async function pollSkeletonLandmarks() {
     try {
         const res = await fetch(API_BASE + '/api/session/landmarks');
-        if (!res.ok || res.status === 204) return;
+        const video = document.getElementById('webcamVideo');
+        if (!res.ok || res.status === 204) {
+            applyCameraSetupFromLandmarks([], video?.videoWidth || video?.clientWidth || 0, video?.videoHeight || video?.clientHeight || 0, 'live');
+            return;
+        }
         const data = await res.json();
-        if (data.ok && data.landmarks && data.landmarks.length > 0) drawSkeleton(data.landmarks);
+        if (data.ok && data.landmarks && data.landmarks.length > 0) {
+            drawSkeleton(data.landmarks);
+            applyCameraSetupFromLandmarks(
+                data.landmarks,
+                video?.videoWidth || video?.clientWidth || 0,
+                video?.videoHeight || video?.clientHeight || 0,
+                'live'
+            );
+        } else {
+            applyCameraSetupFromLandmarks([], video?.videoWidth || video?.clientWidth || 0, video?.videoHeight || video?.clientHeight || 0, 'live');
+        }
     } catch(e) { /* silent */ }
 }
 
@@ -2501,6 +2858,70 @@ function camLog(msg) {
     if (dbg) dbg.innerHTML += msg + '<br>';
 }
 
+async function pollCameraCalibration() {
+    if (calibrationInflight || sessionStarted) return;
+
+    const frame_b64 = grabFrameDataURL();
+    if (!frame_b64) {
+        renderCameraSetup(analyzeCameraFraming([], 0, 0));
+        return;
+    }
+
+    calibrationInflight = true;
+    try {
+        const resp = await fetch('/api/camera/calibration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ frame_b64 })
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) {
+            calibrationStablePasses = 0;
+            renderCameraSetup({
+                poseDetected: false,
+                checks: { head: false, shoulders: false, hips: false, knees: false, ankles: false },
+                score: 0,
+                ready: false,
+                messages: ['Camera setup check failed. Please retry the camera.'],
+                bbox: null,
+            });
+            return;
+        }
+
+        applyCameraSetupFromLandmarks(
+            data.landmarks || [],
+            data.frame_width || 0,
+            data.frame_height || 0,
+            'setup'
+        );
+    } catch (error) {
+        calibrationStablePasses = 0;
+        renderCameraSetup({
+            poseDetected: false,
+            checks: { head: false, shoulders: false, hips: false, knees: false, ankles: false },
+            score: 0,
+            ready: false,
+            messages: ['Unable to run camera setup right now. Please retry the camera.'],
+            bbox: null,
+        });
+    } finally {
+        calibrationInflight = false;
+    }
+}
+
+function startCameraCalibration() {
+    stopCameraCalibration();
+    calibrationPollTimer = setInterval(pollCameraCalibration, CAMERA_CALIBRATION_INTERVAL_MS);
+    pollCameraCalibration();
+}
+
+function stopCameraCalibration() {
+    if (calibrationPollTimer) {
+        clearInterval(calibrationPollTimer);
+        calibrationPollTimer = null;
+    }
+}
+
 async function startWebcam() {
     const video = document.getElementById('webcamVideo');
     const placeholder = document.getElementById('videoPlaceholder');
@@ -2610,7 +3031,10 @@ async function startWebcam() {
 function retryCameraManual() {
     camLog('Manual retry triggered');
     startWebcam().then(ok => {
-        if (ok && !pollTimer) {
+        if (ok && !sessionStarted) {
+            resetCameraSetupAssistant();
+            startCameraCalibration();
+        } else if (ok && !pollTimer) {
             pollFeedback();
             startPolling();
         }
@@ -2618,6 +3042,7 @@ function retryCameraManual() {
 }
 
 function stopCamera() {
+    stopCameraCalibration();
     if (webcamStream) {
         webcamStream.getTracks().forEach(function(t) { t.stop(); });
         webcamStream = null;
@@ -2744,29 +3169,21 @@ async function callSessionStart() {
 }
 
 /* ===================== PHASE 1 → PHASE 2 ===================== */
-async function startSession() {
-    // Check if exercises are selected
+function buildSelectedWorkouts() {
     if (selectedExerciseIds.length === 0) {
         alert('Please select at least one exercise to continue.');
-        return;
+        return false;
     }
-    
-    // Build WORKOUTS array from selected exercises
-    // Use sets/reps from BACKEND_WORKOUTS (clinician-assigned plan) when available,
-    // otherwise fall back to AVAILABLE_EXERCISES defaults.
+
     console.log('🔍 BACKEND_WORKOUTS:', BACKEND_WORKOUTS);
     const userSelectedWorkouts = selectedExerciseIds.map((id, idx) => {
         const exDef = AVAILABLE_EXERCISES[id];
-        // Match by exercise name against backend workouts (from DB)
-        // Try exact match first, then try prefix match (DB name may not have pipeline suffixes like "(CTK)")
         const exNameLower = exDef.name.toLowerCase().trim();
         let backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim() === exNameLower);
         if (!backendMatch) {
-            // Try: DB name is a prefix of the AVAILABLE_EXERCISES name (e.g. "Forward Flexion" matches "Forward Flexion (CTK)")
             backendMatch = BACKEND_WORKOUTS.find(bw => exNameLower.startsWith(bw.name.toLowerCase().trim()));
         }
         if (!backendMatch) {
-            // Try: AVAILABLE_EXERCISES name is a prefix of the DB name
             backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim().startsWith(exNameLower));
         }
         console.log(`  Exercise "${exDef.name}" → backendMatch:`, backendMatch ? `"${backendMatch.name}" (${backendMatch.sets}×${backendMatch.reps})` : 'NONE (using default 3×10)');
@@ -2778,14 +3195,11 @@ async function startSession() {
             reps: backendMatch ? backendMatch.reps : exDef.reps
         };
     });
-    
-    // Replace WORKOUTS with user selections
-    // Clear and repopulate the global WORKOUTS array
-    WORKOUTS.length = 0;  // Clear existing
-    WORKOUTS.push(...userSelectedWorkouts);  // Add user selections
+
+    WORKOUTS.length = 0;
+    WORKOUTS.push(...userSelectedWorkouts);
     console.log('✅ WORKOUTS set to user selections:', WORKOUTS);
-    
-    // Dynamically rebuild exercise steps list
+
     const exerciseStepList = document.getElementById('exerciseStepList');
     if (exerciseStepList) {
         exerciseStepList.innerHTML = userSelectedWorkouts.map((w, idx) => `
@@ -2797,26 +3211,34 @@ async function startSession() {
             </li>
         `).join('');
     }
-    
-    const painBefore = parseInt(document.getElementById('painBeforeInput').value);
+
+    return true;
+}
+
+async function createTrackedSession() {
     try {
         const resp = await fetch('/api/session/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pain_before: painBefore })
+            body: JSON.stringify({ pain_before: pendingPainBefore })
         });
         const data = await resp.json();
-        if (!data.ok) { alert('Error creating session: ' + (data.error || 'Unknown')); return; }
+        if (!data.ok) {
+            alert('Error creating session: ' + (data.error || 'Unknown'));
+            return false;
+        }
         sessionId = data.session_id;
+        return true;
     } catch (err) {
-        alert('Network error creating session.'); console.error(err); return;
+        alert('Network error creating session.');
+        console.error(err);
+        return false;
     }
+}
 
-    // Switch phases
-    document.getElementById('phasePreSession').classList.remove('active');
-    document.getElementById('phaseLiveSession').classList.add('active');
-
-    // Start timers
+function startSessionTimers() {
+    clearInterval(sessionTimerInterval);
+    clearInterval(exerciseTimerInterval);
     sessionStartTs = Date.now();
     exerciseStartTs = Date.now();
     sessionTimerInterval = setInterval(function() {
@@ -2825,36 +3247,63 @@ async function startSession() {
     exerciseTimerInterval = setInterval(function() {
         if (!isPaused) document.getElementById('exerciseTimer').textContent = fmt(Math.floor((Date.now() - exerciseStartTs) / 1000));
     }, 1000);
+}
 
+async function startSession() {
+    if (!buildSelectedWorkouts()) return;
+
+    stopPolling();
+    stopSkeletonPolling();
+    stopCameraCalibration();
+    stopSpeaking();
+    if (webcamStream) stopCamera();
+    clearInterval(sessionTimerInterval);
+    clearInterval(exerciseTimerInterval);
+
+    pendingPainBefore = parseInt(document.getElementById('painBeforeInput').value);
+    sessionId = null;
+    sessionStarted = false;
+    autoStartingSession = false;
+    isPaused = false;
+    currentExIndex = 0;
+    currentRep = 0;
+    currentSet = 1;
+    allScores = [];
+    exerciseData = [];
     setsCompletedDict = {};
-    currentExerciseCompleted = false; // Reset for first exercise
-    
-    // Reset per-pipeline score accumulators for weighted average
+    currentExerciseCompleted = false;
     pipelineScoreAccum = { kimore: { totalScore: 0, exerciseCount: 0 }, keraal: { totalScore: 0, exerciseCount: 0 } };
-    
-    // Set targets from first exercise's WORKOUTS data (DB values from clinician plan)
+
+    document.getElementById('phasePreSession').classList.remove('active');
+    document.getElementById('phaseLiveSession').classList.add('active');
+    document.getElementById('videoContainer').style.display = 'none';
+    document.getElementById('videoPlaceholder').style.display = 'flex';
+    document.getElementById('sessionTimer').textContent = '00:00';
+    document.getElementById('exerciseTimer').textContent = '00:00';
+    document.getElementById('pauseBtn').innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+    document.getElementById('formStatusBadge').className = 'badge analyzing';
+    document.getElementById('formStatusBadge').innerHTML = '<i class="fa-solid fa-camera"></i> CAMERA SETUP REQUIRED';
+    document.getElementById('frameScoreText').textContent = '--';
+    document.getElementById('feedbackList').innerHTML = '<div class="feedback-item info"><i class="fa-solid fa-camera"></i> Finish the camera setup to begin exercise analysis.</div>';
+
     if (WORKOUTS.length > 0) {
         targetSets = WORKOUTS[0].sets;
         targetReps = WORKOUTS[0].reps;
-        currentRep = 0;
-        currentSet = 1;
     }
-    
-    // Switch active pipeline to match the first exercise
+
     switchPipelineForCurrentExercise();
-    
-    console.log(`🚀 Session started with ${WORKOUTS.length} exercises:`, WORKOUTS);
-    console.log(`First exercise: "${WORKOUTS[0].name}", ${WORKOUTS[0].sets} sets x ${WORKOUTS[0].reps} reps`);
-    console.log(`  → targetSets=${targetSets}, targetReps=${targetReps}`);
-    
+    setPipelineWaitingState();
+    setSessionControlState(false);
     updateRepCounter();
     updateExerciseSteps();
     updateSessionProgress();
+    updateExerciseRefPanel();
+    resetCameraSetupAssistant();
 
-    // Start camera + both CV pipelines
-    console.log('📷 About to start webcam...');
+    console.log(`📷 Preparing camera setup for ${WORKOUTS.length} exercises`, WORKOUTS);
     const cameraStatus = document.getElementById('cameraStatusMsg');
     if (cameraStatus) cameraStatus.textContent = '⏳ Starting camera...';
+
     let camOk = false;
     try {
         camOk = await startWebcam();
@@ -2865,15 +3314,42 @@ async function startSession() {
         const retryBtn = document.getElementById('retryCamera');
         if (retryBtn) retryBtn.style.display = 'inline-block';
     }
-    console.log('📷 Camera result:', camOk);
-    await callSessionStart();
-    updateExerciseRefPanel();
-    startSkeletonPolling();
 
-    // Always start polling — even if camera failed, user can retry
     if (camOk) {
-        await pollFeedback();
+        startCameraCalibration();
     }
+}
+
+async function beginSessionAfterCalibration() {
+    if (sessionStarted) return;
+    if (!latestCameraSetup || !latestCameraSetup.ready || calibrationStablePasses < CAMERA_READY_STABLE_PASSES) {
+        autoStartingSession = false;
+        addFeedback('warning', 'Finish the camera setup before starting the session.');
+        return;
+    }
+
+    const created = await createTrackedSession();
+    if (!created) {
+        autoStartingSession = false;
+        return;
+    }
+
+    stopCameraCalibration();
+    sessionStarted = true;
+    autoStartingSession = false;
+    isPaused = false;
+    startSessionTimers();
+    setSessionControlState(true);
+
+    renderCameraSetup(latestCameraSetup);
+    addFeedback('success', 'Camera setup complete. Starting exercise automatically.');
+    updateRepCounter();
+    updateExerciseSteps();
+    updateSessionProgress();
+
+    await callSessionStart();
+    startSkeletonPolling();
+    await pollFeedback();
     startPolling();
 }
 
@@ -2968,6 +3444,16 @@ async function saveCurrentExercise() {
 
 /* ===================== STOP / POST-SESSION ===================== */
 async function stopSession() {
+    if (!sessionStarted) {
+        if (!confirm('Leave camera setup and return to exercise selection?')) return;
+        stopPolling();
+        stopSkeletonPolling();
+        stopCamera();
+        stopSpeaking();
+        document.getElementById('phaseLiveSession').classList.remove('active');
+        document.getElementById('phasePreSession').classList.add('active');
+        return;
+    }
     if (!confirm('End this session and save your progress?')) return;
     await saveCurrentExercise();
     showPostSession();
@@ -2994,6 +3480,7 @@ function showPostSession() {
     stopSkeletonPolling();
     stopCamera();
     stopSpeaking();
+    sessionStarted = false;
     clearInterval(sessionTimerInterval);
     clearInterval(exerciseTimerInterval);
 
@@ -3104,6 +3591,7 @@ async function completeSession() {
 
 /* ===================== MISC CONTROLS ===================== */
 function togglePause() {
+    if (!sessionStarted) return;
     isPaused = !isPaused;
     document.getElementById('pauseBtn').innerHTML = isPaused
         ? '<i class="fa-solid fa-play"></i> Resume'
@@ -3115,13 +3603,16 @@ function togglePause() {
 /* Language change re-inits CV pipeline */
 document.getElementById('languageSelect').addEventListener('change', async function() {
     stopSpeaking();
-    if (sessionId) await callSessionStart();
+    if (sessionStarted && sessionId) await callSessionStart();
 });
 
 window.addEventListener('beforeunload', function() {
     stopCamera();
     stopPolling();
 });
+
+setSessionControlState(false);
+resetCameraSetupAssistant();
 
 /* === PAGE LOAD CAMERA DIAGNOSTIC === */
 (function pageLoadCameraCheck() {

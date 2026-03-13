@@ -3484,6 +3484,58 @@ else:
     print("[INIT] CV pipelines skipped at startup (set ENABLE_CV_PIPELINES=1 to enable)")
 
 
+def _extract_pose_landmarks_for_calibration(frame_b64):
+    """
+    Lightweight pose extraction for camera setup checks.
+    Reuses whichever MediaPipe-backed pipeline is available without
+    touching the rep-counting/session state machines.
+    """
+    if PIPELINE is not None and hasattr(PIPELINE, "_extract_mediapipe_landmarks"):
+        return PIPELINE._extract_mediapipe_landmarks(frame_b64)
+
+    if KERAAL_PIPELINE is not None and hasattr(KERAAL_PIPELINE, "_extract_mediapipe_landmarks_keraal"):
+        return KERAAL_PIPELINE._extract_mediapipe_landmarks_keraal(frame_b64)
+
+    return None, None
+
+
+@app.route("/api/camera/calibration", methods=["POST"])
+@login_required
+@role_required('patient')
+def api_camera_calibration():
+    """
+    Run pose detection on a single webcam frame for pre-session camera setup.
+    Returns raw landmarks so the frontend can compute framing score/guidance.
+    """
+    if PIPELINE is None and KERAAL_PIPELINE is None:
+        return jsonify({"ok": False, "error": "Pose pipeline not available"}), 503
+
+    data = request.get_json(force=True) or {}
+    frame_b64 = data.get("frame_b64", "")
+    if not frame_b64:
+        return jsonify({"ok": False, "error": "frame_b64 missing"}), 400
+
+    try:
+        frame, landmarks = _extract_pose_landmarks_for_calibration(frame_b64)
+        if frame is None:
+            return jsonify({"ok": False, "error": "Could not decode frame"}), 400
+
+        frame_height, frame_width = frame.shape[:2]
+        landmarks_list = landmarks.tolist() if hasattr(landmarks, "tolist") else []
+
+        return jsonify({
+            "ok": True,
+            "pose_detected": bool(landmarks_list),
+            "landmarks": landmarks_list,
+            "frame_width": frame_width,
+            "frame_height": frame_height,
+            "timestamp": time.time(),
+        })
+    except Exception as e:
+        print(f"❌ Camera calibration error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ==================== SESSION LIFECYCLE APIs ====================
 
 @app.route('/api/session/create', methods=['POST'])
