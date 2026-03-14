@@ -1,0 +1,97 @@
+# Git files
+.git
+.gitignore
+.github
+
+# Python cache and virtual environments
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Environment files (keep defaults only)
+.env.local
+.env.production
+
+# Test coverage and reports
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+temp/
+tmp/
+
+# Large or unnecessary directories
+node_modules/
+.next/
+dist/
+build/
+
+# Docker files (don't copy them into the image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation that's not needed in production
+*.md
+docs/
+examples/
+
+# Database files (we don't want stale DBs in image)
+*.db
+*.sqlite
+*.sqlite3
+
+# Flask session files
+flask_session/
+
+# RAG database (will be initialized fresh)
+rag_db/
+
+# Large datasets
+Optim_dataset/
+Keraal_Guides/
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Misc large files
+*.zip
+*.tar.gz
+*.csv

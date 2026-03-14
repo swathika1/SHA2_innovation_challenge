@@ -178,6 +178,15 @@ import random
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'  # Required for sessions
 
+# ==================== CORS CONFIGURATION FOR MULTI-DEVICE VIDEO CALLS ====================
+# Enable CORS to allow video calls from different machines on the local network
+CORS(app, 
+     resources={r"/*": {"origins": "*"}},
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"]
+)
+
 # ==================== CONDITIONS & EXERCISE MAPPING ====================
 
 MSK_CONDITIONS = [
@@ -2653,30 +2662,6 @@ def video_call(appointment_id):
                          user_name=session['user_name'],
                          is_doctor=(session['role'] == 'doctor'))
 
-
-@app.route('/video-call/quick/<int:patient_id>')
-@login_required
-@role_required('doctor')
-def quick_call(patient_id):
-    """Start a quick video call without scheduling"""
-    patient = query_db('SELECT * FROM users WHERE id = ?', (patient_id,), one=True)
-    
-    if not patient:
-        flash('Patient not found.', 'error')
-        return redirect(url_for('clinician_dashboard'))
-    
-    # Create an instant appointment
-    room_id = f"quick-call-{session['user_id']}-{patient_id}-{uuid.uuid4().hex[:8]}"
-    today = date.today().isoformat()
-    now = datetime.now().strftime('%H:%M')
-    
-    appointment_id = execute_db('''
-        INSERT INTO appointments 
-        (doctor_id, patient_id, appointment_date, appointment_time, duration, notes, room_id, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled')
-    ''', (session['user_id'], patient_id, today, now, 30, 'Quick call', room_id))
-    
-    return redirect(url_for('video_call', appointment_id=appointment_id))
 
 
 # ==================== CAREGIVER ROUTES ====================
