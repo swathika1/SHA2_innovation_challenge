@@ -167,24 +167,157 @@
     {% endif %}
 </div>
 
+<!-- Complaints & Queries -->
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">Complaints &amp; Queries</div>
+    <p style="color: #666; font-size: 0.9rem; margin-bottom: 12px;">
+        Log a concern or question about a patient's progress. The patient and their doctor will be notified.
+    </p>
+    {% if patients %}
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; align-items: end;">
+        <div style="flex: 0 0 160px;">
+            <label style="font-size: 0.85rem; color: #555; display: block; margin-bottom: 4px;">Patient</label>
+            <select id="cg-msg-patient" style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;">
+                {% for p in patients %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div style="flex: 0 0 130px;">
+            <label style="font-size: 0.85rem; color: #555; display: block; margin-bottom: 4px;">Type</label>
+            <select id="cg-msg-type" style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;">
+                <option value="query">Query</option>
+                <option value="complaint">Complaint</option>
+            </select>
+        </div>
+        <div style="flex: 1; min-width: 200px;">
+            <label style="font-size: 0.85rem; color: #555; display: block; margin-bottom: 4px;">Message</label>
+            <input type="text" id="cg-msg-text" placeholder="Describe your concern or question..."
+                   style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;">
+        </div>
+        <button onclick="submitCaregiverMessage()" class="btn btn-primary" style="padding: 8px 20px;">Submit</button>
+    </div>
+    {% else %}
+    <p style="color: #999; font-size: 0.9rem;">You must be monitoring a patient to submit a message.</p>
+    {% endif %}
+
+    {% if my_messages %}
+    <div style="margin-top: 10px;">
+        <strong style="font-size: 0.9rem; color: #333;">Your Submitted Messages:</strong>
+        <div style="max-height: 280px; overflow-y: auto; margin-top: 8px;">
+        {% for msg in my_messages %}
+        <div style="padding: 10px 14px; border-radius: 6px; margin-bottom: 8px;
+            {% if msg.status == 'open' %}background: #fff8e1; border: 1px solid #ffe082;
+            {% else %}background: #f0fdf4; border: 1px solid #a5d6a7;{% endif %}">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <div>
+                    <span style="font-weight: 600; font-size: 0.9rem;">{{ msg.patient_name }}</span>
+                    <span style="margin-left: 8px; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;
+                        {% if msg.message_type == 'complaint' %}background: #fde8e8; color: #b91c1c;
+                        {% else %}background: #dbeafe; color: #1d4ed8;{% endif %}">
+                        {{ msg.message_type|capitalize }}
+                    </span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 0.75rem; color: #999;">{{ msg.created_at[:16] if msg.created_at else '' }}</span>
+                    <span style="padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;
+                        {% if msg.status == 'open' %}background: #fff3cd; color: #856404;
+                        {% else %}background: #d4edda; color: #155724;{% endif %}">
+                        {{ msg.status|capitalize }}
+                    </span>
+                </div>
+            </div>
+            <p style="margin: 0; font-size: 0.9rem; color: #444;">{{ msg.message }}</p>
+            {% if msg.resolved_note %}
+            <p style="margin: 4px 0 0; font-size: 0.8rem; color: #555;">
+                <strong>Response:</strong> {{ msg.resolved_note }}
+                {% if msg.resolved_by_name %}<span style="color: #999;"> — {{ msg.resolved_by_name }}</span>{% endif %}
+            </p>
+            {% endif %}
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function submitCaregiverMessage() {
+    const patient_id = document.getElementById('cg-msg-patient').value;
+    const message_type = document.getElementById('cg-msg-type').value;
+    const message = document.getElementById('cg-msg-text').value.trim();
+    if (!message) { alert('Please enter a message.'); return; }
+    fetch('/api/caregiver/message', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({patient_id, message_type, message})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) { alert('Message submitted successfully.'); location.reload(); }
+        else { alert('Error: ' + d.error); }
+    });
+}
+</script>
+
 <!-- Encouragement Message Section -->
 <div class="card" style="margin-top: 20px;">
     <div class="card-header">Send Encouragement Message</div>
     <div class="encouragement-box">
         <p style="margin-bottom: 15px;">Send a supportive message to help motivate your loved one in their recovery journey.</p>
+        {% if patients %}
+        <div style="margin-bottom: 12px;">
+            <label style="font-size: 0.85rem; color: #555; display: block; margin-bottom: 4px;">To Patient</label>
+            <select id="enc-patient" style="padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem; min-width: 180px;">
+                {% for p in patients %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div style="margin-bottom: 15px;">
             <strong>Quick Messages:</strong>
             <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
-                <button class="btn" style="padding: 8px 15px; font-size: 0.9rem;">Great job!</button>
-                <button class="btn" style="padding: 8px 15px; font-size: 0.9rem;">Keep going!</button>
-                <button class="btn" style="padding: 8px 15px; font-size: 0.9rem;">Proud of you!</button>
-                <button class="btn" style="padding: 8px 15px; font-size: 0.9rem;">Thinking of you</button>
+                <button class="btn" style="padding: 8px 15px; font-size: 0.9rem;" onclick="setEncouragement('Great job! Keep up the amazing work! 🌟')">Great job!</button>
+                <button class="btn" style="padding: 8px 15px; font-size: 0.9rem;" onclick="setEncouragement('Keep going! You\'re making great progress! 💪')">Keep going!</button>
+                <button class="btn" style="padding: 8px 15px; font-size: 0.9rem;" onclick="setEncouragement('So proud of you and your dedication to recovery! ❤️')">Proud of you!</button>
+                <button class="btn" style="padding: 8px 15px; font-size: 0.9rem;" onclick="setEncouragement('Thinking of you and cheering you on every step of the way! 🙌')">Thinking of you</button>
             </div>
         </div>
-        <textarea placeholder="Or write a custom message..." style="width: 100%; padding: 15px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; resize: none; height: 100px;"></textarea>
-        <button class="btn btn-primary" style="margin-top: 10px;">Send Message</button>
+        <textarea id="enc-text" placeholder="Or write a custom message..." style="width: 100%; padding: 15px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; resize: none; height: 100px; box-sizing: border-box;"></textarea>
+        <button class="btn btn-primary" style="margin-top: 10px;" onclick="sendEncouragement()">Send Message</button>
+        <span id="enc-status" style="margin-left: 12px; font-size: 0.88rem; color: #22c55e; display: none;">Sent! ✓</span>
+        {% else %}
+        <p style="color: #999;">You must be monitoring a patient to send messages.</p>
+        {% endif %}
     </div>
 </div>
+
+<script>
+function setEncouragement(text) {
+    document.getElementById('enc-text').value = text;
+}
+function sendEncouragement() {
+    const patient_id = document.getElementById('enc-patient').value;
+    const message = document.getElementById('enc-text').value.trim();
+    if (!message) { alert('Please write a message first.'); return; }
+    fetch('/api/caregiver/message', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({patient_id, message_type: 'encouragement', message})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            document.getElementById('enc-text').value = '';
+            const s = document.getElementById('enc-status');
+            s.style.display = 'inline';
+            setTimeout(() => { s.style.display = 'none'; }, 3000);
+        } else {
+            alert('Error: ' + d.error);
+        }
+    });
+}
+</script>
 
 <style>
 .stats-row {

@@ -468,6 +468,7 @@
                     <th>Pain (Before → After)</th>
                     <th>Effort</th>
                     <th>Completion</th>
+                    <th>Report</th>
                 </tr>
             </thead>
             <tbody>
@@ -502,6 +503,15 @@
                     <td>
                         {% set cp = s.completed_perc | default(0) %}
                         <span style="color:{% if cp >= 80 %}#22c55e{% elif cp >= 50 %}#f59e0b{% else %}#ef4444{% endif %};">{{ cp | round(0) | int }}%</span>
+                    </td>
+                    <td>
+                        {% if s.completed_at %}
+                        <a href="{{ url_for('api_session_report_doctor', session_id=s.id) }}"
+                           style="font-size:0.78rem;color:#6366f1;text-decoration:none;white-space:nowrap;"
+                           title="Download clinician summary PDF">
+                            <i class="fa-solid fa-file-pdf"></i> PDF
+                        </a>
+                        {% else %}—{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -647,6 +657,82 @@ function renderCalendar() {
         if (SESSION_DATES.indexOf(dateStr) >= 0) el.classList.add('has-session');
         grid.appendChild(el);
     }
+}
+</script>
+
+<!-- ===== CAREGIVER MESSAGES ===== -->
+<div class="pp-card" style="margin-bottom:20px;" id="caregiver-messages-card">
+    <div class="pp-card-header">
+        <h3><i class="fa-solid fa-comment-medical"></i> Caregiver Messages</h3>
+        <span id="cg-open-count" style="font-size:0.78rem;color:#888;"></span>
+    </div>
+    <div class="pp-card-body" id="cg-messages-body" style="padding:12px;">
+        <p style="color:#999;font-size:0.9rem;">Loading...</p>
+    </div>
+</div>
+
+<script>
+(function loadCaregiverMessages() {
+    const patientId = {{ patient.id }};
+    fetch('/api/caregiver/messages/' + patientId)
+        .then(r => r.json())
+        .then(data => {
+            const body = document.getElementById('cg-messages-body');
+            const countEl = document.getElementById('cg-open-count');
+            if (!data.ok || !data.messages.length) {
+                body.innerHTML = '<p style="color:#999;text-align:center;padding:16px;">No caregiver messages for this patient.</p>';
+                return;
+            }
+            const open = data.messages.filter(m => m.status === 'open').length;
+            countEl.textContent = open + ' open';
+            let html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+            data.messages.forEach(m => {
+                const badgeColor = m.message_type === 'complaint' ? '#fde8e8;color:#b91c1c' : m.message_type === 'encouragement' ? '#ede9fe;color:#7c3aed' : '#dbeafe;color:#1d4ed8';
+                const statusColor = m.status === 'open' ? '#fff3cd;color:#856404' : '#d4edda;color:#155724';
+                html += `<div style="padding:12px 14px;border-radius:6px;border:1px solid #e5e7eb;background:${m.status==='open'?'#fffbeb':'#f9fafb'}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <div>
+                            <strong style="font-size:0.9rem;">${m.caregiver_name}</strong>
+                            <span style="margin-left:8px;padding:2px 8px;border-radius:10px;font-size:0.73rem;font-weight:600;background:${badgeColor}">${m.message_type.charAt(0).toUpperCase()+m.message_type.slice(1)}</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:0.75rem;color:#9ca3af;">${(m.created_at||'').slice(0,16)}</span>
+                            <span style="padding:2px 8px;border-radius:10px;font-size:0.73rem;font-weight:600;background:${statusColor}">${m.status.charAt(0).toUpperCase()+m.status.slice(1)}</span>
+                        </div>
+                    </div>
+                    <p style="margin:0;font-size:0.9rem;color:#374151;">${m.message}</p>
+                    ${m.resolved_note ? `<p style="margin:6px 0 0;font-size:0.8rem;color:#6b7280;"><strong>Response:</strong> ${m.resolved_note}${m.resolved_by_name ? ' — <em>'+m.resolved_by_name+'</em>' : ''}</p>` : ''}
+                    ${m.status === 'open' ? `
+                    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
+                        <input type="text" id="note-${m.id}" placeholder="Optional response note..."
+                               style="flex:1;padding:6px 10px;border:1px solid #d1d5db;border-radius:4px;font-size:0.85rem;">
+                        <button onclick="resolveMessage(${m.id})"
+                                style="padding:5px 14px;background:#6366f1;color:white;border:none;border-radius:4px;font-size:0.85rem;cursor:pointer;">
+                            Resolve
+                        </button>
+                    </div>` : ''}
+                </div>`;
+            });
+            html += '</div>';
+            body.innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById('cg-messages-body').innerHTML = '<p style="color:#ef4444;">Failed to load messages.</p>';
+        });
+})();
+
+function resolveMessage(msgId) {
+    const note = (document.getElementById('note-' + msgId).value || '').trim();
+    fetch('/api/caregiver/message/' + msgId + '/resolve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({note})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) location.reload();
+        else alert('Error: ' + d.error);
+    });
 }
 </script>
 

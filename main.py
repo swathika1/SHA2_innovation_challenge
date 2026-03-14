@@ -81,6 +81,34 @@ except Exception as _re:
     REPORT_AVAILABLE = False
     print(f"[WARNING] PDF report generator not available: {_re}")
 
+# ── Email notifications ──────────────────────────────────────────────────────
+import smtplib
+import threading
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+EMAIL_SENDER = os.environ.get("NOTIFY_EMAIL_SENDER", "spaamkumar81@gmail.com")
+EMAIL_PASSWORD = os.environ.get("NOTIFY_EMAIL_PASSWORD", "")
+EMAIL_ENABLED = bool(EMAIL_PASSWORD)
+
+def _send_email(to_address: str, subject: str, body: str):
+    """Send a plain-text email via Gmail SMTP. Silently skips if not configured."""
+    if not EMAIL_ENABLED:
+        print(f"[EMAIL] Skipped (no password configured): {subject} → {to_address}")
+        return
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = EMAIL_SENDER
+        msg["To"] = to_address
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, to_address, msg.as_string())
+        print(f"[EMAIL] Sent '{subject}' → {to_address}")
+    except Exception as _e:
+        print(f"[EMAIL] Failed to send to {to_address}: {_e}")
+
 try:
     from reinjury_risk import analyze_patient_risk
     REINJURY_RISK_AVAILABLE = True
@@ -578,7 +606,8 @@ def login():
             password_match = check_password_hash(user['password'], password)
             
             if password_match:
-                # Login successful - store user info in session
+                # Login successful — clear any stale data from previous user first
+                session.clear()
                 session['user_id'] = user['id']
                 session['user_name'] = user['name']
                 session['role'] = user['role']
@@ -631,11 +660,12 @@ def api_login():
     if not password_match:
         return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
     
-    # Store in session
+    # Store in session — clear stale data from previous user first
+    session.clear()
     session['user_id'] = user['id']
     session['user_name'] = user['name']
     session['role'] = user['role']
-    
+
     # Log login to login_history table
     execute_db(
         'INSERT INTO login_history (user_id, name, email, role) VALUES (?, ?, ?, ?)',
@@ -1115,6 +1145,7 @@ def patient_dashboard():
                             upcoming_appointments=upcoming_appointments if upcoming_appointments else [],
                             caregivers=caregivers if caregivers else [],
                             pending_caregiver_requests=pending_requests if pending_requests else [],
+                            session_user_id=session['user_id'],
                             total_sessions=total_sessions['count'] if total_sessions else 0,
                             sessions_this_week=sessions_this_week['count'] if sessions_this_week else 0,
                             today_completed=today_completed,
@@ -1409,6 +1440,432 @@ def api_session_report(session_id):
 
     response = make_response(pdf_bytes)
     fname = f"rehab_session_{session_id}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{fname}"'
+    return response
+
+
+@app.route('/api/session/report/doctor/<int:session_id>')
+@login_required
+@role_required('doctor')
+def api_session_report_doctor(session_id):
+    """Generate an enhanced PDF clinician report for the assigned doctor."""
+    import json as _json, io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    from reportlab.graphics.shapes import Drawing, Line, String, Rect, Circle
+    from reportlab.graphics import renderPDF
+
+    doctor_id = session['user_id']
+
+    # ── Auth ────────────────────────────────────────────────────────────────
+    sess = query_db('SELECT * FROM sessions WHERE id = ?', (session_id,), one=True)
+    if not sess:
+        return jsonify({"error": "Session not found"}), 404
+
+    patient_id = sess['patient_id']
+    assigned = query_db(
+        'SELECT 1 FROM doctor_patient WHERE doctor_id = ? AND patient_id = ?',
+        (doctor_id, patient_id), one=True
+    )
+    if not assigned:
+        return jsonify({"error": "Not authorised to view this patient's report"}), 403
+
+    # ── Patient info ─────────────────────────────────────────────────────────
+    user_row = query_db('SELECT name, email, dob FROM users WHERE id = ?', (patient_id,), one=True)
+    pat_row  = query_db(
+        'SELECT condition, current_week, adherence_rate, streak_days, completed_sessions, avg_pain_level FROM patients WHERE user_id = ?',
+        (patient_id,), one=True
+    )
+    patient_name      = user_row['name'] if user_row else 'Patient'
+    patient_condition = pat_row['condition'] if pat_row else 'General'
+    current_week      = pat_row['current_week'] if pat_row else 1
+    adherence         = float(pat_row['adherence_rate'] or 0) if pat_row else 0
+    streak_days       = int(pat_row['streak_days'] or 0) if pat_row else 0
+    total_sessions    = int(pat_row['completed_sessions'] or 0) if pat_row else 0
+    avg_pain          = float(pat_row['avg_pain_level'] or 0) if pat_row else 0
+
+    # Age from DOB
+    patient_age = '—'
+    if user_row and user_row['dob']:
+        try:
+            dob = date.fromisoformat(user_row['dob'])
+            patient_age = str((date.today() - dob).days // 365)
+        except Exception:
+            pass
+
+    # ── This session's exercises ──────────────────────────────────────────────
+    exercises_raw = query_db('''
+        SELECT se.*, COALESCE(se.exercise_name, e.name) as exercise_name
+        FROM session_exercises se
+        LEFT JOIN workouts w ON se.workout_id = w.id
+        LEFT JOIN exercises e ON w.exercise_id = e.id
+        WHERE se.session_id = ?
+        ORDER BY se.exercise_start_time
+    ''', (session_id,))
+
+    exercise_rows = []
+    for ex in (exercises_raw or []):
+        req  = _json.loads(ex['sets_required'])  if ex['sets_required']  else {}
+        comp = _json.loads(ex['sets_completed']) if ex['sets_completed'] else {}
+        total_req  = sum(int(v) for v in req.values())
+        total_comp = sum(int(v) for v in comp.values())
+        qs = int(ex['quality_score'] or 0)
+        exercise_rows.append([
+            ex['exercise_name'] or '—',
+            str(total_req),
+            str(total_comp),
+            f"{qs}/100",
+        ])
+
+    # ── Historical sessions (last 10) for trend charts ───────────────────────
+    history = query_db('''
+        SELECT quality_score, completed_perc, pain_before, pain_after,
+               effort_level, completed_at
+        FROM sessions
+        WHERE patient_id = ? AND completed_at IS NOT NULL
+        ORDER BY completed_at DESC LIMIT 10
+    ''', (patient_id,))
+    history = list(reversed(history or []))   # oldest → newest
+
+    trend_quality  = [float(r['quality_score']  or 0) for r in history]
+    trend_pain_b   = [float(r['pain_before']    or 0) for r in history]
+    trend_pain_a   = [float(r['pain_after']     or 0) for r in history]
+    trend_labels   = [(r['completed_at'] or '')[:10]   for r in history]
+
+    # ── Re-injury risk ────────────────────────────────────────────────────────
+    risk = None
+    if REINJURY_RISK_AVAILABLE:
+        try:
+            risk = analyze_patient_risk(patient_id, query_db)
+        except Exception:
+            pass
+
+    # ── Pending adaptive plan suggestions ────────────────────────────────────
+    pending_suggestions = query_db('''
+        SELECT aps.suggested_change, aps.reason, aps.severity,
+               aps.suggested_sets, aps.suggested_reps, aps.suggested_frequency,
+               e.name as exercise_name
+        FROM adaptive_plan_suggestions aps
+        LEFT JOIN workouts w ON aps.workout_id = w.id
+        LEFT JOIN exercises e ON w.exercise_id = e.id
+        WHERE aps.patient_id = ? AND aps.status = \'pending\'
+        ORDER BY aps.severity DESC, aps.created_at DESC
+        LIMIT 5
+    ''', (patient_id,))
+
+    # ── Recent clinician notes ────────────────────────────────────────────────
+    clinician_notes = query_db('''
+        SELECT cn.note_text, cn.created_at, u.name as doctor_name
+        FROM clinician_notes cn
+        JOIN users u ON cn.doctor_id = u.id
+        WHERE cn.patient_id = ?
+        ORDER BY cn.created_at DESC LIMIT 3
+    ''', (patient_id,))
+
+    # ── AI clinical summary via Groq ─────────────────────────────────────────
+    ai_summary = ""
+    try:
+        from groq import Groq as _Groq
+        _groq = _Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+        ex_names   = ", ".join(r[0] for r in exercise_rows) or "general exercises"
+        risk_line  = f"Re-injury risk: {risk['risk_label']} ({risk['risk_score']}/12). " if risk and risk.get('has_data') else ""
+        _resp = _groq.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[{"role": "user", "content":
+                f"Write a 2-sentence clinical summary for a doctor reviewing a rehab session. "
+                f"Patient: {patient_name}, Condition: {patient_condition}, Week {current_week}. "
+                f"Session quality: {int(sess['quality_score'] or 0)}/100, "
+                f"Pain before: {sess['pain_before']}/10, Pain after: {sess['pain_after']}/10, "
+                f"Adherence: {int(adherence)}%, Streak: {streak_days} days. "
+                f"{risk_line}"
+                f"Exercises: {ex_names}. No markdown, no bullet points."}],
+            max_tokens=120,
+        )
+        ai_summary = _resp.choices[0].message.content.strip()
+    except Exception:
+        pass
+
+    # ════════════════════════════════════════════════════════════════════════
+    # PDF BUILD
+    # ════════════════════════════════════════════════════════════════════════
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=18*mm, rightMargin=18*mm,
+                            topMargin=18*mm, bottomMargin=18*mm)
+    styles = getSampleStyleSheet()
+
+    NAVY   = colors.HexColor('#1e3a5f')
+    BLUE_L = colors.HexColor('#f0f4f8')
+    GRID_C = colors.HexColor('#d0d8e0')
+    STRIPE = colors.HexColor('#f7f9fb')
+
+    h1  = ParagraphStyle('H1',  parent=styles['Heading1'], fontSize=17, textColor=NAVY, spaceAfter=2)
+    h3  = ParagraphStyle('H3',  parent=styles['Heading3'], fontSize=11, textColor=NAVY, spaceBefore=4, spaceAfter=2)
+    sm  = ParagraphStyle('Sm',  parent=styles['Normal'],   fontSize=8.5, textColor=colors.grey)
+    nrm = ParagraphStyle('Nrm', parent=styles['Normal'],   fontSize=10)
+    ctr = ParagraphStyle('Ctr', parent=styles['Normal'],   fontSize=10, alignment=TA_CENTER)
+
+    def section(title):
+        return [Paragraph(title, h3), HRFlowable(width='100%', thickness=0.5, color=GRID_C, spaceAfter=3)]
+
+    def kv_table(rows, col_w=None):
+        col_w = col_w or [40*mm, 55*mm, 40*mm, 38*mm]
+        t = Table(rows, colWidths=col_w)
+        t.setStyle(TableStyle([
+            ('FONTNAME',      (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE',      (0, 0), (-1, -1), 10),
+            ('FONTNAME',      (0, 0), (0, -1),  'Helvetica-Bold'),
+            ('FONTNAME',      (2, 0), (2, -1),  'Helvetica-Bold'),
+            ('ROWBACKGROUNDS',(0, 0), (-1, -1),  [BLUE_L, colors.white]),
+            ('GRID',          (0, 0), (-1, -1),  0.4, GRID_C),
+            ('TOPPADDING',    (0, 0), (-1, -1),  4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1),  4),
+            ('LEFTPADDING',   (0, 0), (-1, -1),  6),
+        ]))
+        return t
+
+    story = []
+
+    # ── Header ───────────────────────────────────────────────────────────────
+    story.append(Paragraph("Clinician Session Report", h1))
+    story.append(Spacer(1, 1*mm))
+
+    # ── Patient & session meta ────────────────────────────────────────────────
+    session_date = (sess['completed_at'] or sess['started_at'] or '')[:10]
+    meta = [
+        ["Patient",       patient_name,                    "Date",          session_date],
+        ["Age",           patient_age,                     "Condition",     patient_condition],
+        ["Recovery Week", str(current_week),               "Total Sessions",str(total_sessions)],
+        ["Pain Before",   f"{sess['pain_before']}/10",     "Pain After",    f"{sess['pain_after']}/10"],
+        ["Quality Score", f"{int(sess['quality_score'] or 0)}/100",
+         "Adherence",     f"{int(adherence)}%"],
+        ["Streak",        f"{streak_days} days",           "Avg Pain (all)",f"{avg_pain:.1f}/10"],
+    ]
+    story.append(kv_table(meta))
+    story.append(Spacer(1, 5*mm))
+
+    # ── Exercise breakdown ────────────────────────────────────────────────────
+    if exercise_rows:
+        story += section("Exercise Breakdown")
+        hdr = [["Exercise", "Sets Required", "Sets Completed", "Quality"]]
+        ex_t = Table(hdr + exercise_rows, colWidths=[78*mm, 33*mm, 36*mm, 26*mm])
+        ex_t.setStyle(TableStyle([
+            ('FONTNAME',      (0, 0), (-1, 0),  'Helvetica-Bold'),
+            ('FONTSIZE',      (0, 0), (-1, -1), 10),
+            ('BACKGROUND',    (0, 0), (-1, 0),   NAVY),
+            ('TEXTCOLOR',     (0, 0), (-1, 0),   colors.white),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1),  [colors.white, STRIPE]),
+            ('GRID',          (0, 0), (-1, -1),  0.4, GRID_C),
+            ('ALIGN',         (1, 0), (-1, -1),  'CENTER'),
+            ('TOPPADDING',    (0, 0), (-1, -1),  4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1),  4),
+            ('LEFTPADDING',   (0, 0), (-1, -1),  6),
+        ]))
+        story.append(ex_t)
+        story.append(Spacer(1, 5*mm))
+
+    # ── Quality score trend chart (last 10 sessions) ──────────────────────────
+    if len(trend_quality) >= 2:
+        story += section("Quality Score Trend (Last 10 Sessions)")
+        chart_w, chart_h = 173*mm, 45*mm
+        d = Drawing(chart_w, chart_h)
+
+        # axes
+        pad_l, pad_r, pad_b, pad_t = 8*mm, 4*mm, 6*mm, 4*mm
+        plot_w = chart_w - pad_l - pad_r
+        plot_h = chart_h - pad_b - pad_t
+
+        # background
+        d.add(Rect(pad_l, pad_b, plot_w, plot_h,
+                   fillColor=colors.HexColor('#f8fafc'), strokeColor=GRID_C, strokeWidth=0.5))
+
+        # horizontal gridlines at 0, 25, 50, 75, 100
+        for yv in [0, 25, 50, 75, 100]:
+            y_px = pad_b + (yv / 100.0) * plot_h
+            d.add(Line(pad_l, y_px, pad_l + plot_w, y_px,
+                       strokeColor=GRID_C, strokeWidth=0.4))
+            d.add(String(pad_l - 1*mm, y_px - 1.5*mm, str(yv),
+                         fontSize=6, fillColor=colors.grey, textAnchor='end'))
+
+        n = len(trend_quality)
+        xs = [pad_l + i / max(n - 1, 1) * plot_w for i in range(n)]
+        ys = [pad_b + (v / 100.0) * plot_h for v in trend_quality]
+
+        # fill area under line
+        from reportlab.graphics.shapes import Polygon
+        poly_pts = [pad_l, pad_b]
+        for x, y in zip(xs, ys):
+            poly_pts += [x, y]
+        poly_pts += [xs[-1], pad_b]
+        d.add(Polygon(poly_pts,
+                      fillColor=colors.HexColor('#dbeafe'), strokeColor=None, strokeWidth=0))
+
+        # line segments
+        for i in range(n - 1):
+            clr = colors.HexColor('#2563eb') if trend_quality[i + 1] >= trend_quality[i] else colors.HexColor('#ef4444')
+            d.add(Line(xs[i], ys[i], xs[i + 1], ys[i + 1],
+                       strokeColor=clr, strokeWidth=1.5))
+
+        # dots + value labels
+        for i, (x, y, v) in enumerate(zip(xs, ys, trend_quality)):
+            dot_color = colors.HexColor('#1d4ed8')
+            if i == n - 1:   # current session highlighted
+                dot_color = colors.HexColor('#16a34a') if v >= 60 else colors.HexColor('#dc2626')
+            d.add(Circle(x, y, 2.2*mm, fillColor=dot_color, strokeColor=colors.white, strokeWidth=0.8))
+            d.add(String(x, y + 3*mm, str(int(v)),
+                         fontSize=6.5, fillColor=NAVY, textAnchor='middle'))
+
+        # x-axis date labels (every other label if many)
+        step = 2 if n > 6 else 1
+        for i in range(0, n, step):
+            lbl = trend_labels[i][5:] if len(trend_labels[i]) >= 10 else trend_labels[i]
+            d.add(String(xs[i], pad_b - 4*mm, lbl,
+                         fontSize=6, fillColor=colors.grey, textAnchor='middle'))
+
+        story.append(d)
+        story.append(Spacer(1, 4*mm))
+
+    # ── Pain trend table ──────────────────────────────────────────────────────
+    if len(history) >= 2:
+        story += section("Pain Trend (Last Sessions)")
+        pain_hdr = [["Date", "Pain Before", "Pain After", "Change", "Quality"]]
+        pain_rows = []
+        for r in history[-6:]:
+            pb  = int(r['pain_before']  or 0)
+            pa  = int(r['pain_after']   or 0)
+            qs  = int(r['quality_score']or 0)
+            chg = pa - pb
+            chg_str = (f"↓ {abs(chg)}" if chg < 0 else (f"↑ {chg}" if chg > 0 else "—"))
+            pain_rows.append([
+                (r['completed_at'] or '')[:10],
+                f"{pb}/10", f"{pa}/10", chg_str, f"{qs}/100"
+            ])
+        pain_t = Table(pain_hdr + pain_rows, colWidths=[36*mm, 30*mm, 30*mm, 28*mm, 28*mm])
+        pain_t.setStyle(TableStyle([
+            ('FONTNAME',      (0, 0), (-1, 0),  'Helvetica-Bold'),
+            ('FONTSIZE',      (0, 0), (-1, -1), 9.5),
+            ('BACKGROUND',    (0, 0), (-1, 0),   NAVY),
+            ('TEXTCOLOR',     (0, 0), (-1, 0),   colors.white),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1),  [colors.white, STRIPE]),
+            ('GRID',          (0, 0), (-1, -1),  0.4, GRID_C),
+            ('ALIGN',         (1, 0), (-1, -1),  'CENTER'),
+            ('TOPPADDING',    (0, 0), (-1, -1),  4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1),  4),
+            ('LEFTPADDING',   (0, 0), (-1, -1),  6),
+        ]))
+        story.append(pain_t)
+        story.append(Spacer(1, 5*mm))
+
+    # ── Re-injury risk ────────────────────────────────────────────────────────
+    if risk and risk.get('has_data'):
+        story += section("Re-Injury Risk Assessment")
+        level  = risk['risk_level']
+        label  = risk['risk_label']
+        score  = risk['risk_score']
+        RISK_COLORS = {
+            'green':  colors.HexColor('#dcfce7'),
+            'yellow': colors.HexColor('#fef9c3'),
+            'orange': colors.HexColor('#ffedd5'),
+            'red':    colors.HexColor('#fee2e2'),
+        }
+        RISK_TEXT = {
+            'green':  colors.HexColor('#166534'),
+            'yellow': colors.HexColor('#854d0e'),
+            'orange': colors.HexColor('#9a3412'),
+            'red':    colors.HexColor('#991b1b'),
+        }
+        risk_bg   = RISK_COLORS.get(level, BLUE_L)
+        risk_text = RISK_TEXT.get(level,  NAVY)
+
+        risk_row = Table(
+            [[Paragraph(f"<b>{label}</b>  (Score: {score}/12)", ParagraphStyle('R', parent=styles['Normal'], fontSize=11, textColor=risk_text))]],
+            colWidths=[173*mm]
+        )
+        risk_row.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, -1), risk_bg),
+            ('TOPPADDING',    (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 10),
+            ('ROUNDEDCORNERS',[3]),
+        ]))
+        story.append(risk_row)
+        story.append(Spacer(1, 2*mm))
+
+        # Signal details
+        if risk.get('signal_details'):
+            for sig in risk['signal_details']:
+                story.append(Paragraph(f"• {sig}", ParagraphStyle('Sig', parent=styles['Normal'], fontSize=9.5, leftIndent=6)))
+        story.append(Spacer(1, 2*mm))
+        story.append(Paragraph(risk.get('explanation', ''), nrm))
+        story.append(Spacer(1, 5*mm))
+
+    # ── Pending adaptive suggestions ─────────────────────────────────────────
+    if pending_suggestions:
+        story += section(f"Pending Adaptive Plan Suggestions ({len(pending_suggestions)})")
+        sug_hdr = [["Exercise", "Severity", "Suggested Change"]]
+        sug_rows = []
+        for s in pending_suggestions:
+            sev = (s['severity'] or '').capitalize()
+            change = s['suggested_change'] or s['reason'] or '—'
+            if len(change) > 70:
+                change = change[:70] + '…'
+            sug_rows.append([s['exercise_name'] or '—', sev, change])
+        sug_t = Table(sug_hdr + sug_rows, colWidths=[42*mm, 24*mm, 107*mm])
+        sug_t.setStyle(TableStyle([
+            ('FONTNAME',      (0, 0), (-1, 0),  'Helvetica-Bold'),
+            ('FONTSIZE',      (0, 0), (-1, -1), 9.5),
+            ('BACKGROUND',    (0, 0), (-1, 0),   NAVY),
+            ('TEXTCOLOR',     (0, 0), (-1, 0),   colors.white),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1),  [colors.white, STRIPE]),
+            ('GRID',          (0, 0), (-1, -1),  0.4, GRID_C),
+            ('TOPPADDING',    (0, 0), (-1, -1),  4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1),  4),
+            ('LEFTPADDING',   (0, 0), (-1, -1),  6),
+            ('WORDWRAP',      (2, 0), (2, -1),   'LTR'),
+        ]))
+        story.append(sug_t)
+        story.append(Spacer(1, 5*mm))
+
+    # ── Recent clinician notes ────────────────────────────────────────────────
+    if clinician_notes:
+        story += section("Recent Clinician Notes")
+        for note in clinician_notes:
+            ts  = (note['created_at'] or '')[:16]
+            doc_name = note['doctor_name'] or 'Unknown'
+            story.append(Paragraph(
+                f"<b>{doc_name}</b> <font size='8' color='grey'>— {ts}</font>",
+                ParagraphStyle('NoteHdr', parent=styles['Normal'], fontSize=9.5)
+            ))
+            story.append(Paragraph(note['note_text'], ParagraphStyle('NoteTxt', parent=styles['Normal'], fontSize=9.5, leftIndent=6)))
+            story.append(Spacer(1, 2*mm))
+        story.append(Spacer(1, 3*mm))
+
+    # ── AI clinical summary ───────────────────────────────────────────────────
+    if ai_summary:
+        story += section("Clinical Summary (AI-Assisted)")
+        story.append(Paragraph(ai_summary, nrm))
+        story.append(Spacer(1, 4*mm))
+
+    # ── Disclaimer ───────────────────────────────────────────────────────────
+    story.append(HRFlowable(width='100%', thickness=0.5, color=GRID_C))
+    story.append(Spacer(1, 2*mm))
+    story.append(Paragraph(
+        "This report is auto-generated for clinical reference only. "
+        "Always apply clinical judgement when reviewing patient progress. "
+        f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        sm
+    ))
+
+    doc.build(story)
+    pdf_bytes = buf.getvalue()
+
+    response = make_response(pdf_bytes)
+    fname = f"clinician_report_{patient_name.replace(' ','_')}_session{session_id}_{datetime.now().strftime('%Y%m%d')}.pdf"
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = f'attachment; filename="{fname}"'
     return response
@@ -2769,13 +3226,24 @@ def caregiver_dashboard():
     first_patient_id = patients_list[0]['id'] if patients_list else None
     caregiver_patient_list = [{'id': p['id'], 'name': p['name']} for p in patients_list]
 
+    # Fetch open messages submitted by this caregiver
+    my_messages = query_db('''
+        SELECT cm.*, u.name as patient_name
+        FROM caregiver_messages cm
+        JOIN users u ON cm.patient_id = u.id
+        WHERE cm.caregiver_id = ?
+        ORDER BY cm.created_at DESC
+        LIMIT 20
+    ''', (session['user_id'],))
+
     return render_template('caregiver/dashboard.html',
                          patients=patients_list,
                          recent_sessions=recent_sessions if recent_sessions else [],
                          alerts=alerts,
                          my_requests=my_pending_requests if my_pending_requests else [],
                          chat_patient_id=first_patient_id,
-                         caregiver_patient_list=caregiver_patient_list)
+                         caregiver_patient_list=caregiver_patient_list,
+                         my_messages=my_messages if my_messages else [])
 
 
 # ==================== CAREGIVER ACCESS MANAGEMENT ====================
@@ -2986,6 +3454,115 @@ def reject_caregiver_request(request_id):
 
     flash('Caregiver request rejected.', 'success')
     return redirect(request.referrer or url_for('landing'))
+
+
+# ==================== CAREGIVER MESSAGES ====================
+
+@app.route('/api/caregiver/message', methods=['POST'])
+@login_required
+@role_required('caregiver')
+def caregiver_submit_message():
+    """Caregiver submits a complaint or query for a patient."""
+    data = request.get_json(force=True) or {}
+    patient_id = data.get('patient_id')
+    message_type = data.get('message_type', 'query')
+    message = (data.get('message') or '').strip()
+
+    if not patient_id or not message:
+        return jsonify({'ok': False, 'error': 'patient_id and message are required'}), 400
+    if message_type not in ('complaint', 'query', 'encouragement'):
+        return jsonify({'ok': False, 'error': 'message_type must be complaint, query, or encouragement'}), 400
+
+    # Verify caregiver monitors this patient
+    link = query_db(
+        'SELECT 1 FROM caregiver_patient WHERE caregiver_id = ? AND patient_id = ?',
+        (session['user_id'], patient_id), one=True
+    )
+    if not link:
+        return jsonify({'ok': False, 'error': 'Not authorised for this patient'}), 403
+
+    execute_db(
+        'INSERT INTO caregiver_messages (caregiver_id, patient_id, message_type, message) VALUES (?, ?, ?, ?)',
+        (session['user_id'], patient_id, message_type, message)
+    )
+    return jsonify({'ok': True})
+
+
+@app.route('/api/caregiver/messages/<int:patient_id>')
+@login_required
+def get_caregiver_messages(patient_id):
+    """Get caregiver messages for a patient. Accessible by the patient, assigned doctor, or caregivers."""
+    role = session.get('role')
+    uid = session['user_id']
+
+    if role == 'patient' and uid != patient_id:
+        return jsonify({'ok': False, 'error': 'Forbidden'}), 403
+    if role == 'doctor':
+        assigned = query_db(
+            'SELECT 1 FROM doctor_patient WHERE doctor_id = ? AND patient_id = ?',
+            (uid, patient_id), one=True
+        )
+        if not assigned:
+            return jsonify({'ok': False, 'error': 'Forbidden'}), 403
+    if role == 'caregiver':
+        link = query_db(
+            'SELECT 1 FROM caregiver_patient WHERE caregiver_id = ? AND patient_id = ?',
+            (uid, patient_id), one=True
+        )
+        if not link:
+            return jsonify({'ok': False, 'error': 'Forbidden'}), 403
+
+    messages = query_db('''
+        SELECT cm.id, cm.message_type, cm.message, cm.status,
+               cm.created_at, cm.resolved_at, cm.resolved_note,
+               u.name as caregiver_name,
+               ru.name as resolved_by_name
+        FROM caregiver_messages cm
+        JOIN users u ON cm.caregiver_id = u.id
+        LEFT JOIN users ru ON cm.resolved_by = ru.id
+        WHERE cm.patient_id = ?
+        ORDER BY cm.created_at DESC
+    ''', (patient_id,))
+
+    return jsonify({'ok': True, 'messages': [dict(m) for m in (messages or [])]})
+
+
+@app.route('/api/caregiver/message/<int:msg_id>/resolve', methods=['POST'])
+@login_required
+def resolve_caregiver_message(msg_id):
+    """Resolve a caregiver message. Doctor or patient can resolve."""
+    role = session.get('role')
+    if role not in ('doctor', 'patient'):
+        return jsonify({'ok': False, 'error': 'Only doctors or patients can resolve messages'}), 403
+
+    data = request.get_json(force=True) or {}
+    resolved_note = (data.get('note') or '').strip()
+
+    msg = query_db('SELECT * FROM caregiver_messages WHERE id = ?', (msg_id,), one=True)
+    if not msg:
+        return jsonify({'ok': False, 'error': 'Message not found'}), 404
+
+    uid = session['user_id']
+    patient_id = msg['patient_id']
+
+    if role == 'patient' and uid != patient_id:
+        return jsonify({'ok': False, 'error': 'Forbidden'}), 403
+    if role == 'doctor':
+        assigned = query_db(
+            'SELECT 1 FROM doctor_patient WHERE doctor_id = ? AND patient_id = ?',
+            (uid, patient_id), one=True
+        )
+        if not assigned:
+            return jsonify({'ok': False, 'error': 'Forbidden'}), 403
+
+    execute_db(
+        """UPDATE caregiver_messages
+           SET status = 'resolved', resolved_by = ?, resolved_note = ?,
+               resolved_at = CURRENT_TIMESTAMP
+           WHERE id = ?""",
+        (uid, resolved_note, msg_id)
+    )
+    return jsonify({'ok': True})
 
 
 # ==================== ROLE SELECTION ====================
@@ -3723,6 +4300,9 @@ def api_session_complete():
     except Exception as e:
         print(f"[WARN] Adaptive suggestion auto-trigger failed: {e}")
 
+    # Recalculate adherence after every completed session
+    recalculate_adherence(session['user_id'])
+
     return jsonify({'ok': True, 'session_id': session_id})
 
 
@@ -3961,12 +4541,17 @@ def api_chat():
 
     message = data['message']
 
-    # Use server-side session to persist conversation history across page navigations
+    role = session.get('role')
+    user_id = session['user_id']
+
+    # Guard: reset chat history if it belongs to a different user
+    if session.get('chat_owner') != user_id:
+        session['chat_history'] = []
+        session['chat_owner'] = user_id
+
     if 'chat_history' not in session:
         session['chat_history'] = []
     conversation_history = session['chat_history']
-    role = session.get('role')
-    user_id = session['user_id']
 
     # Determine which patient we're chatting about
     if role == 'patient':
@@ -4649,6 +5234,25 @@ def ensure_tables_exist():
             )
     print(f"[INIT] Exercises table seeded with {len(CANONICAL_EXERCISES)} canonical exercises")
 
+    # Caregiver messages (complaints & queries)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS caregiver_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            caregiver_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            message_type TEXT NOT NULL CHECK(message_type IN ('complaint', 'query', 'encouragement')),
+            message TEXT NOT NULL,
+            status TEXT DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
+            resolved_by INTEGER,
+            resolved_note TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TIMESTAMP,
+            FOREIGN KEY (caregiver_id) REFERENCES users(id),
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            FOREIGN KEY (resolved_by) REFERENCES users(id)
+        )
+    ''')
+
     conn.commit()
     conn.close()
 
@@ -4671,6 +5275,165 @@ def _mark_missed_appointments():
         """)
 
 _mark_missed_appointments()
+
+
+def _run_daily_notifications():
+    """
+    Background thread: runs once per day.
+    Sends email alerts for:
+      1. Patients who have missed 2+ consecutive expected session days.
+      2. Patients with an appointment tomorrow.
+    """
+    import time as _time
+
+    def _check():
+        with app.app_context():
+            try:
+                # ── 1. Missed sessions (2+ consecutive missed days) ──────────────
+                patients = query_db('''
+                    SELECT u.id, u.name, u.email, p.adherence_rate
+                    FROM users u
+                    JOIN patients p ON u.id = p.user_id
+                    WHERE u.role = 'patient'
+                ''')
+                for pat in (patients or []):
+                    workouts = query_db(
+                        "SELECT frequency FROM workouts WHERE patient_id = ? AND is_active = 1",
+                        (pat['id'],)
+                    )
+                    if not workouts:
+                        continue
+                    # Find last 2 expected session days and check if any session was done
+                    max_freq = max(_parse_frequency_per_week(w['frequency']) for w in workouts)
+                    # If freq < 1/day, skip daily check — only flag if at least daily
+                    if max_freq < 1:
+                        continue
+                    missed = query_db('''
+                        SELECT COUNT(*) as cnt FROM sessions
+                        WHERE patient_id = ? AND completed_at IS NOT NULL
+                        AND completed_at >= date('now', '-2 days')
+                    ''', (pat['id'],), one=True)
+                    sessions_last_2d = int(missed['cnt']) if missed else 0
+                    if sessions_last_2d == 0 and pat['email']:
+                        _send_email(
+                            to_address=pat['email'],
+                            subject="Reminder: You've missed 2 rehab sessions",
+                            body=(
+                                f"Hi {pat['name']},\n\n"
+                                "We noticed you haven't completed a rehab session in the last 2 days. "
+                                "Staying consistent is key to your recovery!\n\n"
+                                "Please log in and complete your session when you can.\n\n"
+                                "— Your Rehab Coach Team"
+                            )
+                        )
+
+                # ── 2. Appointment reminders (tomorrow) ──────────────────────────
+                upcoming = query_db('''
+                    SELECT a.id, a.appointment_date, a.appointment_time,
+                           pu.name as patient_name, pu.email as patient_email,
+                           du.name as doctor_name
+                    FROM appointments a
+                    JOIN users pu ON a.patient_id = pu.id
+                    JOIN users du ON a.doctor_id = du.id
+                    WHERE a.status = 'scheduled'
+                    AND a.appointment_date = date('now', '+1 day')
+                ''')
+                for appt in (upcoming or []):
+                    if appt['patient_email']:
+                        _send_email(
+                            to_address=appt['patient_email'],
+                            subject="Reminder: Appointment tomorrow",
+                            body=(
+                                f"Hi {appt['patient_name']},\n\n"
+                                f"This is a reminder that you have an appointment tomorrow "
+                                f"({appt['appointment_date']}) at {appt['appointment_time']} "
+                                f"with Dr. {appt['doctor_name']}.\n\n"
+                                "Please log in to the platform or contact your clinic if you need to reschedule.\n\n"
+                                "— Your Rehab Coach Team"
+                            )
+                        )
+
+            except Exception as _e:
+                print(f"[NOTIFY] Daily notification check failed: {_e}")
+
+    def _loop():
+        while True:
+            _check()
+            _time.sleep(86400)  # run every 24 hours
+
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
+    print("[NOTIFY] Daily notification thread started")
+
+
+_run_daily_notifications()
+
+
+def _parse_frequency_per_week(freq_text: str) -> float:
+    """Parse a workout frequency string into sessions per week."""
+    if not freq_text:
+        return 3.0
+    f = freq_text.strip().lower()
+    if 'daily' in f or f == '7x per week':
+        return 7.0
+    if 'twice' in f or '2x' in f:
+        return 2.0
+    if 'once' in f or '1x' in f:
+        return 1.0
+    # handles "3x per week", "4x per week", "5x per week", etc.
+    import re as _re
+    m = _re.search(r'(\d+)\s*x', f)
+    if m:
+        return float(m.group(1))
+    return 3.0  # sensible default
+
+
+def recalculate_adherence(patient_id: int):
+    """
+    Recalculate and persist adherence_rate for a patient.
+
+    Formula (0–100):
+      50% — Recent performance: average of (completion_perc/100 + quality_score/100) / 2
+             across the last 3 completed sessions.
+      50% — Overall history: average quality_score / 100 across all completed sessions.
+
+    If fewer than 3 sessions exist the recent score uses whatever is available.
+    If no sessions at all, adherence stays unchanged.
+    """
+    try:
+        # ── Recent: last 3 sessions ──────────────────────────────────────────
+        recent = query_db(
+            """SELECT quality_score, completed_perc FROM sessions
+               WHERE patient_id = ? AND completed_at IS NOT NULL
+               ORDER BY completed_at DESC LIMIT 3""",
+            (patient_id,)
+        )
+        if not recent:
+            return  # no sessions yet — leave as-is
+
+        recent_scores = []
+        for r in recent:
+            comp = min(float(r['completed_perc'] or 0), 100.0) / 100.0
+            qual = min(float(r['quality_score'] or 0), 100.0) / 100.0
+            recent_scores.append((comp + qual) / 2.0)
+        recent_component = (sum(recent_scores) / len(recent_scores)) * 100.0
+
+        # ── Overall history: all sessions ────────────────────────────────────
+        overall = query_db(
+            """SELECT AVG(quality_score) as avg_q FROM sessions
+               WHERE patient_id = ? AND completed_at IS NOT NULL""",
+            (patient_id,), one=True
+        )
+        overall_component = min(float(overall['avg_q'] or 0), 100.0) if overall else 0.0
+
+        adherence = round(0.5 * recent_component + 0.5 * overall_component, 1)
+
+        execute_db(
+            "UPDATE patients SET adherence_rate = ? WHERE user_id = ?",
+            (adherence, patient_id)
+        )
+    except Exception as _e:
+        print(f"[WARN] recalculate_adherence failed for patient {patient_id}: {_e}")
 
 
 def assign_patient_exercises(patient_user_id, condition):
