@@ -210,12 +210,12 @@ def load_exercises_from_db():
             chunk = (
                 f"Exercise pattern: {p['name']} ({p['category'] or 'General'}) - "
                 f"Based on {p['session_count']} sessions, average quality score is "
-                f"{p['avg_quality']:.0f}/100 and average post-exercise pain is "
+                f"{p['avg_quality']:.0f}/50 and average post-exercise pain is "
                 f"{p['avg_pain']:.1f}/10. "
             )
             if p['avg_pain'] and p['avg_pain'] > 5:
                 chunk += "This exercise tends to cause significant pain and may need modification. "
-            if p['avg_quality'] and p['avg_quality'] < 50:
+            if p['avg_quality'] and p['avg_quality'] < 25:
                 chunk += "Patients often struggle with form on this exercise. "
             texts.append(chunk)
             metadatas.append({

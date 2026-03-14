@@ -1,21 +1,37 @@
 {% extends 'base.html' %}
 
-{% block title %}Caregiver Dashboard - Home Rehab Coach{% endblock %}
+{% block title %}Caregiver Dashboard - SHA2 Rehab Coach{% endblock %}
 
 {% block header %}
 <header class="header">
-    <h1>Caregiver Dashboard</h1>
+    <h1><a href="{{ url_for('caregiver_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="SHA2 Rehab Coach logo" class="brand-logo"> SHA2 Rehab Coach</a></h1>
     <nav class="nav-links">
-        <a href="{{ url_for('caregiver_dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('logout') }}">Logout</a>
+        <a href="{{ url_for('caregiver_dashboard') }}" class="active">Dashboard</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>{{ session.get('user_name', 'Caregiver') }}</strong></div>
+                    <a href="{{ url_for('caregiver_profile') }}"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
+                </div>
+            </div>
+        </div>
     </nav>
 </header>
 {% endblock %}
 
 {% block content %}
-<div class="dashboard-header">
-    <h2>Welcome, {{ session.user_name }}</h2>
-    <span>Monitoring {{ patients|length }} patient{{ 's' if patients|length != 1 else '' }}</span>
+<div class="dashboard-header caregiver-hero">
+    <div class="welcome-block">
+        <h2 class="welcome-greeting">Welcome, <span class="welcome-name">{{ session.get('user_name', 'Caregiver') }}</span></h2>
+        <div class="welcome-subtitle">
+            <span class="welcome-condition-badge"><i class="fa-solid fa-heart-pulse"></i> Caregiver</span>
+            <span class="welcome-separator">·</span>
+            <span class="welcome-detail"><i class="fa-solid fa-users-viewfinder"></i> Monitoring {{ patients|length }} patient{{ 's' if patients|length != 1 else '' }}</span>
+        </div>
+    </div>
 </div>
 
 <!-- Patient Cards -->
@@ -40,7 +56,7 @@
             </div>
             <div>
                 <span style="font-size: 1.4rem; font-weight: bold; color: #007bff;">
-                    {{ (p.avg_quality_score or 0)|round|int }}
+                    {{ (p.avg_quality_score or 0)|round|int }}/50
                 </span>
                 <div style="font-size: 0.75rem; color: #999;">Quality</div>
             </div>
@@ -103,14 +119,14 @@
                         min-width: 36px;
                         text-align: center;
                         font-size: 0.85rem;
-                        background: {% if (sess.pain_after or 0) >= 7 %}#f8d7da{% elif (sess.quality_score or 0) < 50 %}#fff3cd{% else %}#d4edda{% endif %};
+                        background: {% if (sess.pain_after or 0) >= 7 %}#f8d7da{% elif (sess.quality_score or 0) < 25 %}#fff3cd{% else %}#d4edda{% endif %};
                     ">
-                        {% if (sess.pain_after or 0) >= 7 %}!{% elif (sess.quality_score or 0) < 50 %}~{% else %}OK{% endif %}
+                        {% if (sess.pain_after or 0) >= 7 %}!{% elif (sess.quality_score or 0) < 25 %}~{% else %}OK{% endif %}
                     </div>
                     <div style="flex: 1;">
                         <strong>{{ sess.patient_name }}</strong> - {{ sess.exercise_name }}
                         <div style="font-size: 0.85rem; color: #666; margin-top: 3px;">
-                            Quality: {{ (sess.quality_score or 0)|round|int }}/100 |
+                            Quality: {{ (sess.quality_score or 0)|round|int }}/50 |
                             Pain: {{ sess.pain_after or 0 }}/10 |
                             Effort: {{ sess.effort_level or 0 }}/10
                         </div>
@@ -187,6 +203,25 @@
 </div>
 
 <style>
+.caregiver-hero {
+    padding: 24px 28px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.68), rgba(30, 41, 59, 0.58));
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+    margin-bottom: 24px;
+}
+.caregiver-hero .welcome-subtitle {
+    margin-top: 2px;
+}
+.caregiver-hero .welcome-detail {
+    color: #e2e8f0;
+}
+.caregiver-hero .welcome-condition-badge {
+    background: rgba(20, 184, 166, 0.18);
+    color: #99f6e4;
+    border: 1px solid rgba(45, 212, 191, 0.3);
+}
 .stats-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

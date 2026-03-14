@@ -1830,6 +1830,72 @@ def clinician_profile():
                          all_specialties=DOCTOR_SPECIALTIES)
 
 
+@app.route('/caregiver/profile')
+@login_required
+@role_required('caregiver')
+def caregiver_profile():
+    """Caregiver profile page."""
+    caregiver_id = session['user_id']
+
+    user_info = query_db(
+        'SELECT id, name, email, role, phone, pincode, dob, created_at FROM users WHERE id = ?',
+        (caregiver_id,), one=True
+    )
+
+    monitored_patients = query_db('''
+        SELECT
+            u.id, u.name, u.email, u.phone,
+            p.condition, p.adherence_rate, p.avg_pain_level,
+            p.avg_quality_score, p.streak_days,
+            cp.relationship
+        FROM caregiver_patient cp
+        JOIN users u ON cp.patient_id = u.id
+        JOIN patients p ON u.id = p.user_id
+        WHERE cp.caregiver_id = ?
+        ORDER BY u.name
+    ''', (caregiver_id,))
+    monitored_patients = monitored_patients if monitored_patients else []
+
+    my_requests = query_db('''
+        SELECT cr.id, cr.status, cr.requested_at, u.name as patient_name
+        FROM caregiver_requests cr
+        JOIN users u ON cr.patient_id = u.id
+        WHERE cr.caregiver_id = ?
+        ORDER BY
+            CASE cr.status
+                WHEN 'pending' THEN 0
+                WHEN 'approved' THEN 1
+                ELSE 2
+            END,
+            cr.requested_at DESC
+        LIMIT 20
+    ''', (caregiver_id,))
+    my_requests = my_requests if my_requests else []
+
+    total_patients = len(monitored_patients)
+    pending_requests = sum(1 for req in my_requests if req['status'] == 'pending')
+    avg_adherence = round(
+        sum((p['adherence_rate'] or 0) for p in monitored_patients) / total_patients, 1
+    ) if total_patients else 0
+
+    age = None
+    if user_info and user_info['dob']:
+        dob = date.fromisoformat(user_info['dob'])
+        today = date.today()
+        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
+    return render_template(
+        'caregiver/profile.html',
+        user_info=user_info,
+        monitored_patients=monitored_patients,
+        my_requests=my_requests,
+        total_patients=total_patients,
+        pending_requests=pending_requests,
+        avg_adherence=avg_adherence,
+        age=age,
+    )
+
+
 @app.route('/clinician/dashboard')
 @login_required
 @role_required('doctor')
@@ -2728,11 +2794,11 @@ def caregiver_dashboard():
                     'message': f"{s['patient_name']} reported pain level {s['pain_after']}/10 after {s['exercise_name']}",
                     'time': s['completed_at']
                 })
-            if s['quality_score'] is not None and s['quality_score'] < 50:
+            if s['quality_score'] is not None and s['quality_score'] < 25:
                 alerts.append({
                     'type': 'warning',
                     'title': 'Low Quality Session',
-                    'message': f"{s['patient_name']}'s form quality dropped to {int(s['quality_score'])} during {s['exercise_name']}",
+                    'message': f"{s['patient_name']}'s form quality dropped to {int(s['quality_score'])}/50 during {s['exercise_name']}",
                     'time': s['completed_at']
                 })
 
@@ -3686,13 +3752,13 @@ def api_session_complete():
             reason = None
             if avg_quality < 25 or completed_perc < 50:
                 severity = 'high'
-                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames) with low quality ({avg_quality}/100) or low completion ({completed_perc}%)'
+                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames) with low quality ({avg_quality}/50) or low completion ({completed_perc}%)'
             elif pain_after >= 7:
                 severity = 'high'
                 reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames) and high pain after session ({pain_after}/10)'
             elif avg_quality < 40:
                 severity = 'medium'
-                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames); quality below target ({avg_quality}/100)'
+                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames); quality below target ({avg_quality}/50)'
 
             if reason:
                 workout = query_db('''
@@ -4026,14 +4092,14 @@ Surgery Date: {patient_info['surgery_date'] or 'N/A'}
 Current Rehab Week: {patient_info['current_week']}
 Adherence Rate: {patient_info['adherence_rate']}%
 Avg Pain Level: {patient_info['avg_pain_level']}/10
-Avg Quality Score: {patient_info['avg_quality_score']}/100
+Avg Quality Score: {patient_info['avg_quality_score']}/50
 Completed Sessions: {patient_info['completed_sessions']}
 Streak Days: {patient_info['streak_days']}
 """
             if recent_sessions_db:
                 patient_context += "\nRecent Sessions:\n"
                 for s in recent_sessions_db:
-                    patient_context += f"- {s['exercise_name']}: Quality {s['quality_score']}, Pain {s['pain_after']}/10 ({s['completed_at']})\n"
+                    patient_context += f"- {s['exercise_name']}: Quality {s['quality_score']}/50, Pain {s['pain_after']}/10 ({s['completed_at']})\n"
 
         # Get workouts for exercise plan context
         workouts = query_db('''
@@ -4102,7 +4168,7 @@ Streak Days: {patient_info['streak_days']}
             patient_context += "\n=== FULL SESSION REPORTS (most recent 20) ===\n"
             for sess in all_sessions:
                 patient_context += f"\nSession #{sess['id']} ({sess['completed_at']}):\n"
-                patient_context += f"  Quality: {sess['quality_score']}/100, Completion: {sess['completed_perc']}%\n"
+                patient_context += f"  Quality: {sess['quality_score']}/50, Completion: {sess['completed_perc']}%\n"
                 patient_context += f"  Pain: {sess['pain_before']}/10 before → {sess['pain_after']}/10 after\n"
                 patient_context += f"  Effort Level: {sess['effort_level']}/10\n"
                 if sess['notes']:
@@ -4118,7 +4184,7 @@ Streak Days: {patient_info['streak_days']}
                 if sess_exercises:
                     for se in sess_exercises:
                         ex_name = se['exercise_name'] or 'Unknown'
-                        patient_context += f"    - {ex_name}: Quality {se['quality_score']}/100"
+                        patient_context += f"    - {ex_name}: Quality {se['quality_score']}/50"
                         if se['sets_required'] and se['sets_completed']:
                             patient_context += f", Sets required: {se['sets_required']}, completed: {se['sets_completed']}"
                         patient_context += "\n"

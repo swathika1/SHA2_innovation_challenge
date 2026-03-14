@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Clinician Dashboard - Home Rehab Coach{% endblock %}
+{% block title %}Clinician Dashboard - SHA2 Rehab Coach{% endblock %}
 
 {% block header %}
 <header class="header">
@@ -110,7 +110,7 @@
                     <span class="risk-flag high"><i class="fa-solid fa-triangle-exclamation"></i> Low Adherence</span>
                 {% elif patient.avg_pain_level and patient.avg_pain_level > 6 %}
                     <span class="risk-flag medium"><i class="fa-solid fa-triangle-exclamation"></i> Pain Spike</span>
-                {% elif patient.avg_quality_score and patient.avg_quality_score < 60 %}
+                {% elif patient.avg_quality_score and patient.avg_quality_score < 30 %}
                     <span class="risk-flag medium"><i class="fa-solid fa-triangle-exclamation"></i> Form Quality Low</span>
                 {% else %}
                     <span class="risk-flag low"><i class="fa-solid fa-circle-check"></i> On Track</span>

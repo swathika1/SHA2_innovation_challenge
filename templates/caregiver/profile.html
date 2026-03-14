@@ -1,0 +1,503 @@
+{% extends 'base.html' %}
+
+{% block title %}My Profile - SHA2 Rehab Coach{% endblock %}
+
+{% block header %}
+<header class="header">
+    <h1><a href="{{ url_for('caregiver_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="SHA2 Rehab Coach logo" class="brand-logo"> SHA2 Rehab Coach</a></h1>
+    <nav class="nav-links">
+        <a href="{{ url_for('caregiver_dashboard') }}">Dashboard</a>
+        <div class="nav-user">
+            <button class="nav-user-btn" title="Account"><i class="fa-solid fa-user"></i></button>
+            <div class="nav-user-dropdown">
+                <div class="nav-user-dropdown-inner">
+                    <div class="dropdown-header">Signed in as<strong>{{ user_info.name if user_info else session.get('user_name', 'Caregiver') }}</strong></div>
+                    <a href="{{ url_for('caregiver_profile') }}" class="active"><span class="dropdown-icon"><i class="fa-solid fa-user"></i></span> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{{ url_for('logout') }}" class="dropdown-logout"><span class="dropdown-icon"><i class="fa-solid fa-right-from-bracket"></i></span> Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+</header>
+{% endblock %}
+
+{% block content %}
+<style>
+    .profile-layout {
+        display: flex;
+        gap: 28px;
+        margin-top: 10px;
+        min-height: 70vh;
+    }
+
+    .profile-sidebar {
+        width: 220px;
+        flex-shrink: 0;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.07);
+        padding: 20px 0;
+        align-self: flex-start;
+        position: sticky;
+        top: 90px;
+    }
+    .profile-sidebar h3 {
+        font-size: .85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #999;
+        padding: 0 20px;
+        margin: 0 0 12px;
+    }
+    .profile-sidebar a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 24px;
+        color: #333;
+        text-decoration: none;
+        font-weight: 500;
+        font-size: .95rem;
+        transition: background .15s, color .15s;
+        border-left: 3px solid transparent;
+    }
+    .profile-sidebar a:hover {
+        background: #f4f6fa;
+        color: #1a73e8;
+    }
+    .profile-sidebar a.active {
+        background: #eef3ff;
+        color: #1a73e8;
+        border-left-color: #1a73e8;
+        font-weight: 600;
+    }
+
+    .profile-content {
+        flex: 1;
+        min-width: 0;
+    }
+    .profile-page-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #f8fafc;
+        margin: 0 0 24px;
+    }
+
+    .info-card {
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.07);
+        padding: 28px 32px;
+        margin-bottom: 24px;
+    }
+    .info-card-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1a1a2e;
+        margin: 0 0 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px 40px;
+    }
+    .info-item {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    .info-label {
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .8px;
+        color: #888;
+        font-weight: 600;
+    }
+    .info-value {
+        font-size: 1rem;
+        color: #1a1a2e;
+        font-weight: 500;
+    }
+    .info-value.role-badge {
+        display: inline-block;
+        background: #eef6ff;
+        color: #0f766e;
+        padding: 2px 14px;
+        border-radius: 20px;
+        font-size: .85rem;
+        font-weight: 700;
+        width: fit-content;
+    }
+
+    .stat-chips {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+    .stat-chip {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.06);
+        padding: 18px 24px;
+        flex: 1;
+        min-width: 160px;
+        text-align: center;
+    }
+    .chip-value {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #0f766e;
+    }
+    .chip-label {
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .8px;
+        color: #888;
+        margin-top: 4px;
+        font-weight: 600;
+    }
+
+    .patient-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+    }
+    .patient-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 18px;
+    }
+    .patient-card h4 {
+        margin: 0 0 6px;
+        font-size: 1.05rem;
+        color: #0f172a;
+    }
+    .patient-meta {
+        color: #64748b;
+        font-size: .86rem;
+        margin-bottom: 14px;
+    }
+    .patient-stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+    .patient-stat {
+        background: #fff;
+        border-radius: 10px;
+        padding: 10px 12px;
+        border: 1px solid #e5e7eb;
+    }
+    .patient-stat strong {
+        display: block;
+        font-size: 1rem;
+        color: #111827;
+    }
+    .patient-stat span {
+        font-size: .78rem;
+        color: #6b7280;
+    }
+
+    .request-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .request-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
+        background: #f8fafc;
+    }
+    .request-item strong {
+        color: #0f172a;
+        display: block;
+    }
+    .request-time {
+        color: #6b7280;
+        font-size: .82rem;
+        margin-top: 2px;
+    }
+    .request-badge {
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: .76rem;
+        font-weight: 700;
+        text-transform: capitalize;
+    }
+    .request-badge.pending { background: #fef3c7; color: #92400e; }
+    .request-badge.approved { background: #dcfce7; color: #166534; }
+    .request-badge.rejected { background: #fee2e2; color: #991b1b; }
+
+    .empty-note {
+        color: #94a3b8;
+        font-style: italic;
+        font-size: .92rem;
+    }
+
+    .btn-edit-profile {
+        background: #ecfeff;
+        color: #0f766e;
+        border: 1px solid #99f6e4;
+        padding: 7px 18px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: .88rem;
+        font-weight: 600;
+        transition: all .2s;
+    }
+    .btn-edit-profile:hover { background: #0f766e; color: #fff; }
+    .info-edit-input {
+        width: 100%;
+        padding: 9px 12px;
+        border: 1.5px solid #14b8a6;
+        border-radius: 8px;
+        font-size: .95rem;
+        font-family: inherit;
+        outline: none;
+        background: #f7f9fc;
+    }
+    .info-edit-input:focus { border-color: #0f766e; background: #fff; }
+
+    @media (max-width: 768px) {
+        .profile-layout {
+            flex-direction: column;
+            gap: 16px;
+        }
+        .profile-sidebar {
+            width: 100%;
+            position: static;
+            display: flex;
+            flex-direction: row;
+            padding: 0;
+            border-radius: 12px;
+            overflow-x: auto;
+        }
+        .profile-sidebar h3 { display: none; }
+        .profile-sidebar a {
+            border-left: none;
+            border-bottom: 3px solid transparent;
+            padding: 14px 20px;
+            white-space: nowrap;
+            font-size: .9rem;
+        }
+        .profile-sidebar a.active {
+            border-bottom-color: #1a73e8;
+            border-left-color: transparent;
+        }
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="profile-layout">
+    <nav class="profile-sidebar">
+        <h3>Profile</h3>
+        <a href="#account" class="active"><i class="fa-solid fa-user"></i> Personal Details</a>
+        <a href="#monitoring"><i class="fa-solid fa-heart-pulse"></i> Monitoring</a>
+        <a href="#requests"><i class="fa-solid fa-envelope-open-text"></i> Requests</a>
+    </nav>
+
+    <div class="profile-content">
+        <h2 class="profile-page-title">Caregiver Profile</h2>
+
+        <div class="stat-chips">
+            <div class="stat-chip">
+                <div class="chip-value">{{ total_patients }}</div>
+                <div class="chip-label">Patients Monitored</div>
+            </div>
+            <div class="stat-chip">
+                <div class="chip-value">{{ avg_adherence }}%</div>
+                <div class="chip-label">Avg Adherence</div>
+            </div>
+            <div class="stat-chip">
+                <div class="chip-value">{{ pending_requests }}</div>
+                <div class="chip-label">Pending Requests</div>
+            </div>
+        </div>
+
+        <div class="info-card" id="account">
+            <div class="info-card-title" style="justify-content: space-between;">
+                <span><i class="fa-solid fa-id-card"></i> Account Information</span>
+                <button class="btn-edit-profile" onclick="toggleEditMode()" id="editProfileBtn">
+                    <i class="fa-solid fa-pen"></i> Edit
+                </button>
+            </div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Full Name</span>
+                    <span class="info-value">{{ user_info.name }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Email Address</span>
+                    <span class="info-value info-display" data-field="email">{{ user_info.email }}</span>
+                    <input type="email" class="info-edit-input" data-field="email" value="{{ user_info.email }}" style="display:none;">
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Role</span>
+                    <span class="info-value role-badge">{{ user_info.role|capitalize }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Phone</span>
+                    <span class="info-value info-display" data-field="phone">{{ user_info.phone if user_info.phone else '— Not set' }}</span>
+                    <input type="tel" class="info-edit-input" data-field="phone" value="{{ user_info.phone or '' }}" style="display:none;">
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Pincode</span>
+                    <span class="info-value info-display" data-field="pincode">{{ user_info.pincode if user_info.pincode else '— Not set' }}</span>
+                    <input type="text" class="info-edit-input" data-field="pincode" value="{{ user_info.pincode or '' }}" style="display:none;">
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Date of Birth</span>
+                    <span class="info-value">{{ user_info.dob if user_info.dob else '—' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Age</span>
+                    <span class="info-value">{{ (age|string + ' years') if age else '—' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Member Since</span>
+                    <span class="info-value">{{ user_info.created_at[:10] if user_info and user_info.created_at else '—' }}</span>
+                </div>
+            </div>
+            <div class="edit-actions" id="editActions" style="display:none; margin-top:20px; padding-top:18px; border-top:1px solid #e8ebf0;">
+                <button class="btn btn-primary" onclick="saveProfile()" style="padding:10px 24px; font-weight:600;">
+                    <i class="fa-solid fa-check"></i> Save Changes
+                </button>
+                <button class="btn" onclick="cancelEdit()" style="padding:10px 24px; margin-left:10px;">Cancel</button>
+                <span id="editStatus" style="margin-left:15px; font-size:.9rem;"></span>
+            </div>
+        </div>
+
+        <div class="info-card" id="monitoring">
+            <div class="info-card-title"><i class="fa-solid fa-people-group"></i> Monitoring Overview</div>
+            {% if monitored_patients %}
+            <div class="patient-grid">
+                {% for patient in monitored_patients %}
+                <div class="patient-card">
+                    <h4>{{ patient.name }}</h4>
+                    <div class="patient-meta">{{ patient.condition or 'General Rehab' }}{% if patient.relationship %} · {{ patient.relationship }}{% endif %}</div>
+                    <div class="patient-stats">
+                        <div class="patient-stat">
+                            <strong>{{ (patient.adherence_rate or 0)|round|int }}%</strong>
+                            <span>Adherence</span>
+                        </div>
+                        <div class="patient-stat">
+                            <strong>{{ (patient.avg_quality_score or 0)|round(1) }}/50</strong>
+                            <span>Quality</span>
+                        </div>
+                        <div class="patient-stat">
+                            <strong>{{ (patient.avg_pain_level or 0)|round(1) }}/10</strong>
+                            <span>Pain</span>
+                        </div>
+                        <div class="patient-stat">
+                            <strong>{{ patient.streak_days or 0 }}</strong>
+                            <span>Streak</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-note">You are not monitoring any patients yet.</p>
+            {% endif %}
+        </div>
+
+        <div class="info-card" id="requests">
+            <div class="info-card-title"><i class="fa-solid fa-envelope-open-text"></i> Request Status</div>
+            {% if my_requests %}
+            <div class="request-list">
+                {% for req in my_requests %}
+                <div class="request-item">
+                    <div>
+                        <strong>{{ req.patient_name }}</strong>
+                        <div class="request-time">{{ req.requested_at }}</div>
+                    </div>
+                    <span class="request-badge {{ req.status }}">{{ req.status }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-note">No caregiver requests yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+let editMode = false;
+
+function toggleEditMode() {
+    editMode = !editMode;
+    const displays = document.querySelectorAll('.info-display');
+    const inputs = document.querySelectorAll('.info-edit-input');
+    const actions = document.getElementById('editActions');
+    const btn = document.getElementById('editProfileBtn');
+
+    displays.forEach(el => el.style.display = editMode ? 'none' : '');
+    inputs.forEach(el => el.style.display = editMode ? 'block' : 'none');
+    actions.style.display = editMode ? 'flex' : 'none';
+    btn.innerHTML = editMode
+        ? '<i class="fa-solid fa-xmark"></i> Cancel'
+        : '<i class="fa-solid fa-pen"></i> Edit';
+}
+
+function cancelEdit() {
+    document.querySelectorAll('.info-edit-input').forEach(inp => {
+        const field = inp.dataset.field;
+        const display = document.querySelector(`.info-display[data-field="${field}"]`);
+        const origVal = display.textContent.trim();
+        inp.value = origVal.startsWith('—') ? '' : origVal;
+    });
+    toggleEditMode();
+}
+
+async function saveProfile() {
+    const status = document.getElementById('editStatus');
+    status.textContent = 'Saving…';
+    status.style.color = '#0f766e';
+
+    const body = {};
+    document.querySelectorAll('.info-edit-input').forEach(inp => {
+        body[inp.dataset.field] = inp.value.trim();
+    });
+
+    try {
+        const res = await fetch('/api/profile/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            status.textContent = '✓ Saved';
+            status.style.color = '#22c55e';
+            document.querySelectorAll('.info-edit-input').forEach(inp => {
+                const field = inp.dataset.field;
+                const display = document.querySelector(`.info-display[data-field="${field}"]`);
+                display.textContent = inp.value.trim() || '— Not set';
+            });
+            setTimeout(() => toggleEditMode(), 800);
+        } else {
+            status.textContent = data.error || 'Error saving';
+            status.style.color = '#dc2626';
+        }
+    } catch (e) {
+        status.textContent = 'Network error';
+        status.style.color = '#dc2626';
+    }
+}
+</script>
+{% endblock %}
