@@ -13,12 +13,12 @@ APP_CONTEXT = """
 You have access to patient data from these tables. Use this to give informed, personalized answers.
 
 1. users — id, email, name, role (doctor/patient/caregiver), phone, created_at
-2. patients — user_id, condition, surgery_date, current_week, adherence_rate (%), avg_pain_level (0-10), avg_quality_score (0-100), completed_sessions, streak_days
+2. patients — user_id, condition, surgery_date, current_week, adherence_rate (%), avg_pain_level (0-10), avg_quality_score (0-50), completed_sessions, streak_days
 3. doctor_patient — doctor_id, patient_id, assigned_date
 4. caregiver_patient — caregiver_id, patient_id, relationship
 5. exercises — id, name, description, category, difficulty (1-5), video_url
 6. workouts — patient_id, exercise_id, sets, reps, frequency, instructions, is_active
-7. sessions — patient_id, started_at, completed_at, pain_before (0-10), pain_after (0-10), effort_level, quality_score (0-100), completed_perc (%)
+7. sessions — patient_id, started_at, completed_at, pain_before (0-10), pain_after (0-10), effort_level, quality_score (0-50), completed_perc (%)
 8. session_exercises — session_id, workout_id, exercise_name, quality_score, sets_required/completed (JSON)
 9. session_frames — frame-level telemetry: session_id, exercise_name, score, status, rep_count, set_count
 10. appointments — doctor_id, patient_id, date, time, duration, status (scheduled/completed/cancelled)
@@ -51,7 +51,7 @@ General: Safety guidelines, scoring systems, LBP rehab protocols
 === APP FEATURES ===
 - Real-time webcam exercise scoring (OpenPose/BlazePose skeleton detection)
 - Pain tracking before/after sessions (0-10)
-- Quality scoring per session (0-100)
+- Quality scoring per session (0-50)
 - Adherence rate and streak tracking
 - Doctor dashboard, caregiver access workflow
 - Appointment scheduling with optimization
@@ -97,7 +97,7 @@ def _build_chat_payload(messages: list, patient_context: str, rag_context: str =
 
     # Build the full instruction that MERaLiON will respond to
     instruction_parts = [
-        "You are a healthcare rehab assistant for the Home Rehab Coach app. Answer the patient's question directly with specific, practical advice.",
+        "You are a healthcare rehab assistant for the SHA2 Rehab Coach app. Answer the patient's question directly with specific, practical advice.",
         SAFETY_RULES,
         APP_CONTEXT
     ]

@@ -88,7 +88,7 @@ def test_session_data():
             print(f"\n   Recent sessions:")
             for sess in sessions:
                 print(f"   - Patient: {sess['patient_name']}")
-                print(f"     Quality: {sess['quality_score']:.1f}, Pain: {sess['pain_after']}, Sets: {sess['sets_completed']}")
+                print(f"     Quality: {sess['quality_score']:.1f}/50, Pain: {sess['pain_after']}, Sets: {sess['sets_completed']}")
                 print(f"     Date: {sess['completed_at']}")
         else:
             print("   No sessions found yet. Complete a session to test!")
@@ -127,7 +127,7 @@ def test_patient_metrics():
                 print(f"\n   Patient: {patient['name']} ({patient['email']})")
                 print(f"   - Adherence Rate: {patient['adherence_rate']:.1f}%")
                 print(f"   - Streak Days: {patient['streak_days']}")
-                print(f"   - Avg Quality: {patient['avg_quality_score']:.1f}/100")
+                print(f"   - Avg Quality: {patient['avg_quality_score']:.1f}/50")
                 print(f"   - Avg Pain: {patient['avg_pain_level']:.1f}/10")
                 
                 # Get session count for this patient
@@ -185,7 +185,7 @@ def test_metric_calculations():
         """, (patient_id,))
         result = cursor.fetchone()
         avg_quality = result['avg_quality'] if result['avg_quality'] else 0
-        print(f"   ✅ Avg Quality Score (30 days): {avg_quality:.2f}")
+        print(f"   ✅ Avg Quality Score (30 days): {avg_quality:.2f}/50")
         
         # Calculate average pain (last 30 days)
         cursor.execute("""

@@ -1,5 +1,5 @@
 """
-database.py - Database helper functions for Home Rehab Coach
+database.py - Database helper functions for SHA2 Rehab Coach
 Uses SQLite with Flask's application context
 """
 

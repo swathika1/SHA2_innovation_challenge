@@ -172,7 +172,7 @@ curl -X POST https://localhost:8000/api/session/save \
     "pain_before": 3,
     "pain_after": 2,
     "effort_level": 7,
-    "quality_score": 85,
+    "quality_score": 42.5,
     "sets_completed": 3,
     "reps_completed": 30,
     "notes": "Test session"
@@ -210,7 +210,7 @@ DB design:
 | `workout_id` | INTEGER | → workouts.id |
 | `pain_before` / `pain_after` | INTEGER | 0–10 |
 | `effort_level` | INTEGER | 1–10 |
-| `quality_score` | REAL | 0–100, avg of all frame scores |
+| `quality_score` | REAL | 0–50, avg of all frame scores |
 | `sets_completed` / `reps_completed` | INTEGER | |
 | `completed_at` | TIMESTAMP | |
 

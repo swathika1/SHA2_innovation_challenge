@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 
-{% block title %}Rehab Session - Home Rehab Coach{% endblock %}
+{% block title %}Rehab Session - SHA2 Rehab Coach{% endblock %}
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo"> Home Rehab Coach</a></h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="SHA2 Rehab Coach logo" class="brand-logo"> SHA2 Rehab Coach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
         <a href="{{ url_for('patient_appointments') }}">Consultations</a>
@@ -389,42 +389,6 @@
     .btn-prog-next.personalized-ready { background:linear-gradient(135deg,#10b981,#059669); }
     .btn-prog-next.personalized-ready:hover { box-shadow:0 9px 26px rgba(16,185,129,.45); }
 
-    .assigned-today-card {
-        background: #fff;
-        border: 2px solid #d1fae5;
-        border-radius: 16px;
-        padding: 22px;
-        margin-bottom: 18px;
-        box-shadow: 0 6px 22px rgba(16,185,129,.12);
-    }
-    .assigned-today-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 10px;
-        flex-wrap: wrap;
-    }
-    .assigned-today-head h3 { margin: 0; font-size: 1.1rem; color: #065f46; }
-    .assigned-today-pill {
-        font-size: .75rem;
-        background: #ecfdf5;
-        color: #065f46;
-        border: 1px solid #a7f3d0;
-        padding: 4px 10px;
-        border-radius: 999px;
-        font-weight: 700;
-    }
-    .assigned-task-list { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 8px; }
-    .assigned-task-list li {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 8px 10px;
-        font-size: .88rem;
-        color: #334155;
-        font-weight: 600;
-    }
     .testing-section { margin-top: 8px; }
     .testing-section-title { font-size: .86rem; color: #64748b; font-weight: 700; margin: 0 0 10px; }
 
@@ -864,26 +828,6 @@
         <div class="prog-title-row">
             <h2>🏥 Start Today&apos;s Session</h2>
         </div>
-        <p class="prog-tagline">Your doctor-assigned tasks are shown first. Pipeline cards below are for testing.</p>
-
-        <div class="assigned-today-card">
-            <div class="assigned-today-head">
-                <h3><i class="fa-solid fa-clipboard-check"></i> Doctor Assigned Tasks</h3>
-                <span class="assigned-today-pill">{{ assigned_exercises|length }} exercise{{ '' if assigned_exercises|length == 1 else 's' }}</span>
-            </div>
-            <ul class="assigned-task-list">
-                {% for e in assigned_exercises %}
-                <li>{{ e.exercise_name }}</li>
-                {% endfor %}
-                {% if not assigned_exercises %}
-                <li style="color:#888; font-weight:500;">No assigned exercises yet. Contact your doctor.</li>
-                {% endif %}
-            </ul>
-            <button class="btn-prog-next ready personalized-ready" onclick="startAssignedToday()" {% if not assigned_exercises %}disabled style="opacity:.5;pointer-events:none;"{% endif %}>
-                <i class="fa-solid fa-play"></i> START
-            </button>
-        </div>
-
         <div class="testing-section">
             <p class="testing-section-title">Testing Pipelines (optional)</p>
 
@@ -1384,12 +1328,6 @@ function selectAllCurrentExercises() {
         card.classList.add('checked');
     });
     updateSelectedExercisesList();
-}
-
-function startAssignedToday() {
-    selectProgram('personalized');
-    goToExerciseStep();
-    selectAllCurrentExercises();
 }
 
 /* ===================== PROGRAM DEFINITIONS ===================== */

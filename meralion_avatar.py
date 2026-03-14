@@ -19,7 +19,7 @@ class AvatarJimmy:
         self.api_key = MERILION_API_KEY
         self.base_url = MERILION_BASE_URL
         self.avatar_name = "Jimmy"
-        self.system_prompt = """You are Jimmy, a friendly and knowledgeable rehabilitation coach avatar for the Home Rehab Coach app.
+        self.system_prompt = """You are Jimmy, a friendly and knowledgeable rehabilitation coach avatar for the SHA2 Rehab Coach app.
 Your role is to help patients with:
 1. Exercise FAQs and how to perform exercises correctly
 2. Performance feedback and motivation based on their session history
@@ -29,13 +29,13 @@ Your role is to help patients with:
 Guidelines:
 - Be encouraging and empathetic
 - Use simple, clear language
-- Reference specific patient data when relevant (e.g., "I see you scored 85% last session!")
+- Reference specific patient data when relevant (e.g., "I see you scored 42.5/50 last session!")
 - NEVER provide medical diagnosis - suggest consulting their doctor for serious concerns
 - Respond in the same language the patient uses
 - Keep responses concise (2-4 sentences) and actionable
 
 Available Data:
-- Patient profiles, exercises, sessions with quality scores (0-100) and pain (0-10)
+- Patient profiles, exercises, sessions with quality scores (0-50) and pain (0-10)
 - KIMORE exercises: Lifting Arms, Lateral Trunk Tilt, Trunk Rotation, Squat, Trunk Rotation+Target (scored 0-50)
 - KERAAL exercises: Forward Flexion (CTK), Flank Stretch (ELK), Torso Rotation (RTK) (scored 0-50, ≥27.5=correct form)
 - Appointments, clinician notes, caregiver information
@@ -93,7 +93,7 @@ Current Rehab Week: {patient['current_week']}
 Sessions Completed: {patient['completed_sessions'] or (recent_sessions['total_sessions'] if recent_sessions else 0)}
 Streak Days: {patient['streak_days'] or 0}
 Adherence Rate: {patient['adherence_rate']:.1f}%
-Average Quality Score: {patient['avg_quality_score']:.1f}/100
+Average Quality Score: {patient['avg_quality_score']:.1f}/50
 Average Pain Level: {patient['avg_pain_level']:.1f}/10"""
             
             if exercises:
@@ -115,7 +115,7 @@ Average Pain Level: {patient['avg_pain_level']:.1f}/10"""
             if recent_detail:
                 context += "\n\nRecent Sessions:"
                 for s in recent_detail:
-                    context += f"\n- Q:{s['quality_score']}, Pain:{s['pain_before']}->{s['pain_after']} ({s['completed_at']})"
+                    context += f"\n- Q:{s['quality_score']}/50, Pain:{s['pain_before']}->{s['pain_after']} ({s['completed_at']})"
 
             # Upcoming appointments
             appointments = query_db('''
@@ -210,8 +210,8 @@ Average Pain Level: {patient['avg_pain_level']:.1f}/10"""
             latest = sessions[0]
             
             summary = f"""Performance ({len(sessions)} recent sessions):
-Latest: {latest['quality_score']}% quality, {latest['completed_perc'] or 0}% complete, pain {latest['pain_before']}->{latest['pain_after']}
-Average quality: {avg_quality:.0f}%, Avg pain improvement: {avg_pain_improvement:.1f} pts"""
+Latest: {latest['quality_score']}/50 quality, {latest['completed_perc'] or 0}% complete, pain {latest['pain_before']}->{latest['pain_after']}
+Average quality: {avg_quality:.0f}/50, Avg pain improvement: {avg_pain_improvement:.1f} pts"""
             
             # Per-session one-liner
             for sess in sessions:
@@ -224,9 +224,10 @@ Average quality: {avg_quality:.0f}%, Avg pain improvement: {avg_pain_improvement
                 if sess_exercises:
                     for se in sess_exercises:
                         ex_name = se['exercise_name'] or 'exercise'
-                        ex_parts.append(f"{ex_name}:{se['quality_score'] or '?'}")
+                        score_text = f"{se['quality_score']}/50" if se['quality_score'] is not None else "?"
+                        ex_parts.append(f"{ex_name}:{score_text}")
                 ex_str = ", ".join(ex_parts) if ex_parts else "no exercises logged"
-                summary += f"\n  {sess['completed_at']}: Q{sess['quality_score']}, pain {sess['pain_before']}->{sess['pain_after']}, [{ex_str}]"
+                summary += f"\n  {sess['completed_at']}: Q{sess['quality_score']}/50, pain {sess['pain_before']}->{sess['pain_after']}, [{ex_str}]"
             
             return summary
         except Exception as e:

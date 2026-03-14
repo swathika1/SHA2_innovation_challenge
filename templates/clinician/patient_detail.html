@@ -206,8 +206,8 @@
         <div class="pp-stat-label">Adherence</div>
     </div>
     <div class="pp-stat">
-        <div class="pp-stat-value" style="color:{% if patient.avg_quality_score >= 70 %}#22c55e{% elif patient.avg_quality_score >= 45 %}#f59e0b{% else %}#ef4444{% endif %};">
-            {{ patient.avg_quality_score | round(1) }}
+        <div class="pp-stat-value" style="color:{% if patient.avg_quality_score >= 35 %}#22c55e{% elif patient.avg_quality_score >= 22.5 %}#f59e0b{% else %}#ef4444{% endif %};">
+            {{ patient.avg_quality_score | round(1) }}/50
         </div>
         <div class="pp-stat-label">Avg Quality</div>
     </div>
@@ -222,7 +222,7 @@
         <div class="pp-stat-label">Total Sessions</div>
     </div>
     <div class="pp-stat">
-        <div class="pp-stat-value" style="color:#0ea5e9;">{{ avg_quality_recent }}</div>
+        <div class="pp-stat-value" style="color:#0ea5e9;">{{ avg_quality_recent }}/50</div>
         <div class="pp-stat-label">Recent Quality (5)</div>
     </div>
     <div class="pp-stat">
@@ -483,9 +483,9 @@
                     </td>
                     <td>
                         {% set qs = s.quality_score | default(0) %}
-                        <span style="font-weight:600;color:{% if qs >= 70 %}#22c55e{% elif qs >= 45 %}#f59e0b{% else %}#ef4444{% endif %};">{{ qs | round(0) | int }}</span>
+                        <span style="font-weight:600;color:{% if qs >= 35 %}#22c55e{% elif qs >= 22.5 %}#f59e0b{% else %}#ef4444{% endif %};">{{ qs | round(0) | int }}/50</span>
                         <div class="pp-quality-bar">
-                            <div class="pp-quality-bar-fill" style="width:{{ qs }}%;background:{% if qs >= 70 %}#22c55e{% elif qs >= 45 %}#f59e0b{% else %}#ef4444{% endif %};"></div>
+                            <div class="pp-quality-bar-fill" style="width:{{ (qs * 2) | round(1) }}%;background:{% if qs >= 35 %}#22c55e{% elif qs >= 22.5 %}#f59e0b{% else %}#ef4444{% endif %};"></div>
                         </div>
                     </td>
                     <td>

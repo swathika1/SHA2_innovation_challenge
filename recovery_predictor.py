@@ -117,13 +117,13 @@ def predict_recovery(patient_id: int, query_fn: Callable) -> dict:
         adjustments.append("Low adherence (<30%) — recovery significantly delayed")
 
     # 5b. Quality score impact
-    if avg_quality >= 75:
+    if avg_quality >= 37.5:
         factor -= 0.07
         adjustments.append("Excellent exercise quality — positive signal")
-    elif avg_quality >= 55:
+    elif avg_quality >= 27.5:
         factor -= 0.02
         adjustments.append("Good exercise quality")
-    elif avg_quality >= 35:
+    elif avg_quality >= 17.5:
         factor += 0.04
         adjustments.append("Below-average quality — may slow progress")
     elif total_completed > 0:
