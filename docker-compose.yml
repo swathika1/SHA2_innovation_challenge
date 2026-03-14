@@ -1,0 +1,137 @@
+version: '3.8'
+
+services:
+  # ========================================================================
+  # Main Flask Web Application
+  # ========================================================================
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rehab-coach-web
+    ports:
+      - "8000:8000"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=main.py
+      - PYTHONUNBUFFERED=1
+      # ===== API Keys and Credentials (POPULATE THESE) =====
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - MERILION_API_KEY=${MERILION_API_KEY:-}
+      - MERILION_USERNAME=${MERILION_USERNAME:-}
+      - MERILION_BASE_URL=${MERILION_BASE_URL:-https://api.cr8lab.com}
+      - FAL_KEY=${FAL_KEY:-}
+      - GOOGLE_GENAI_API_KEY=${GOOGLE_GENAI_API_KEY:-}
+      # ===== Database Configuration =====
+      - DATABASE_URL=sqlite:////app/rehab_coach.db
+      - DATABASE_PATH=/app/rehab_coach.db
+      # ===== Application Settings =====
+      - APP_PORT=8000
+      - SESSION_PERMANENT=False
+      - PERMANENT_SESSION_LIFETIME=3600
+      - SESSION_TYPE=filesystem
+      - SESSION_SQLALCHEMY_TABLE=flask_session
+    volumes:
+      # Persist database
+      - rehab_data:/app
+      # Persist Flask sessions
+      - flask_sessions:/app/flask_session
+      # Persist RAG database
+      - rag_data:/app/rag_db
+      # Persist logs
+      - app_logs:/app/logs
+    networks:
+      - rehab-network
+    depends_on:
+      - db-init
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ========================================================================
+  # Database Initialization Service (runs once)
+  # ========================================================================
+  db-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rehab-coach-db-init
+    command: python init_database.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_PATH=/app/rehab_coach.db
+    volumes:
+      - rehab_data:/app
+    networks:
+      - rehab-network
+    restart: "no"
+
+  # ========================================================================
+  # Optional: FastAPI Chatbot Server (for async chat operations)
+  # ========================================================================
+  chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rehab-coach-chatbot
+    command: uvicorn app_chat:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GOOGLE_GENAI_API_KEY=${GOOGLE_GENAI_API_KEY:-}
+      - MERILION_API_KEY=${MERILION_API_KEY:-}
+    networks:
+      - rehab-network
+    depends_on:
+      - web
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ========================================================================
+  # Optional: PostgreSQL Database (if you want to use PostgreSQL instead of SQLite)
+  # Uncomment these lines if you prefer PostgreSQL over SQLite
+  # ========================================================================
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: rehab-coach-postgres
+  #   environment:
+  #     POSTGRES_DB: rehab_coach
+  #     POSTGRES_USER: rehab_user
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD:-rehab_password}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - rehab-network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U rehab_user"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+networks:
+  rehab-network:
+    driver: bridge
+
+volumes:
+  rehab_data:
+    driver: local
+  flask_sessions:
+    driver: local
+  rag_data:
+    driver: local
+  app_logs:
+    driver: local
+  # postgres_data:  # Uncomment if using PostgreSQL
+  #   driver: local

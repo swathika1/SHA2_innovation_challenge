@@ -213,26 +213,6 @@
 
     <!-- Right Column: Quick Actions & Info -->
     <div>
-        <!-- Quick Call Card -->
-        <div class="card">
-            <div class="card-header">Quick Video Call</div>
-            <p style="color: #666; font-size: 0.9rem; margin-bottom: 15px;">
-                Start an instant video call with a patient without scheduling.
-            </p>
-            <div class="form-group">
-                <label>Select Patient</label>
-                <select id="quickCallPatient" class="form-control">
-                    <option value="">-- Select Patient --</option>
-                    {% for patient in patients %}
-                    <option value="{{ patient.id }}">{{ patient.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <button onclick="startQuickCall()" class="btn btn-success" style="width: 100%;">
-                Start Instant Call
-            </button>
-        </div>
-
         <!-- Video Call Tips -->
         <div class="card" style="margin-top: 20px;">
             <div class="card-header">Video Call Tips</div>
@@ -528,16 +508,6 @@
         formCard.style.transition = 'background-color 0.3s';
         formCard.style.backgroundColor = '#d4edda';
         setTimeout(function() { formCard.style.backgroundColor = ''; }, 1000);
-    }
-
-    // === QUICK CALL ===
-    function startQuickCall() {
-        var patientId = document.getElementById('quickCallPatient').value;
-        if (!patientId) {
-            alert('Please select a patient first.');
-            return;
-        }
-        window.location.href = '/video-call/quick/' + patientId;
     }
 
     // === SET MINIMUM DATE TO TODAY ===
