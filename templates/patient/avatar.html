@@ -1279,51 +1279,56 @@
         }
 
         pcmChunks = [];
-        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        // Explicitly request 16 kHz — Groq Whisper works best at this rate
+        const MIC_SAMPLE_RATE = 16000;
+        navigator.mediaDevices.getUserMedia({ audio: { sampleRate: MIC_SAMPLE_RATE, channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false })
             .then(stream => {
                 recordStream = stream;
-                recAudioCtx = new AudioContext();
+                recAudioCtx = new AudioContext({ sampleRate: MIC_SAMPLE_RATE });
                 recSource = recAudioCtx.createMediaStreamSource(stream);
                 recProcessor = recAudioCtx.createScriptProcessor(4096, 1, 1);
-                
+
                 // VAD variables
                 let silenceStart = Date.now();
                 let hasSpoken = false;
                 let vadTriggered = false;
-                
+                let spokenSamples = 0;  // track how many samples had actual speech
+
                 recProcessor.onaudioprocess = e => {
                     const data = e.inputBuffer.getChannelData(0);
                     pcmChunks.push(new Float32Array(data));
-                    
+
                     // Calculate RMS (volume level)
                     let sum = 0;
                     for (let i = 0; i < data.length; i++) {
                         sum += data[i] * data[i];
                     }
                     const rms = Math.sqrt(sum / data.length);
-                    
-                    // Detect speech
-                    if (rms > 0.02) {  // Threshold for speech detection
+
+                    // Detect speech (raised threshold to filter background noise)
+                    if (rms > 0.03) {
                         hasSpoken = true;
                         silenceStart = Date.now();
-                    } else if (hasSpoken && Date.now() - silenceStart > 800 && !vadTriggered) {
-                        // Speech ended (silence for 800ms) - auto-process
+                        spokenSamples += data.length;
+                    } else if (hasSpoken && Date.now() - silenceStart > 900 && !vadTriggered) {
+                        // Speech ended (silence for 900ms) - auto-process
                         vadTriggered = true;
                         isListening = false;
                         voiceMicBtn.classList.remove('active');
                         voiceNote.textContent = 'Processing speech…';
                         setAvatarState('thinking');
-                        
+
                         const ctx = stopRecording();
-                        const sampleRate = ctx ? ctx.sampleRate : 16000;
+                        const sampleRate = MIC_SAMPLE_RATE;
                         if (ctx) ctx.close();
-                        
-                        const totalSamples = pcmChunks.reduce((acc, c) => acc + c.length, 0);
-                        if (totalSamples < 800) {
+
+                        // Require at least 0.4s of actual speech content
+                        if (spokenSamples < sampleRate * 0.4) {
                             voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
                             setAvatarState('idle');
                             return;
                         }
+                        const totalSamples = pcmChunks.reduce((acc, c) => acc + c.length, 0);
                         const merged = new Float32Array(totalSamples);
                         let offset = 0;
                         for (const chunk of pcmChunks) { merged.set(chunk, offset); offset += chunk.length; }
@@ -1354,8 +1359,14 @@
             const res = await fetch('/api/chat/transcribe', { method: 'POST', body: formData });
             const data = await res.json();
             if (!res.ok) {
-                const detail = (data && (data.detail || data.error)) ? ` (${data.detail || data.error})` : '';
-                throw new Error(`Transcription request failed: ${res.status}${detail}`);
+                // 502 "No speech detected" is a soft failure — show a friendly retry, not a console error
+                const detail = (data && (data.detail || data.error)) || '';
+                if (res.status === 502 || detail.toLowerCase().includes('no speech')) {
+                    voiceNote.textContent = "Didn't catch that — tap the microphone and try again.";
+                    setAvatarState('idle');
+                    return;
+                }
+                throw new Error(`Transcription request failed: ${res.status} (${detail})`);
             }
             const spokenText = (data.transcript || '').trim();
             if (!spokenText) {
