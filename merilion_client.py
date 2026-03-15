@@ -188,7 +188,13 @@ def translate_text_sync(text: str, target_language: str) -> str:
     return _extract_response(r.json())
 
 
-def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm", vocab_hint: str = "") -> str:
+def transcribe_audio(
+    audio_bytes: bytes,
+    filename: str = "audio.webm",
+    vocab_hint: str = "",
+    raise_on_error: bool = False,
+    allow_whisper_fallback: bool = True
+) -> str:
     """Transcribe audio using MERaLiON /process/transcribe endpoint.
     
     Falls back to whisper_transcriber if Meralion transcription fails.
@@ -253,22 +259,33 @@ def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm", vocab_hin
     # Fallback: Use Whisper/Groq transcription if Meralion fails
     if data is None:
         print(f"[TRANSCRIBE] ⚠️  Meralion transcribe failed ({len(errors)} errors), trying Whisper fallback...")
+        if raise_on_error and not allow_whisper_fallback:
+            raise RuntimeError(" | ".join(errors) if errors else "Meralion transcription failed")
         try:
             # Try Whisper via Groq or other transcription service
             try:
                 from whisper_transcriber import transcribe as whisper_transcribe
                 print(f"[TRANSCRIBE] Using Whisper fallback")
-                transcript = whisper_transcribe(audio_bytes, filename)
+                transcript = whisper_transcribe(audio_bytes, filename, raise_on_error=raise_on_error)
                 if transcript:
                     return transcript
             except Exception as whisper_err:
                 print(f"[TRANSCRIBE] Whisper also failed: {whisper_err}")
+                if raise_on_error:
+                    raise RuntimeError(
+                        (" | ".join(errors) + " | " if errors else "") +
+                        f"Whisper fallback failed: {whisper_err}"
+                    ) from whisper_err
             
             # Final fallback: Return empty string instead of crashing
             print(f"[TRANSCRIBE] All transcription methods failed, returning empty string")
+            if raise_on_error:
+                raise RuntimeError(" | ".join(errors) if errors else "Transcription returned empty text")
             return ""
         except Exception as fallback_err:
             print(f"[TRANSCRIBE] Error in fallback: {fallback_err}")
+            if raise_on_error:
+                raise
             return ""
 
     # Parse response from Meralion

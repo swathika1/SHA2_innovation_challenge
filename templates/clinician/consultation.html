@@ -414,7 +414,7 @@
             html += '        <strong style="font-size: 1.1rem;">#' + (index + 1) + ' - ' + patient.label + '</strong>';
             html += '        <span class="priority-badge ' + priorityClass + '">' + priorityLabel + '</span>';
             html += '      </div>';
-            html += '      <p style="font-size: 0.85rem; color: #666; margin: 0;">Rehab Score: <strong>' + patient.score + '/10</strong></p>';
+            html += '      <p style="font-size: 0.85rem; color: #666; margin: 0;">Rehab Score: <strong>' + patient.score_display + '</strong></p>';
 
             if (notif) {
                 var notifColor = notif.level === 'critical' ? '#d32f2f' : '#f57c00';

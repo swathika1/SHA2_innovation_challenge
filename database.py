@@ -197,8 +197,11 @@ def load_optimization_data():
             urgency_str = pat_row['urgency'] if pat_row['urgency'] else 'Medium'
             urgency = urgency_map.get(urgency_str, 2)
             
-            # Get rehab score (avg_quality_score 0-10)
-            score = float(pat_row['avg_quality_score']) if pat_row['avg_quality_score'] else 5.0
+            # Keep a numeric fallback for optimization, but surface missing scores as NA in the UI.
+            raw_score = pat_row['avg_quality_score']
+            has_score = raw_score is not None and raw_score != '' and float(raw_score) > 0
+            score = float(raw_score) if has_score else 5.0
+            score_display = f"{score:g}/50" if has_score else "NA"
             
             # Get availability
             avail_rows = query_db(
@@ -255,6 +258,7 @@ def load_optimization_data():
                 'id': patient_id,
                 'label': pat_row['name'],
                 'score': score,
+                'score_display': score_display,
                 'urgency': urgency,
                 'max_dist': max_distance,
                 'distances': distances,
