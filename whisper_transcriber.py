@@ -23,7 +23,7 @@ def _get_client():
     return _client
 
 
-def transcribe(audio_bytes: bytes, filename: str = "audio.webm") -> str:
+def transcribe(audio_bytes: bytes, filename: str = "audio.webm", raise_on_error: bool = False) -> str:
     """Transcribe audio bytes using Whisper large-v3-turbo via Groq.
 
     Returns the transcribed text, or an empty string if transcription fails.
@@ -32,6 +32,8 @@ def transcribe(audio_bytes: bytes, filename: str = "audio.webm") -> str:
         client = _get_client()
     except Exception as e:
         print(f"[Whisper] Client init failed: {e}")
+        if raise_on_error:
+            raise
         return ""  # Return empty string instead of raising
 
     try:
@@ -53,4 +55,6 @@ def transcribe(audio_bytes: bytes, filename: str = "audio.webm") -> str:
         return text
     except Exception as e:
         print(f"[Whisper] Transcription failed: {e}")
+        if raise_on_error:
+            raise
         return ""  # Return empty on error
