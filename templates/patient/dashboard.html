@@ -411,6 +411,103 @@
     </form>
 </div>
 
+<!-- Caregiver Messages (visible to patient) -->
+{% if caregivers %}
+<div class="card" style="margin-top: 20px;" id="cg-patient-messages-card">
+    <div class="card-header">
+        Messages from Your Caregivers
+        <span id="cg-patient-open-count" style="font-size:0.8rem;color:#888;margin-left:8px;"></span>
+    </div>
+    <div id="cg-patient-messages-body" style="padding:12px;">
+        <p style="color:#999;font-size:0.9rem;">Loading...</p>
+    </div>
+</div>
+<script>
+(function loadPatientCaregiverMessages() {
+    const patientId = {{ session_user_id }};
+    fetch('/api/caregiver/messages/' + patientId)
+        .then(r => r.json())
+        .then(data => {
+            const body = document.getElementById('cg-patient-messages-body');
+            const countEl = document.getElementById('cg-patient-open-count');
+            if (!data.ok || !data.messages.length) {
+                body.innerHTML = '<p style="color:#999;text-align:center;padding:12px;">No messages from your caregivers yet.</p>';
+                return;
+            }
+            // Separate encouragement from complaints/queries
+            const encouragements = data.messages.filter(m => m.message_type === 'encouragement');
+            const actionItems = data.messages.filter(m => m.message_type !== 'encouragement');
+            const openCount = actionItems.filter(m => m.status === 'open').length;
+            if (openCount > 0) countEl.textContent = openCount + ' open item' + (openCount > 1 ? 's' : '');
+
+            let html = '';
+
+            // Encouragement messages — friendly card style
+            if (encouragements.length) {
+                html += '<div style="margin-bottom:14px;">';
+                html += '<p style="font-size:0.82rem;font-weight:600;color:#7c3aed;margin-bottom:8px;letter-spacing:0.03em;">💌 ENCOURAGEMENT</p>';
+                encouragements.forEach(m => {
+                    html += `<div style="padding:10px 14px;border-radius:8px;border:1px solid #ede9fe;background:#faf5ff;margin-bottom:6px;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+                            <strong style="font-size:0.88rem;color:#6d28d9;">${m.caregiver_name}</strong>
+                            <span style="font-size:0.73rem;color:#a78bfa;">${(m.created_at||'').slice(0,16)}</span>
+                        </div>
+                        <p style="margin:0;font-size:0.9rem;color:#4c1d95;">${m.message}</p>
+                    </div>`;
+                });
+                html += '</div>';
+            }
+
+            // Complaints & queries — action items with resolve
+            if (actionItems.length) {
+                html += '<p style="font-size:0.82rem;font-weight:600;color:#374151;margin-bottom:8px;letter-spacing:0.03em;">📋 QUERIES & COMPLAINTS</p>';
+                html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+                actionItems.forEach(m => {
+                    const badgeColor = m.message_type === 'complaint' ? 'background:#fde8e8;color:#b91c1c' : 'background:#dbeafe;color:#1d4ed8';
+                    const statusBg = m.status === 'open' ? '#fffbeb' : '#f9fafb';
+                    html += `<div style="padding:10px 14px;border-radius:6px;border:1px solid #e5e7eb;background:${statusBg}">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                            <span><strong style="font-size:0.88rem;">${m.caregiver_name}</strong>
+                            <span style="margin-left:8px;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:600;${badgeColor}">${m.message_type.charAt(0).toUpperCase()+m.message_type.slice(1)}</span></span>
+                            <span style="font-size:0.75rem;color:#9ca3af;">${(m.created_at||'').slice(0,16)}</span>
+                        </div>
+                        <p style="margin:0;font-size:0.88rem;color:#374151;">${m.message}</p>
+                        ${m.resolved_note ? `<p style="margin:4px 0 0;font-size:0.8rem;color:#6b7280;"><strong>Response:</strong> ${m.resolved_note}</p>` : ''}
+                        ${m.status === 'open' ? `
+                        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+                            <input type="text" id="pt-note-${m.id}" placeholder="Add a response (optional)..."
+                                   style="flex:1;padding:5px 10px;border:1px solid #d1d5db;border-radius:4px;font-size:0.82rem;">
+                            <button onclick="patientResolveMessage(${m.id})"
+                                    style="padding:4px 12px;background:#10b981;color:white;border:none;border-radius:4px;font-size:0.82rem;cursor:pointer;">
+                                Mark Resolved
+                            </button>
+                        </div>` : ''}
+                    </div>`;
+                });
+                html += '</div>';
+            }
+
+            body.innerHTML = html || '<p style="color:#999;text-align:center;padding:12px;">No messages yet.</p>';
+        })
+        .catch(() => {
+            document.getElementById('cg-patient-messages-body').innerHTML = '<p style="color:#ef4444;">Failed to load messages.</p>';
+        });
+})();
+
+function patientResolveMessage(msgId) {
+    const noteEl = document.getElementById('pt-note-' + msgId);
+    const note = noteEl ? noteEl.value.trim() : '';
+    fetch('/api/caregiver/message/' + msgId + '/resolve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({note})
+    })
+    .then(r => r.json())
+    .then(d => { if (d.ok) location.reload(); else alert('Error: ' + d.error); });
+}
+</script>
+{% endif %}
+
 <!-- Progress Charts -->
 {% if chart_sessions and chart_sessions|length > 1 %}
 <div class="grid grid-2" style="margin-top: 20px;">
