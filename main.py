@@ -29,7 +29,10 @@ from Rehab_Scorer_Coach.src.keraal_pipeline import KeraalRehabPipeline
 from flask_cors import CORS # type: ignore
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
+import io
 import os
+import wave
+import audioop
 import uuid
 try:
     from optim import get_top3_recommendations, optimize_all_patients, build_demo_data, load_dataset
@@ -3343,7 +3346,12 @@ def api_optimize_consultation():
         print(f"[CONSULTATION API] After filtering: {len(filtered_results)} patients have recommendations for doctor {doctor_id}")
 
         patient_list = [
-            {"id": p["id"], "label": p["label"], "score": p["score"]}
+            {
+                "id": p["id"],
+                "label": p["label"],
+                "score": p["score"],
+                "score_display": p.get("score_display", f'{p["score"]:g}/50'),
+            }
             for p in patients
         ]
 
@@ -3964,6 +3972,60 @@ def api_chat_clear():
     return jsonify({"ok": True})
 
 
+def _prepare_audio_for_transcription(audio_bytes, filename):
+    """Normalize WAV mic input to mono 16 kHz PCM and boost quiet recordings."""
+    normalized_name = filename or "audio.wav"
+    diagnostics = {"duration_s": None, "rms": None}
+    ext = normalized_name.rsplit(".", 1)[-1].lower() if "." in normalized_name else ""
+
+    if ext != "wav":
+        return audio_bytes, normalized_name, diagnostics
+
+    try:
+        with wave.open(io.BytesIO(audio_bytes), "rb") as wav_in:
+            channels = wav_in.getnchannels()
+            sample_width = wav_in.getsampwidth()
+            sample_rate = wav_in.getframerate()
+            frame_count = wav_in.getnframes()
+            frames = wav_in.readframes(frame_count)
+
+        if not frames:
+            return audio_bytes, normalized_name, diagnostics
+
+        if channels > 1:
+            frames = audioop.tomono(frames, sample_width, 0.5, 0.5)
+            channels = 1
+
+        if sample_width != 2:
+            frames = audioop.lin2lin(frames, sample_width, 2)
+            sample_width = 2
+
+        diagnostics["duration_s"] = round(frame_count / float(sample_rate or 1), 3)
+        diagnostics["rms"] = audioop.rms(frames, sample_width)
+        peak = audioop.max(frames, sample_width)
+
+        if 0 < peak < 12000:
+            gain = min(4.0, 16000.0 / peak)
+            frames = audioop.mul(frames, sample_width, gain)
+            diagnostics["rms"] = audioop.rms(frames, sample_width)
+
+        if sample_rate != 16000:
+            frames, _ = audioop.ratecv(frames, sample_width, channels, sample_rate, 16000, None)
+            sample_rate = 16000
+
+        out = io.BytesIO()
+        with wave.open(out, "wb") as wav_out:
+            wav_out.setnchannels(channels)
+            wav_out.setsampwidth(sample_width)
+            wav_out.setframerate(sample_rate)
+            wav_out.writeframes(frames)
+
+        return out.getvalue(), "voice_16k.wav", diagnostics
+    except Exception as prep_err:
+        print(f"[TRANSCRIBE] Audio normalization skipped: {prep_err}")
+        return audio_bytes, normalized_name, diagnostics
+
+
 @app.route('/api/chat/transcribe', methods=['POST'])
 @login_required
 def api_chat_transcribe():
@@ -3982,11 +4044,14 @@ def api_chat_transcribe():
         if not audio_bytes:
             return jsonify({"error": "Empty audio payload"}), 400
 
+        audio_bytes, filename, audio_diag = _prepare_audio_for_transcription(audio_bytes, filename)
+        print(f"[TRANSCRIBE] Prepared audio diagnostics: {audio_diag}")
+
         transcript = ""
         provider_errors = []
         if WHISPER_AVAILABLE:
             try:
-                transcript = whisper_transcribe(audio_bytes, filename)
+                transcript = whisper_transcribe(audio_bytes, filename, raise_on_error=True)
                 print(f"[Whisper] Transcript: '{transcript}'")
             except Exception as whisper_err:
                 provider_errors.append(f"Whisper: {whisper_err}")
@@ -3996,16 +4061,33 @@ def api_chat_transcribe():
         if not transcript and CHATBOT_AVAILABLE:
             try:
                 print("[TRANSCRIBE] Falling back to Meralion transcription")
-                transcript = transcribe_audio(audio_bytes, filename)
+                transcript = transcribe_audio(
+                    audio_bytes,
+                    filename,
+                    raise_on_error=True,
+                    allow_whisper_fallback=False
+                )
                 print(f"[Meralion] Transcript: '{transcript}'")
             except Exception as mer_err:
                 provider_errors.append(f"Meralion: {mer_err}")
                 print(f"[Meralion] Failed: {mer_err}")
 
         if not transcript:
+            duration_s = audio_diag.get("duration_s") or 0
+            rms = audio_diag.get("rms") or 0
+            if not provider_errors and duration_s >= 0.75 and rms >= 200:
+                return jsonify({
+                    "error": "Transcription unavailable",
+                    "detail": "Speech was captured, but the transcription service returned empty text"
+                }), 502
+            if not provider_errors:
+                return jsonify({
+                    "transcript": "",
+                    "detail": "No speech detected"
+                })
             return jsonify({
                 "error": "Transcription unavailable",
-                "detail": " ; ".join(provider_errors) if provider_errors else "No speech detected"
+                "detail": " ; ".join(provider_errors)
             }), 502
 
         return jsonify({"transcript": transcript})

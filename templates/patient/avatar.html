@@ -345,6 +345,7 @@
 </div>
 
 <script>
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
     const LANG_CONFIG = {
         English: { recognition: 'en-SG', tts: 'English', synthesis: 'en-SG' },
         Chinese: { recognition: 'zh-CN', tts: 'Chinese', synthesis: 'zh-CN' },
@@ -1062,8 +1063,12 @@
 
     /* ── Text-mode mic (speech-to-text into textarea) ── */
     let textRecognition = null;
-    if (SpeechRecognition) {
-        textRecognition = new SpeechRecognition();
+    let avatarRecognition = null;
+    let avatarRecognitionActive = false;
+    let avatarRecognitionHasResult = false;
+
+    if (SpeechRecognitionCtor) {
+        textRecognition = new SpeechRecognitionCtor();
         textRecognition.continuous = false;
         textRecognition.interimResults = true;
         textRecognition.maxAlternatives = 1;
@@ -1105,6 +1110,69 @@
             textRecognition.start();
         }
     });
+
+    if (SpeechRecognitionCtor) {
+        avatarRecognition = new SpeechRecognitionCtor();
+        avatarRecognition.continuous = false;
+        avatarRecognition.interimResults = false;
+        avatarRecognition.maxAlternatives = 1;
+
+        avatarRecognition.onstart = () => {
+            avatarRecognitionActive = true;
+            avatarRecognitionHasResult = false;
+            isListening = true;
+            voiceMicBtn.classList.add('active');
+            voiceNote.textContent = 'Listening... Stop talking when done (auto-response will start).';
+            setAvatarState('listening');
+        };
+
+        avatarRecognition.onresult = async (event) => {
+            const spokenText = ((event.results[0] && event.results[0][0] && event.results[0][0].transcript) || '').trim();
+            avatarRecognitionHasResult = !!spokenText;
+            isListening = false;
+            voiceMicBtn.classList.remove('active');
+
+            if (!spokenText) {
+                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
+                setAvatarState('idle');
+                return;
+            }
+
+            voiceNote.textContent = 'Thinking…';
+            setAvatarState('thinking');
+            const answer = await queryJimmy(spokenText, false);
+            if (answer) {
+                voiceNote.textContent = 'Jimmy is responding…';
+                await speakAuto(answer);
+                voiceNote.textContent = 'Done. Tap microphone to ask next question.';
+            } else {
+                voiceNote.textContent = 'I could not get a response. Tap microphone to retry.';
+                setAvatarState('idle');
+            }
+        };
+
+        avatarRecognition.onerror = (event) => {
+            avatarRecognitionActive = false;
+            isListening = false;
+            voiceMicBtn.classList.remove('active');
+            if (event && event.error === 'no-speech') {
+                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
+            } else {
+                voiceNote.textContent = 'Voice recognition failed. Tap microphone to try again.';
+            }
+            setAvatarState('idle');
+        };
+
+        avatarRecognition.onend = () => {
+            avatarRecognitionActive = false;
+            isListening = false;
+            voiceMicBtn.classList.remove('active');
+            if (!avatarRecognitionHasResult && avatarState === 'listening') {
+                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
+                setAvatarState('idle');
+            }
+        };
+    }
 
     /* ── Speaker toggle ── */
     textSpeakerBtn.addEventListener('click', () => {
@@ -1265,11 +1333,61 @@
         return ctx;
     }
 
+    function finalizeRecording(noteText = 'Processing speech…') {
+        isListening = false;
+        voiceMicBtn.classList.remove('active');
+        voiceNote.textContent = noteText;
+        setAvatarState('thinking');
+
+        const ctx = stopRecording();
+        const sampleRate = ctx ? ctx.sampleRate : 16000;
+        if (ctx) ctx.close();
+
+        const totalSamples = pcmChunks.reduce((acc, c) => acc + c.length, 0);
+        if (totalSamples < 800) {
+            voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
+            setAvatarState('idle');
+            pcmChunks = [];
+            return;
+        }
+
+        const merged = new Float32Array(totalSamples);
+        let offset = 0;
+        let peak = 0;
+        for (const chunk of pcmChunks) {
+            merged.set(chunk, offset);
+            offset += chunk.length;
+            for (let i = 0; i < chunk.length; i++) {
+                peak = Math.max(peak, Math.abs(chunk[i]));
+            }
+        }
+        pcmChunks = [];
+
+        if (peak < 0.01) {
+            voiceNote.textContent = 'Microphone input is very quiet. Move closer and try again.';
+            setAvatarState('idle');
+            return;
+        }
+
+        processVoiceBlob(encodeWAV(merged, sampleRate));
+    }
+
     function toggleListening() {
         if (currentMode !== 'avatar') return;
 
+        if (avatarRecognition) {
+            if (avatarRecognitionActive) {
+                avatarRecognition.stop();
+                return;
+            }
+            const cfg = LANG_CONFIG[languageSelect.value] || LANG_CONFIG.English;
+            avatarRecognition.lang = cfg.recognition;
+            avatarRecognition.start();
+            return;
+        }
+
         if (isListening) {
-            // Already handled by auto-VAD, do nothing
+            finalizeRecording('Processing speech…');
             return;
         }
 
@@ -1283,6 +1401,7 @@
             .then(stream => {
                 recordStream = stream;
                 recAudioCtx = new AudioContext();
+                recAudioCtx.resume();
                 recSource = recAudioCtx.createMediaStreamSource(stream);
                 recProcessor = recAudioCtx.createScriptProcessor(4096, 1, 1);
                 
@@ -1303,32 +1422,13 @@
                     const rms = Math.sqrt(sum / data.length);
                     
                     // Detect speech
-                    if (rms > 0.02) {  // Threshold for speech detection
+                    if (rms > 0.01) {  // Lower threshold so quieter speech still counts
                         hasSpoken = true;
                         silenceStart = Date.now();
                     } else if (hasSpoken && Date.now() - silenceStart > 800 && !vadTriggered) {
                         // Speech ended (silence for 800ms) - auto-process
                         vadTriggered = true;
-                        isListening = false;
-                        voiceMicBtn.classList.remove('active');
-                        voiceNote.textContent = 'Processing speech…';
-                        setAvatarState('thinking');
-                        
-                        const ctx = stopRecording();
-                        const sampleRate = ctx ? ctx.sampleRate : 16000;
-                        if (ctx) ctx.close();
-                        
-                        const totalSamples = pcmChunks.reduce((acc, c) => acc + c.length, 0);
-                        if (totalSamples < 800) {
-                            voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
-                            setAvatarState('idle');
-                            return;
-                        }
-                        const merged = new Float32Array(totalSamples);
-                        let offset = 0;
-                        for (const chunk of pcmChunks) { merged.set(chunk, offset); offset += chunk.length; }
-                        pcmChunks = [];
-                        processVoiceBlob(encodeWAV(merged, sampleRate));
+                        finalizeRecording('Processing speech…');
                     }
                 };
                 
@@ -1354,7 +1454,18 @@
             const res = await fetch('/api/chat/transcribe', { method: 'POST', body: formData });
             const data = await res.json();
             if (!res.ok) {
-                const detail = (data && (data.detail || data.error)) ? ` (${data.detail || data.error})` : '';
+                const detailText = (data && (data.detail || data.error)) ? String(data.detail || data.error) : '';
+                if (res.status === 502 && /no speech detected/i.test(detailText)) {
+                    voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
+                    setAvatarState('idle');
+                    return;
+                }
+                if (res.status === 502 && /speech was captured/i.test(detailText)) {
+                    voiceNote.textContent = 'Speech was captured, but transcription came back empty. Please try again.';
+                    setAvatarState('idle');
+                    return;
+                }
+                const detail = detailText ? ` (${detailText})` : '';
                 throw new Error(`Transcription request failed: ${res.status}${detail}`);
             }
             const spokenText = (data.transcript || '').trim();
@@ -1397,6 +1508,8 @@
     }
 
     window.addEventListener('beforeunload', () => {
+        if (textRecognition && textMicActive) { textRecognition.stop(); }
+        if (avatarRecognition && avatarRecognitionActive) { avatarRecognition.stop(); }
         stopRecording();
         if (recAudioCtx) { recAudioCtx.close(); recAudioCtx = null; }
         stopAudioSpeech();
