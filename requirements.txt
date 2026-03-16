@@ -11,6 +11,7 @@ Flask-SQLAlchemy==3.1.1
 Flask-Login==0.6.3
 Flask-Session>=0.5.0
 Flask-CORS>=4.0.0
+gunicorn==21.2.0
 
 # --- FastAPI chatbot server (app_chat.py) ---
 fastapi>=0.115.0
@@ -18,6 +19,7 @@ uvicorn==0.40.0
 pydantic==2.11.10
 httpx==0.28.1
 
+gunicorn==21.2.0
 # --- Database ---
 SQLAlchemy>=2.0.32
 
