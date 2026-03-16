@@ -22,6 +22,7 @@ if not _meralion_key:
 
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file, make_response
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 from Rehab_Scorer_Coach.src.web_pipeline import WebRehabPipeline
@@ -207,7 +208,30 @@ from database import close_db, query_db, execute_db, load_optimization_data
 import random
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-this-in-production'  # Required for sessions
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "your-secret-key-change-this-in-production")
+
+# Respect reverse-proxy headers when running behind HTTPS terminators.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+
+# Enable HTTPS-aware behavior when requested (used behind TLS proxies).
+_force_https = os.environ.get("FORCE_HTTPS", "0") == "1"
+if _force_https:
+    app.config.update(
+        PREFERRED_URL_SCHEME="https",
+        SESSION_COOKIE_SECURE=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_HTTPONLY=True,
+    )
+
+@app.before_request
+def _redirect_to_https():
+    if not _force_https:
+        return None
+    if request.is_secure:
+        return None
+    if request.headers.get("X-Forwarded-Proto", "").lower() == "https":
+        return None
+    return redirect(request.url.replace("http://", "https://", 1), code=301)
 
 # ==================== CONDITIONS & EXERCISE MAPPING ====================
 

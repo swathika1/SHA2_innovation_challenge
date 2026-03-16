@@ -30,17 +30,28 @@ fi
 
 # Set port (default 5050)
 PORT=${PORT:-5050}
-echo "[CONFIG] Running on port $PORT"
+WORKERS=${WORKERS:-2}
+THREADS=${THREADS:-4}
+GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-300}
+GUNICORN_PRELOAD=${GUNICORN_PRELOAD:-0}
+PRELOAD_FLAG=""
+if [ "$GUNICORN_PRELOAD" = "1" ]; then
+    PRELOAD_FLAG="--preload"
+fi
+echo "[CONFIG] Running on port $PORT (workers=$WORKERS threads=$THREADS timeout=$GUNICORN_TIMEOUT)"
 
 # Start Gunicorn with Flask app
 echo "[START] Launching Flask app with Gunicorn..."
 cd /app
 exec gunicorn \
     --bind 0.0.0.0:${PORT} \
-    --timeout 300 \
-    --workers 2 \
+    --timeout ${GUNICORN_TIMEOUT} \
+    --workers ${WORKERS} \
+    --threads ${THREADS} \
+    --worker-tmp-dir /dev/shm \
     --worker-class sync \
     --access-logfile - \
     --error-logfile - \
     --log-level info \
+    ${PRELOAD_FLAG} \
     main:app
