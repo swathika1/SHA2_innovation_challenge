@@ -2266,9 +2266,16 @@ function processKimoreResult(out) {
         if (r.set_completed)      { addXP(XP_PER_SET,      'Set Done!');   triggerAchievement('set_complete'); }
         if (r.exercise_completed) { addXP(XP_PER_EXERCISE, 'Exercise!');   triggerAchievement('exercise_complete'); }
     }
-    const fb = Array.isArray(out.llm_feedback) ? out.llm_feedback : (out.llm_feedback ? [out.llm_feedback] : []);
+    const fb = getActionableFeedback(out);
+    console.log('[FEEDBACK][KIMORE]', {
+        status: out.form_status,
+        frame_score: out.frame_score,
+        aggregated_score: out.aggregated_score,
+        raw_feedback: out.llm_feedback,
+        actionable_feedback: fb,
+    });
     renderCVFeedback(fb);
-    if (fb.length > 0) speakFeedbackList(fb);
+    if (shouldSpeakFeedback(out, fb)) speakFeedbackList(fb);
 }
 function processKeraalResult(out) {
     if (!out) return;
@@ -2303,9 +2310,16 @@ function processKeraalResult(out) {
     }
 
     // Always render + speak feedback for ALL form statuses (both solo and dual mode)
-    const fb = Array.isArray(out.llm_feedback) ? out.llm_feedback : (out.llm_feedback ? [out.llm_feedback] : []);
-    if (fb.length) renderCVFeedback(fb);
-    if (fb.length > 0) speakFeedbackList(fb);
+    const fb = getActionableFeedback(out);
+    console.log('[FEEDBACK][KERAAL]', {
+        status: out.form_status,
+        frame_score: out.frame_score,
+        aggregated_score: out.aggregated_score,
+        raw_feedback: out.llm_feedback,
+        actionable_feedback: fb,
+    });
+    renderCVFeedback(fb);
+    if (shouldSpeakFeedback(out, fb)) speakFeedbackList(fb);
 
     // If Keraal is the only pipeline, also drive rep UI + exercise detect + gamification
     if (selectedPipeline === 'keraal') {
@@ -2557,6 +2571,58 @@ function renderCVFeedback(items) {
     });
     LAST_FEEDBACK_RENDERED_KEY = newKey;
     LAST_FEEDBACK_RENDER_TIME = now;
+}
+
+function normalizeFormStatus(status) {
+    return String(status || '').trim().toUpperCase();
+}
+
+function isIncorrectFormStatus(status) {
+    const normalized = normalizeFormStatus(status);
+    return normalized === 'WRONG' || normalized === 'INCORRECT';
+}
+
+function getActionableFeedback(out) {
+    const rawItems = Array.isArray(out && out.llm_feedback)
+        ? out.llm_feedback
+        : (out && out.llm_feedback ? [out.llm_feedback] : []);
+
+    const cleaned = rawItems
+        .filter(function(item) { return typeof item === 'string' && item.trim(); })
+        .map(function(item) { return item.trim(); })
+        .filter(function(item) {
+            const lower = item.toLowerCase();
+            return !lower.includes('backend error:') && !lower.includes('keraal error:');
+        });
+
+    if (cleaned.length > 0) return cleaned;
+
+    const score = Number((out && (out.aggregated_score ?? out.frame_score)) || 0);
+    const asymmetry = Number((out && out.asymmetry_pct) || 0);
+    const status = normalizeFormStatus(out && out.form_status);
+    const needsCoaching = isIncorrectFormStatus(status) || (score > 0 && score < 35) || asymmetry >= 15;
+
+    if (needsCoaching) {
+        const exerciseName = (out && out.exercise_name ? String(out.exercise_name) : 'this exercise').replace(/_/g, ' ').trim();
+        const fallback = [];
+        fallback.push('Posture needs correction. Slow down, stay aligned, and adjust your form before continuing with ' + exerciseName + '.');
+        if (asymmetry >= 15) {
+            fallback.push('Try to keep both sides of your body level and avoid leaning more to one side.');
+        } else if (score > 0 && score < 35) {
+            fallback.push('Use a slower, more controlled motion and keep your trunk steady through the full rep.');
+        }
+        return fallback;
+    }
+
+    return [];
+}
+
+function shouldSpeakFeedback(out, items) {
+    const score = Number((out && (out.aggregated_score ?? out.frame_score)) || 0);
+    return Array.isArray(items) && items.length > 0 && (
+        isIncorrectFormStatus(out && out.form_status) ||
+        (score > 0 && score < 35)
+    );
 }
 
 function updateFormStatus(status, score) {
