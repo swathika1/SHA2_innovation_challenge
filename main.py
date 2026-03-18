@@ -963,6 +963,7 @@ def patient_dashboard():
             (session['user_id'],),
             one=True
         )
+    patient_info = with_live_patient_progress(patient_info)
     
     # Get patient's workouts — only exercises actively assigned/enabled for this patient
     workouts = query_db('''
@@ -1081,10 +1082,7 @@ def patient_dashboard():
     ''', (session['user_id'],))
     
     # Calculate dynamic statistics from sessions
-    total_sessions = query_db('''
-        SELECT COUNT(DISTINCT COALESCE(session_group_id, id)) as count FROM sessions 
-        WHERE patient_id = ?
-    ''', (session['user_id'],), one=True)
+    total_sessions = {'count': patient_info.get('completed_sessions', 0)}
     
     sessions_this_week = query_db('''
         SELECT COUNT(DISTINCT COALESCE(session_group_id, id)) as count FROM sessions 
@@ -1487,6 +1485,7 @@ def api_session_report_doctor(session_id):
     patient_name      = user_row['name'] if user_row else 'Patient'
     patient_condition = pat_row['condition'] if pat_row else 'General'
     current_week      = pat_row['current_week'] if pat_row else 1
+    pat_row = with_live_patient_progress({'user_id': patient_id, **(dict(pat_row) if pat_row else {})}) if pat_row else None
     adherence         = float(pat_row['adherence_rate'] or 0) if pat_row else 0
     streak_days       = int(pat_row['streak_days'] or 0) if pat_row else 0
     total_sessions    = int(pat_row['completed_sessions'] or 0) if pat_row else 0
@@ -2259,7 +2258,7 @@ def clinician_profile():
         ORDER BY u.name
     ''', (doctor_id,))
 
-    patients_with_caregivers = patients_with_caregivers if patients_with_caregivers else []
+    patients_with_caregivers = with_live_patient_progress_list(patients_with_caregivers)
 
     # Summary stats
     total_patients = len(patients_with_caregivers)
@@ -2314,7 +2313,7 @@ def caregiver_profile():
         WHERE cp.caregiver_id = ?
         ORDER BY u.name
     ''', (caregiver_id,))
-    monitored_patients = monitored_patients if monitored_patients else []
+    monitored_patients = with_live_patient_progress_list(monitored_patients)
 
     my_requests = query_db('''
         SELECT cr.id, cr.status, cr.requested_at, u.name as patient_name
@@ -2386,7 +2385,7 @@ def clinician_dashboard():
             ORDER BY p.adherence_rate ASC
         ''')
     
-    patients = patients if patients else []
+    patients = with_live_patient_progress_list(patients)
     total_patients = len(patients)
     needs_attention = sum(1 for p in patients if p['adherence_rate'] < 50 or p['avg_pain_level'] > 6)
     avg_adherence = sum(p['adherence_rate'] for p in patients) / total_patients if total_patients > 0 else 0
@@ -2631,6 +2630,7 @@ def patient_detail(patient_id):
     if not patient:
         flash('Patient not found.', 'error')
         return redirect(url_for('clinician_dashboard'))
+    patient = with_live_patient_progress(patient)
 
     # ── Assigned exercises (from patient_exercises, synced to workouts) ──
     assigned_exercises = query_db('''
@@ -3224,6 +3224,7 @@ def caregiver_dashboard():
         WHERE cp.caregiver_id = ?
     ''', (session['user_id'],))
     
+    monitored_patients = with_live_patient_progress_list(monitored_patients)
     patient_ids = [p['id'] for p in monitored_patients] if monitored_patients else []
     recent_sessions = []
     if patient_ids:
@@ -4296,23 +4297,8 @@ def api_session_complete():
     ''', (pain_after, effort_level, notes, avg_quality, completed_perc,
           session_id, session['user_id']))
 
-    # Update patient stats
-    try:
-        stats = query_db('''
-            SELECT AVG(quality_score) as avg_q, AVG(pain_after) as avg_p, COUNT(*) as cnt
-            FROM sessions
-            WHERE patient_id = ? AND completed_at IS NOT NULL
-        ''', (session['user_id'],), one=True)
-        if stats:
-            execute_db('''
-                UPDATE patients
-                SET avg_quality_score = ?, avg_pain_level = ?
-                WHERE user_id = ?
-            ''', (round(float(stats['avg_q'] or 0), 1),
-                  round(float(stats['avg_p'] or 0), 1),
-                  session['user_id']))
-    except Exception as e:
-        print(f"[WARN] Could not update patient stats: {e}")
+    # Refresh persisted patient progress stats from completed sessions.
+    get_live_patient_progress(session['user_id'], persist=True)
 
     # Auto-adaptive suggestion trigger (no model changes; only when wrong form is detected)
     try:
@@ -4373,9 +4359,6 @@ def api_session_complete():
                 )
     except Exception as e:
         print(f"[WARN] Adaptive suggestion auto-trigger failed: {e}")
-
-    # Recalculate adherence after every completed session
-    recalculate_adherence(session['user_id'])
 
     return jsonify({'ok': True, 'session_id': session_id})
 
@@ -5536,52 +5519,94 @@ def _parse_frequency_per_week(freq_text: str) -> float:
     return 3.0  # sensible default
 
 
-def recalculate_adherence(patient_id: int):
+def get_live_patient_progress(patient_id: int, persist: bool = True) -> dict:
     """
-    Recalculate and persist adherence_rate for a patient.
+    Compute patient progress stats directly from completed sessions.
 
-    Formula (0–100):
-      50% — Recent performance: average of (completion_perc/100 + quality_score/100) / 2
-             across the last 3 completed sessions.
-      50% — Overall history: average quality_score / 100 across all completed sessions.
-
-    If fewer than 3 sessions exist the recent score uses whatever is available.
-    If no sessions at all, adherence stays unchanged.
+    Returns a dict containing adherence_rate, avg_quality_score,
+    avg_pain_level, and completed_sessions. When ``persist`` is True,
+    the computed values are written back to the patients table so older
+    views and exports stay in sync.
     """
     try:
-        # ── Recent: last 3 sessions ──────────────────────────────────────────
+        overall = query_db(
+            """SELECT
+                   COUNT(DISTINCT COALESCE(session_group_id, id)) AS completed_sessions,
+                   AVG(quality_score) AS avg_q,
+                   AVG(pain_after) AS avg_p
+               FROM sessions
+               WHERE patient_id = ? AND completed_at IS NOT NULL""",
+            (patient_id,), one=True
+        )
+
         recent = query_db(
             """SELECT quality_score, completed_perc FROM sessions
                WHERE patient_id = ? AND completed_at IS NOT NULL
                ORDER BY completed_at DESC LIMIT 3""",
             (patient_id,)
         )
-        if not recent:
-            return  # no sessions yet — leave as-is
 
-        recent_scores = []
-        for r in recent:
-            comp = min(float(r['completed_perc'] or 0), 100.0) / 100.0
-            qual = min(float(r['quality_score'] or 0), 100.0) / 100.0
-            recent_scores.append((comp + qual) / 2.0)
-        recent_component = (sum(recent_scores) / len(recent_scores)) * 100.0
+        completed_sessions = int((overall['completed_sessions'] or 0) if overall else 0)
+        avg_quality_score = round(float((overall['avg_q'] or 0) if overall else 0), 1)
+        avg_pain_level = round(float((overall['avg_p'] or 0) if overall else 0), 1)
 
-        # ── Overall history: all sessions ────────────────────────────────────
-        overall = query_db(
-            """SELECT AVG(quality_score) as avg_q FROM sessions
-               WHERE patient_id = ? AND completed_at IS NOT NULL""",
-            (patient_id,), one=True
-        )
-        overall_component = min(float(overall['avg_q'] or 0), 100.0) if overall else 0.0
+        adherence = 0.0
+        if recent:
+            recent_scores = []
+            for r in recent:
+                comp = min(float(r['completed_perc'] or 0), 100.0) / 100.0
+                qual = min(float(r['quality_score'] or 0), 100.0) / 100.0
+                recent_scores.append((comp + qual) / 2.0)
+            recent_component = (sum(recent_scores) / len(recent_scores)) * 100.0
+            overall_component = min(avg_quality_score, 100.0)
+            adherence = round(0.5 * recent_component + 0.5 * overall_component, 1)
 
-        adherence = round(0.5 * recent_component + 0.5 * overall_component, 1)
+        metrics = {
+            'adherence_rate': adherence,
+            'avg_quality_score': avg_quality_score,
+            'avg_pain_level': avg_pain_level,
+            'completed_sessions': completed_sessions,
+        }
 
-        execute_db(
-            "UPDATE patients SET adherence_rate = ? WHERE user_id = ?",
-            (adherence, patient_id)
-        )
+        if persist:
+            execute_db(
+                """UPDATE patients
+                   SET adherence_rate = ?, avg_quality_score = ?, avg_pain_level = ?, completed_sessions = ?
+                   WHERE user_id = ?""",
+                (
+                    adherence,
+                    avg_quality_score,
+                    avg_pain_level,
+                    completed_sessions,
+                    patient_id,
+                )
+            )
+        return metrics
     except Exception as _e:
-        print(f"[WARN] recalculate_adherence failed for patient {patient_id}: {_e}")
+        print(f"[WARN] get_live_patient_progress failed for patient {patient_id}: {_e}")
+        return {}
+
+
+def recalculate_adherence(patient_id: int):
+    """Backward-compatible wrapper around the live progress calculator."""
+    get_live_patient_progress(patient_id, persist=True)
+
+
+def with_live_patient_progress(patient_row, persist: bool = True):
+    """Attach live adherence/progress metrics to a patient row-like object."""
+    if not patient_row:
+        return patient_row
+    row = dict(patient_row)
+    patient_id = row.get('user_id', row.get('id'))
+    if patient_id is None:
+        return row
+    row.update(get_live_patient_progress(int(patient_id), persist=persist))
+    return row
+
+
+def with_live_patient_progress_list(rows, persist: bool = True):
+    """Map live patient progress onto a list of patient row-like objects."""
+    return [with_live_patient_progress(row, persist=persist) for row in (rows or [])]
 
 
 def assign_patient_exercises(patient_user_id, condition):
@@ -5816,6 +5841,138 @@ def _log_frame_telemetry(out: dict, program: str = 'general'):
         print(f"[FRAME_LOG] Error: {e}")
 
 
+def _ensure_live_feedback_message(out: dict) -> dict:
+    """Guarantee a user-facing coaching message for bad-form live frames."""
+    if not isinstance(out, dict):
+        return out
+
+    form_status = str(out.get("form_status") or "").strip().upper()
+    existing = out.get("llm_feedback")
+    if isinstance(existing, list):
+        feedback_items = [item.strip() for item in existing if isinstance(item, str) and item.strip()]
+    elif isinstance(existing, str) and existing.strip():
+        feedback_items = [existing.strip()]
+    else:
+        feedback_items = []
+
+    def _landmark_xy(idx: int):
+        landmarks = out.get("landmarks") or []
+        if not isinstance(landmarks, list) or idx >= len(landmarks):
+            return None
+        point = landmarks[idx]
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            return None
+        try:
+            return float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            return None
+
+    def _is_generic_feedback(text: str) -> bool:
+        lower = text.lower().strip()
+        generic_markers = (
+            "keep going",
+            "proper form",
+            "proper posture",
+            "maintain proper form",
+            "maintain proper form and posture",
+            "posture controlled and stable",
+            "focus on proper form",
+            "move slowly and controlled",
+            "adjust your positioning",
+            "small corrections matter",
+            "almost there",
+            "fine-tune your form",
+            "try again",
+            "try once more",
+            "one more perfect rep",
+        )
+        return any(marker in lower for marker in generic_markers)
+
+    def _specific_form_cues() -> list[str]:
+        cues = []
+        exercise_name = str(out.get("exercise_name") or "").replace("_", " ").lower()
+
+        left_shoulder = _landmark_xy(11)
+        right_shoulder = _landmark_xy(12)
+        left_hip = _landmark_xy(23)
+        right_hip = _landmark_xy(24)
+        left_knee = _landmark_xy(25)
+        right_knee = _landmark_xy(26)
+        left_ankle = _landmark_xy(27)
+        right_ankle = _landmark_xy(28)
+        left_wrist = _landmark_xy(15)
+        right_wrist = _landmark_xy(16)
+        nose = _landmark_xy(0)
+
+        if left_shoulder and right_shoulder:
+            shoulder_diff = abs(left_shoulder[1] - right_shoulder[1])
+            if shoulder_diff > 0.06:
+                higher_side = "left" if left_shoulder[1] < right_shoulder[1] else "right"
+                cues.append(f"Your shoulders are uneven. Keep the {higher_side} shoulder relaxed and level with the other side.")
+
+        if left_hip and right_hip:
+            hip_diff = abs(left_hip[1] - right_hip[1])
+            if hip_diff > 0.06:
+                drop_side = "left" if left_hip[1] > right_hip[1] else "right"
+                cues.append(f"Your hips are tilting. Keep your pelvis level and avoid dropping the {drop_side} hip.")
+
+        if left_shoulder and right_shoulder and left_hip and right_hip:
+            shoulder_mid_x = (left_shoulder[0] + right_shoulder[0]) / 2.0
+            hip_mid_x = (left_hip[0] + right_hip[0]) / 2.0
+            trunk_shift = shoulder_mid_x - hip_mid_x
+            if abs(trunk_shift) > 0.08:
+                lean_side = "right" if trunk_shift > 0 else "left"
+                cues.append(f"Your trunk is leaning to the {lean_side}. Bring your chest back over your hips.")
+
+        if nose and left_hip and right_hip:
+            hip_mid_x = (left_hip[0] + right_hip[0]) / 2.0
+            head_shift = nose[0] - hip_mid_x
+            if abs(head_shift) > 0.10:
+                head_side = "right" if head_shift > 0 else "left"
+                cues.append(f"Your head and chest are drifting to the {head_side}. Keep your spine stacked and centered.")
+
+        if "squat" in exercise_name and left_knee and right_knee and left_ankle and right_ankle:
+            knee_gap = abs(left_knee[0] - right_knee[0])
+            ankle_gap = abs(left_ankle[0] - right_ankle[0])
+            if ankle_gap > 0.05 and knee_gap < ankle_gap * 0.75:
+                cues.append("Your knees are falling inward. Push them out so they track over your toes.")
+
+        if ("lifting" in exercise_name or "arm" in exercise_name) and left_wrist and right_wrist and left_shoulder and right_shoulder:
+            wrist_height_diff = abs(left_wrist[1] - right_wrist[1])
+            if wrist_height_diff > 0.08:
+                lower_arm = "left" if left_wrist[1] > right_wrist[1] else "right"
+                cues.append(f"Your arms are uneven. Lift the {lower_arm} arm to match the other side.")
+            wrists_below_shoulders = (left_wrist[1] > left_shoulder[1] + 0.05) or (right_wrist[1] > right_shoulder[1] + 0.05)
+            if wrists_below_shoulders:
+                cues.append("Raise your arms a little higher and keep both shoulders level.")
+
+        deduped = []
+        for cue in cues:
+            if cue not in deduped:
+                deduped.append(cue)
+        return deduped[:3]
+
+    specific_cues = _specific_form_cues()
+
+    if form_status in ("WRONG", "INCORRECT"):
+        if not feedback_items:
+            feedback_items = specific_cues[:]
+
+        if specific_cues:
+            generic_only = not feedback_items or all(_is_generic_feedback(item) for item in feedback_items)
+            if generic_only:
+                feedback_items = specific_cues + [item for item in feedback_items if not _is_generic_feedback(item)]
+
+    if form_status in ("WRONG", "INCORRECT") and not feedback_items:
+        exercise_name = str(out.get("exercise_name") or "this exercise").replace("_", " ").strip()
+        feedback_items = [
+            f"Posture needs correction. Slow down, stay aligned, and adjust your form before continuing with {exercise_name}."
+        ]
+
+    out["llm_feedback"] = feedback_items[:3]
+    return out
+
+
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():
     if PIPELINE is None:
@@ -5842,6 +5999,7 @@ def api_live_feedback():
             manual_exercise=manual_exercise,
             exercise_hint=exercise_hint
         )
+        out = _ensure_live_feedback_message(out)
         
         # Store landmarks for frontend polling
         global LATEST_LANDMARKS
@@ -5898,6 +6056,7 @@ def api_live_feedback_keraal():
             language=language,
             exercise_hint=exercise_hint
         )
+        out = _ensure_live_feedback_message(out)
         
         # Store landmarks for frontend polling
         global LATEST_LANDMARKS
