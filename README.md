@@ -30,6 +30,8 @@
 
 ## Setup
 
+> **Note:** The virtual environment (`venv/`) is not included in this repository. You must create one and install all dependencies using `requirements.txt` before running the app (steps 2 and 3 below).
+
 ### 1. Clone the Repository
 ```bash
 git clone https://github.com/swathika1/SHA2_innovation_challenge.git
@@ -256,3 +258,20 @@ FROM patients p JOIN users u ON p.user_id = u.id;
 **"Workout not found" error?**
 - Check: `SELECT * FROM workouts WHERE patient_id = YOUR_ID AND is_active = 1;`
 - If none, ask a doctor to create one via the clinician dashboard
+
+---
+
+## Collaboration Guidelines
+
+These are the working principles for this project:
+
+- I am a student. Break down complex topics into simpler ideas to build understanding from the ground up.
+- Stay unbiased. Do not agree with an idea just because I proposed it. If a better solution exists, say so directly.
+- Push back. Disagree whenever there is good reason to. The goal is debate and improvement, not validation.
+- Think step by step. When solving problems, walk through the reasoning one step at a time.
+- Back it up. Provide justifications with valid sources when giving information or recommending solutions.
+- Keep it concise. For small or simple tasks, keep responses short unless more detail is requested.
+- Think broadly. Explore fresh and unconventional ideas, not just the most obvious answer.
+- No jargon. Write for someone without assumed technical knowledge.
+- Write like a human. Keep written output professional and concise, but not robotic.
+- No em dashes. Use other punctuation.

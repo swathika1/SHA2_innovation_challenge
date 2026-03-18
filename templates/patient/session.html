@@ -1692,6 +1692,9 @@ let lastCameraSetupSpeechHash = "";
 let lastCameraSetupSpeechAt = 0;
 const SPEAK_COOLDOWN_MS = 3000;
 const CAMERA_SETUP_SPEAK_COOLDOWN_MS = 4000;
+const FEEDBACK_SPEAK_COOLDOWN_MS = 30000; // re-speak same feedback after 30s
+const FORM_CORRECTION_THRESHOLD = 47;     // score below this triggers form correction feedback
+const ASYMMETRY_THRESHOLD_PCT = 15;       // asymmetry % above this triggers feedback
 
 // CV feedback persistence
 let LAST_FEEDBACK = null;
@@ -2605,7 +2608,9 @@ function renderCVFeedback(items) {
     if (!displayItems) {
         const div = document.createElement('div');
         div.className = 'feedback-item info';
-        div.textContent = 'Position yourself in frame to begin analysis';
+        div.textContent = sessionStarted
+            ? 'Form looks good! Keep going.'
+            : 'Position yourself in frame to begin analysis';
         list.appendChild(div);
         LAST_FEEDBACK_RENDERED_KEY = '';
         LAST_FEEDBACK_RENDER_TIME = now;
@@ -2621,6 +2626,63 @@ function renderCVFeedback(items) {
     LAST_FEEDBACK_RENDER_TIME = now;
 }
 
+<<<<<<< Updated upstream
+=======
+function normalizeFormStatus(status) {
+    return String(status || '').trim().toUpperCase();
+}
+
+function isIncorrectFormStatus(status) {
+    const normalized = normalizeFormStatus(status);
+    return normalized === 'WRONG' || normalized === 'INCORRECT';
+}
+
+function getActionableFeedback(out) {
+    const rawItems = Array.isArray(out && out.llm_feedback)
+        ? out.llm_feedback
+        : (out && out.llm_feedback ? [out.llm_feedback] : []);
+
+    const cleaned = rawItems
+        .filter(function(item) { return typeof item === 'string' && item.trim(); })
+        .map(function(item) { return item.trim(); })
+        .filter(function(item) {
+            const lower = item.toLowerCase();
+            return !lower.includes('backend error:') && !lower.includes('keraal error:');
+        });
+
+    if (cleaned.length > 0) return cleaned;
+
+    const score = Number((out && (out.aggregated_score ?? out.frame_score)) || 0);
+    const asymmetry = Number((out && out.asymmetry_pct) || 0);
+    const status = normalizeFormStatus(out && out.form_status);
+    const needsCoaching = isIncorrectFormStatus(status) || (score > 0 && score < FORM_CORRECTION_THRESHOLD) || asymmetry >= ASYMMETRY_THRESHOLD_PCT;
+
+    if (needsCoaching) {
+        const exerciseName = (out && out.exercise_name ? String(out.exercise_name) : 'this exercise').replace(/_/g, ' ').trim();
+        const fallback = [];
+        fallback.push('Posture needs correction. Slow down, stay aligned, and adjust your form before continuing with ' + exerciseName + '.');
+        if (asymmetry >= ASYMMETRY_THRESHOLD_PCT) {
+            fallback.push('Try to keep both sides of your body level and avoid leaning more to one side.');
+        } else if (score > 0 && score < FORM_CORRECTION_THRESHOLD) {
+            fallback.push('Use a slower, more controlled motion and keep your trunk steady through the full rep.');
+        }
+        return fallback;
+    }
+
+    return [];
+}
+
+function shouldSpeakFeedback(out, items) {
+    const score = Number((out && (out.aggregated_score ?? out.frame_score)) || 0);
+    const asymmetry = Number((out && out.asymmetry_pct) || 0);
+    return Array.isArray(items) && items.length > 0 && (
+        isIncorrectFormStatus(out && out.form_status) ||
+        (score > 0 && score < FORM_CORRECTION_THRESHOLD) ||
+        asymmetry >= ASYMMETRY_THRESHOLD_PCT
+    );
+}
+
+>>>>>>> Stashed changes
 function updateFormStatus(status, score) {
     const badge = document.getElementById('formStatusBadge');
     // Score text is now updated ONLY per rep via updateScoreDisplay()
@@ -2825,9 +2887,10 @@ async function speakFeedbackList(items) {
     // Don't interrupt: if TTS is still playing previous feedback, skip
     if (isSpeaking || ttsQueue.length > 0) return;
 
-    // Duplicate check: skip if same feedback as last time
+    // Duplicate check: skip if same feedback was spoken recently (within 30s)
     const hash = items.join("|");
-    if (hash === lastSpokenHash) return;
+    const now = Date.now();
+    if (hash === lastSpokenHash && (now - lastSpokenAt) < FEEDBACK_SPEAK_COOLDOWN_MS) return;
 
     // Queue ALL feedback lines individually so each is spoken fully
     // but skip fallback/error messages (e.g. "feedback unavailable")
@@ -2840,7 +2903,7 @@ async function speakFeedbackList(items) {
     });
 
     lastSpokenHash = hash;
-    lastSpokenAt = Date.now();
+    lastSpokenAt = now;
 }
 
 /* ===================== AUDIO TOGGLE ===================== */
@@ -3384,6 +3447,8 @@ async function nextExercise() {
     updateSessionProgress();
     addFeedback('info', 'Now: ' + w.name);
     streak = 0;  // reset streak on exercise change
+    lastSpokenHash = "";  // reset TTS dedup so new exercise gets fresh feedback
+    lastSpokenAt = 0;
     updateExerciseRefPanel();
     const btn = document.getElementById('nextExerciseBtn');
     btn.style.animation = '';

@@ -288,9 +288,8 @@ def predict_score(feature_50d: np.ndarray):
 
     sequence = sequence.reshape(1, 100, 50)
 
-    score = scoring_model.predict(sequence, verbose=0)[0][0]
-    #normalized_score = (float(score) / 300.0) * 50.0
-    return float(score)
+    score = float(scoring_model.predict(sequence, verbose=0)[0][0])
+    return score
 
 def reset_sequence():
     global SEQUENCE_BUFFER
