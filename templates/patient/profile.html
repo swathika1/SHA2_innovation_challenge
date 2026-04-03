@@ -366,6 +366,24 @@
                 <span><span class="card-icon"><i class="fa-solid fa-notes-medical"></i></span> Medical History</span>
                 <span style="font-size:.8rem;color:#aaa;font-weight:400;" id="mh-last-updated"></span>
             </div>
+            <!-- PDF Import -->
+            <input type="file" id="pdf-profile-input" accept=".pdf" style="display:none" onchange="mhPdfUpload(this)">
+            <button type="button" class="pdf-upload-btn" id="pdf-profile-btn" onclick="document.getElementById('pdf-profile-input').click()">
+                <i class="fa-solid fa-file-medical"></i> Import from PDF
+            </button>
+            <div id="pdf-profile-error">
+                <i class="fa-solid fa-triangle-exclamation"></i> <span id="pdf-profile-error-msg"></span>
+                <button onclick="document.getElementById('pdf-profile-error').style.display='none'" style="float:right;background:none;border:none;cursor:pointer;color:#991b1b;" aria-label="Close error message">✕</button>
+            </div>
+            <div id="pdf-confirm-panel">
+                <h4><i class="fa-solid fa-circle-check"></i> Medical history extracted from PDF</h4>
+                <p style="margin:0 0 8px;color:#374151;">Review the records below, then click <strong>Save All</strong> to add them to your profile.</p>
+                <ul id="pdf-confirm-list"></ul>
+                <div class="pdf-confirm-actions">
+                    <button class="pdf-save-btn" id="pdf-save-btn" onclick="mhSaveExtracted()">Save All</button>
+                    <button class="pdf-cancel-btn" onclick="mhCancelExtracted()">Cancel</button>
+                </div>
+            </div>
             <p style="font-size:.85rem;color:#888;margin:0 0 16px;">
                 Self-reported — reviewed by your clinician. Records marked
                 <span style="background:#f0fdf4;color:#166534;padding:1px 8px;border-radius:20px;font-size:.77rem;font-weight:600;">Verified</span>
@@ -629,6 +647,25 @@ async function saveProfile() {
 .mh-form-save { padding:6px 18px; background:#6366f1; color:#fff; border:none; border-radius:7px; font-size:.85rem; font-weight:700; cursor:pointer; }
 .mh-form-save:hover { background:#4f46e5; }
 .mh-form-cancel { padding:6px 14px; background:#f0f0f0; color:#555; border:none; border-radius:7px; font-size:.85rem; cursor:pointer; }
+.pdf-upload-btn {
+    display:inline-flex; align-items:center; gap:7px; padding:8px 16px;
+    background:#fff; color:#6366f1; border:2px solid #6366f1;
+    border-radius:9px; font-size:.85rem; font-weight:700; cursor:pointer;
+    transition:background .15s; margin-bottom:14px;
+}
+.pdf-upload-btn:hover { background:#eef3ff; }
+.pdf-upload-btn:disabled { opacity:.5; cursor:not-allowed; }
+#pdf-confirm-panel {
+    display:none; background:#f0fdf4; border:1px solid #86efac;
+    border-radius:10px; padding:14px 16px; margin-bottom:16px; font-size:.88rem;
+}
+#pdf-confirm-panel h4 { margin:0 0 8px; font-size:.92rem; color:#166534; }
+#pdf-confirm-list { margin:0 0 12px; padding-left:18px; color:#374151; line-height:1.8; }
+.pdf-confirm-actions { display:flex; gap:10px; }
+.pdf-save-btn { padding:8px 18px; background:#22c55e; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer; font-size:.88rem; }
+.pdf-save-btn:disabled { opacity:.5; }
+.pdf-cancel-btn { padding:8px 14px; background:none; border:1px solid #aaa; border-radius:8px; color:#555; cursor:pointer; font-size:.88rem; }
+#pdf-profile-error { display:none; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:10px 14px; font-size:.84rem; color:#991b1b; margin-bottom:12px; }
 </style>
 
 <script>
@@ -857,6 +894,130 @@ async function mhDelete(type, id) {
     if (!confirm('Delete this record?')) return;
     await fetch(MH_ENDPOINTS[type] + '/' + id, {method:'DELETE'});
     await mhLoad();
+}
+
+async function mhPdfUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const btn = document.getElementById('pdf-profile-btn');
+    const errEl = document.getElementById('pdf-profile-error');
+    const errMsg = document.getElementById('pdf-profile-error-msg');
+    errEl.style.display = 'none';
+
+    if (file.size > 5 * 1024 * 1024) {
+        errMsg.textContent = 'File must be under 5MB.';
+        errEl.style.display = 'block';
+        setTimeout(() => { errEl.style.display = 'none'; }, 7000);
+        input.value = '';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Extracting...';
+
+    const formData = new FormData();
+    formData.append('pdf', file);
+
+    try {
+        const res = await fetch('/patient/medical-history/upload-pdf', {method: 'POST', body: formData});
+        const data = await res.json();
+        if (!res.ok) {
+            errMsg.textContent = data.message || 'Extraction failed. Please enter manually.';
+            errEl.style.display = 'block';
+            setTimeout(() => { errEl.style.display = 'none'; }, 7000);
+        } else {
+            mhAutoFill(data);
+        }
+    } catch (e) {
+        errMsg.textContent = 'Network error. Please try again.';
+        errEl.style.display = 'block';
+        setTimeout(() => { errEl.style.display = 'none'; }, 7000);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-file-medical"></i> Import from PDF';
+        input.value = '';
+    }
+}
+
+function mhAutoFill(data) {
+    const labels = {
+        conditions:     c => c.name + (c.onset_year ? ` (${c.onset_year})` : ''),
+        surgeries:      s => s.procedure + (s.body_region ? ` \u2014 ${s.body_region}` : ''),
+        injuries:       i => i.body_region + (i.injury_description ? `: ${i.injury_description}` : ''),
+        medications:    m => m.drug_name + (m.indication ? ` for ${m.indication}` : ''),
+        family_history: f => f.condition + (f.relation ? ` (${f.relation})` : '')
+    };
+    const sectionNames = {
+        conditions: 'Conditions', surgeries: 'Surgeries',
+        injuries: 'Injuries', medications: 'Medications', family_history: 'Family History'
+    };
+
+    let total = 0;
+    const listEl = document.getElementById('pdf-confirm-list');
+    listEl.innerHTML = '';
+
+    for (const [section, items] of Object.entries(data)) {
+        if (!items || !items.length) continue;
+        const groupLi = document.createElement('li');
+        groupLi.style.fontWeight = '700';
+        groupLi.textContent = sectionNames[section] || section;
+        listEl.appendChild(groupLi);
+        for (const item of items) {
+            const li = document.createElement('li');
+            li.style.marginLeft = '12px';
+            li.style.fontWeight = '400';
+            li.textContent = labels[section] ? labels[section](item) : JSON.stringify(item);
+            listEl.appendChild(li);
+            total++;
+        }
+    }
+
+    if (total > 0) {
+        window._pdfExtracted = data;
+        document.getElementById('pdf-confirm-panel').style.display = 'block';
+        document.getElementById('pdf-confirm-panel').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    } else {
+        const errEl = document.getElementById('pdf-profile-error');
+        document.getElementById('pdf-profile-error-msg').textContent = 'No medical history found in this PDF. Please enter manually.';
+        errEl.style.display = 'block';
+        setTimeout(() => { errEl.style.display = 'none'; }, 7000);
+    }
+}
+
+async function mhSaveExtracted() {
+    const data = window._pdfExtracted || {};
+    const btn = document.getElementById('pdf-save-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    const endpointMap = {
+        conditions:     '/patient/medical-history/condition',
+        surgeries:      '/patient/medical-history/surgery',
+        injuries:       '/patient/medical-history/injury',
+        medications:    '/patient/medical-history/medication',
+        family_history: '/patient/medical-history/family-history'
+    };
+
+    for (const [category, items] of Object.entries(data)) {
+        const endpoint = endpointMap[category];
+        if (!endpoint || !items.length) continue;
+        for (const item of items) {
+            await fetch(endpoint, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(item)
+            });
+        }
+    }
+
+    mhCancelExtracted();
+    await mhLoad();
+}
+
+function mhCancelExtracted() {
+    window._pdfExtracted = null;
+    document.getElementById('pdf-confirm-panel').style.display = 'none';
+    document.getElementById('pdf-confirm-list').innerHTML = '';
 }
 
 // Load on page init
