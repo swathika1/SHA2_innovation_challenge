@@ -12,6 +12,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <!-- Mobile responsive CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='mobile.css') }}">
 </head>
 <body>
     <!-- Animated particle background canvas -->
@@ -219,6 +221,23 @@
     const aura3 = document.createElement('div');
     aura3.className = 'bg-aura3';
     document.body.appendChild(aura3);
+    </script>
+    
+    <!-- Mobile App Initialization -->
+    <script src="{{ url_for('static', filename='mobile-app.js') }}"></script>
+    <script>
+        // Auto-initialize mobile app if available
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                if (typeof initializeMobileApp === 'function') {
+                    initializeMobileApp();
+                }
+            });
+        } else {
+            if (typeof initializeMobileApp === 'function') {
+                initializeMobileApp();
+            }
+        }
     </script>
 </body>
 </html>

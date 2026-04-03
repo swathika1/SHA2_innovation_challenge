@@ -1,0 +1,334 @@
+/* ========================================
+   MOBILE OPTIMIZATIONS FOR SHA2 REHAB APP
+   Responsive Design for Touch Devices
+   ======================================== */
+
+/* ========== MOBILE-FIRST VIEWPORT ========== */
+@media (max-width: 768px) {
+    :root {
+        --font-size-base: 14px;
+        --font-size-lg: 16px;
+        --font-size-xl: 18px;
+    }
+
+    * {
+        touch-action: manipulation;
+    }
+
+    html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        position: fixed;
+        overflow: hidden;
+    }
+
+    body {
+        font-size: 14px;
+    }
+
+    .page-wrapper {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* ========== HEADER MOBILE ========== */
+    header.header {
+        padding: 12px 16px !important;
+        flex-shrink: 0;
+    }
+
+    header.header h1 {
+        font-size: 18px !important;
+        margin: 0 !important;
+    }
+
+    header.header .brand-logo {
+        max-height: 32px !important;
+        width: auto !important;
+    }
+
+    nav.nav-links {
+        display: flex !important;
+        gap: 12px !important;
+        align-items: center !important;
+    }
+
+    nav.nav-links a {
+        font-size: 13px !important;
+        padding: 8px 12px !important;
+    }
+
+    /* ========== MAIN CONTAINER ========== */
+    main.container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .pre-session-card {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 20px !important;
+        border-radius: 12px !important;
+    }
+
+    /* ========== VIDEO PLAYER RESPONSIVE ========== */
+    .live-session-grid {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0 !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .video-panel-wrap {
+        width: 100% !important;
+        border-radius: 0 !important;
+        min-height: 320px !important;
+    }
+
+    .video-container video {
+        width: 100% !important;
+        height: auto !important;
+        display: block !important;
+    }
+
+    /* ========== BUTTONS - TOUCH FRIENDLY ========== */
+    button, .btn, a.btn {
+        min-height: 44px !important;
+        min-width: 44px !important;
+        padding: 12px 16px !important;
+        font-size: 15px !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+    }
+
+    .btn-start-session {
+        width: 100% !important;
+        padding: 16px !important;
+        font-size: 16px !important;
+        margin-top: 16px !important;
+    }
+
+    .btn-primary, button.btn-primary {
+        padding: 14px 20px !important;
+        font-size: 15px !important;
+    }
+
+    /* ========== FORMS - MOBILE FRIENDLY ========== */
+    input, select, textarea {
+        font-size: 16px !important;
+        padding: 12px !important;
+        border-radius: 8px !important;
+        width: 100% !important;
+        border: 1px solid #ddd !important;
+        margin-bottom: 12px !important;
+    }
+
+    input[type="range"] {
+        width: 100% !important;
+        height: 6px !important;
+        padding: 0 !important;
+    }
+
+    label {
+        display: block !important;
+        margin-bottom: 8px !important;
+        font-weight: 600 !important;
+        font-size: 14px !important;
+    }
+
+    /* ========== TIMERS BAR ========== */
+    .timers-bar {
+        display: flex !important;
+        gap: 10px !important;
+        margin-bottom: 12px !important;
+        flex-wrap: wrap !important;
+    }
+
+    .timer-card {
+        flex: 1 1 calc(50% - 5px) !important;
+        min-width: 120px !important;
+        padding: 12px !important;
+        border-radius: 8px !important;
+    }
+
+    .timer-card .timer-value {
+        font-size: 20px !important;
+        font-weight: 700 !important;
+    }
+
+    /* ========== CHAT/SIDEBAR ========== */
+    .chat-sidebar {
+        display: none !important;
+    }
+
+    .chat-modal {
+        position: fixed !important;
+        bottom: 0 !important;
+        right: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 60% !important;
+        border-radius: 12px 12px 0 0 !important;
+        z-index: 1000 !important;
+    }
+
+    /* ========== MODALS - FULLSCREEN ON MOBILE ========== */
+    .modal {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 0 !important;
+        z-index: 2000 !important;
+    }
+
+    .modal-content {
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+        max-height: 100% !important;
+    }
+
+    /* ========== NAVBAR - HAMBURGER ========== */
+    .nav-links {
+        gap: 8px !important;
+    }
+
+    .nav-user-btn {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        padding: 8px !important;
+    }
+
+    /* ========== EXERCISE LIST ========== */
+    .exercise-list li {
+        padding: 14px !important;
+        margin-bottom: 8px !important;
+        font-size: 14px !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+    }
+
+    .exercise-list li .meta {
+        font-size: 12px !important;
+        margin-top: 6px !important;
+    }
+
+    /* ========== CANVAS PARTICLES - LIGHTER ON MOBILE ========== */
+    #bgParticles {
+        opacity: 0.3;
+    }
+
+    /* ========== TEXT SIZES ========== */
+    h1 { font-size: 24px !important; }
+    h2 { font-size: 20px !important; }
+    h3 { font-size: 18px !important; }
+    h4 { font-size: 16px !important; }
+    h5 { font-size: 14px !important; }
+    h6 { font-size: 13px !important; }
+
+    /* ========== SAFE AREA SUPPORT (iPhone notch/status bar) ========== */
+    header.header {
+        padding-top: max(12px, env(safe-area-inset-top)) !important;
+        padding-left: max(12px, env(safe-area-inset-left)) !important;
+        padding-right: max(12px, env(safe-area-inset-right)) !important;
+    }
+
+    main.container {
+        padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+    }
+
+    /* ========== ORIENTATION SUPPORT ========== */
+    @media (orientation: landscape) {
+        header.header {
+            padding: 8px 16px;
+        }
+
+        main.container {
+            padding: 8px;
+        }
+
+        .video-container video {
+            max-height: 70vh;
+        }
+
+        h1 { font-size: 20px !important; }
+        h2 { font-size: 18px !important; }
+    }
+}
+
+/* ========== TABLET (768px - 1024px) ========== */
+@media (min-width: 769px) and (max-width: 1024px) {
+    button, .btn {
+        min-height: 40px !important;
+        padding: 10px 14px !important;
+    }
+
+    .live-session-grid {
+        grid-template-columns: 1fr 300px !important;
+    }
+
+    main.container {
+        padding: 16px !important;
+    }
+}
+
+/* ========== PREVENT ZOOM ON IOS ========== */
+html {
+    -webkit-user-scalable: no;
+    -webkit-touch-callout: none;
+}
+
+input, textarea, select {
+    -webkit-user-scalable: no;
+    -webkit-appearance: none;
+    border-radius: 4px;
+}
+
+/* ========== HAPTIC FEEDBACK / ACTIVE STATE ========== */
+button:active, .btn:active, a:active {
+    opacity: 0.8;
+    transform: scale(0.98);
+}
+
+/* ========== AVOID LAYOUT SHIFT ON SCROLL ========== */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+/* ========== FLEXBOX GRID FOR MOBILE ========== */
+.grid-responsive {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+}
+
+@media (max-width: 768px) {
+    .grid-responsive {
+        grid-template-columns: 1fr;
+    }
+}

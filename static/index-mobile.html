@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="true">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SHA2 Rehab Coach">
+    <meta name="theme-color" content="#0066cc">
+    
+    <title>SHA2 Rehab Coach</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="rehab-logo.png">
+    <link rel="apple-touch-icon" href="rehab-logo.png">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="mobile.css">
+    
+    <style>
+        /* App shell loading state */
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        #app-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(-45deg, #0f0c29, #302b63, #24243e);
+            color: white;
+            font-family: 'Poppins', sans-serif;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top: 3px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Status message */
+        #status-msg {
+            font-size: 14px;
+            color: rgba(255,255,255,0.8);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading screen while app initializes -->
+    <div id="app-loading">
+        <div class="spinner"></div>
+        <div id="status-msg">Initializing SHA2 Rehab Coach...</div>
+    </div>
+
+    <!-- App container (filled by Flask/React) -->
+    <div id="app"></div>
+
+    <!-- Capacitor -->
+    <script src="capacitor.js"></script>
+
+    <!-- Mobile App Initialization -->
+    <script src="mobile-app.js"></script>
+
+    <!-- Your main app will load here via Flask or bundler -->
+    <script>
+        // Initialize mobile app shell
+        if (typeof initializeMobileApp === 'function') {
+            window.addEventListener('DOMContentLoaded', () => {
+                initializeMobileApp();
+            });
+        } else {
+            // Fallback: load your Flask app after a delay
+            setTimeout(() => {
+                const loadingScreen = document.getElementById('app-loading');
+                if (loadingScreen) loadingScreen.style.display = 'none';
+                
+                // Redirect to Flask login/dashboard
+                window.location.href = '/';
+            }, 1500);
+        }
+    </script>
+</body>
+</html>
