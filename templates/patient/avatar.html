@@ -118,14 +118,21 @@
         color: #fff;
     }
 
-    .language-select {
+    .language-status {
         margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         border: 1px solid #d4d9e6;
-        border-radius: 8px;
-        padding: 8px 10px;
+        border-radius: 999px;
+        padding: 8px 14px;
         background: #fff;
         font-weight: 600;
         color: #243447;
+    }
+
+    .language-status strong {
+        color: #2c56d8;
     }
 
     .panel {
@@ -285,7 +292,7 @@
     @media (max-width: 900px) {
         .jimmy-top { flex-direction: column; text-align: center; }
         .hero-avatar-wrap { width: 260px; height: 320px; }
-        .language-select { margin-left: 0; }
+        .language-status { margin-left: 0; }
         .bubble { max-width: 86%; }
     }
 </style>
@@ -306,14 +313,10 @@
     <div class="mode-row">
         <button id="modeTextBtn" class="mode-btn">Text Chat</button>
         <button id="modeAvatarBtn" class="mode-btn active">Talk to Avatar</button>
-
-        <select id="languageSelect" class="language-select" title="Language">
-            <option value="English">English</option>
-            <option value="Chinese">中文 (Chinese)</option>
-            <option value="Malay">Bahasa Melayu</option>
-            <option value="Tamil">தமிழ் (Tamil)</option>
-            <option value="Singlish">Singlish</option>
-        </select>
+        <div id="languageStatus" class="language-status" aria-live="polite">
+            Auto language:
+            <strong id="languageStatusValue">English</strong>
+        </div>
     </div>
 
     <div class="panel">
@@ -345,7 +348,6 @@
 </div>
 
 <script>
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
     const LANG_CONFIG = {
         English: { recognition: 'en-SG', tts: 'English', synthesis: 'en-SG' },
         Chinese: { recognition: 'zh-CN', tts: 'Chinese', synthesis: 'zh-CN' },
@@ -353,6 +355,9 @@
         Tamil: { recognition: 'ta-IN', tts: 'Tamil', synthesis: 'ta-IN' },
         Singlish: { recognition: 'en-SG', tts: 'Singlish', synthesis: 'en-SG' }
     };
+    const DEFAULT_LANGUAGE = 'English';
+    const SUPPORTED_LANGUAGES = Object.keys(LANG_CONFIG);
+    const DEFAULT_MESSAGE_PLACEHOLDER = 'Type your question...';
 
     let recAudioCtx = null;
     let recProcessor = null;
@@ -366,7 +371,7 @@
 
     const modeTextBtn = document.getElementById('modeTextBtn');
     const modeAvatarBtn = document.getElementById('modeAvatarBtn');
-    const languageSelect = document.getElementById('languageSelect');
+    const languageStatusValue = document.getElementById('languageStatusValue');
 
     const textModePanel = document.getElementById('textModePanel');
     const voiceModePanel = document.getElementById('voiceModePanel');
@@ -383,10 +388,10 @@
     let currentMode = 'avatar';
     let avatarState = 'idle';
     let isListening = false;
-    let manualStop = false;
+    let listeningTarget = null;
     let isSending = false;
-    let textMicActive = false;
     let textSpeakerOn = true;   // auto-speak Jimmy replies in text chat
+    let activeLanguage = DEFAULT_LANGUAGE;
     let history = [];
 
     let speechAudio = null;
@@ -400,6 +405,19 @@
     let avatarRenderer = null;
 
     document.getElementById('introTime').textContent = new Date().toLocaleTimeString();
+
+    function normalizeLanguage(language) {
+        return SUPPORTED_LANGUAGES.includes(language) ? language : DEFAULT_LANGUAGE;
+    }
+
+    function getLanguageConfig(language) {
+        return LANG_CONFIG[normalizeLanguage(language)] || LANG_CONFIG[DEFAULT_LANGUAGE];
+    }
+
+    function setActiveLanguage(language) {
+        activeLanguage = normalizeLanguage(language);
+        languageStatusValue.textContent = activeLanguage;
+    }
 
     function setAvatarState(state) {
         avatarState = state;
@@ -953,18 +971,22 @@
     }
 
     avatarRenderer = new SuperheroAvatarRenderer(heroAvatarCanvas);
+    setActiveLanguage(DEFAULT_LANGUAGE);
 
     function setMode(mode) {
         currentMode = mode;
         modeTextBtn.classList.toggle('active', mode === 'text');
         modeAvatarBtn.classList.toggle('active', mode === 'avatar');
 
+        if (isListening) {
+            cancelRecording();
+        }
+
         if (mode === 'text') {
             textModePanel.style.display = 'block';
             voiceModePanel.style.display = 'none';
             stopAudioSpeech();
             setAvatarState('idle');
-            voiceBuffer = '';
         } else {
             textModePanel.style.display = 'none';
             voiceModePanel.style.display = 'flex';
@@ -974,10 +996,6 @@
 
     modeTextBtn.addEventListener('click', () => setMode('text'));
     modeAvatarBtn.addEventListener('click', () => setMode('avatar'));
-
-    languageSelect.addEventListener('change', () => {
-        // language used at transcription time via the server-side /api/chat/transcribe endpoint
-    });
 
     function addMessage(role, text) {
         const wrap = document.createElement('div');
@@ -1002,7 +1020,7 @@
         if (el) el.remove();
     }
 
-    async function queryJimmy(inputText, renderChat) {
+    async function queryJimmy(inputText, renderChat, languageHint = activeLanguage) {
         if (!inputText || isSending) return null;
 
         if (renderChat) {
@@ -1021,13 +1039,15 @@
                 body: JSON.stringify({
                     message: inputText,
                     history: history.slice(-8),
-                    language: languageSelect.value
+                    language_hint: normalizeLanguage(languageHint)
                 })
             });
             if (!res.ok) throw new Error(`Server error ${res.status}`);
 
             const data = await res.json();
             const answer = (data.response || '').toString();
+            const detectedLanguage = normalizeLanguage(data.detected_language);
+            setActiveLanguage(detectedLanguage);
             history.push({ role: 'assistant', content: answer });
 
             if (renderChat) {
@@ -1035,7 +1055,7 @@
                 addMessage('avatar', answer);
             }
 
-            return answer;
+            return { answer, detectedLanguage };
         } catch (err) {
             if (renderChat) {
                 removeTyping();
@@ -1052,127 +1072,21 @@
         const inputText = (messageInput.value || '').trim();
         if (!inputText) return;
         messageInput.value = '';
+        messageInput.placeholder = DEFAULT_MESSAGE_PLACEHOLDER;
         sendBtn.disabled = true;
-        const answer = await queryJimmy(inputText, true);
-        if (answer && textSpeakerOn) {
-            await speakAuto(answer);
+        const result = await queryJimmy(inputText, true);
+        if (result && result.answer && textSpeakerOn) {
+            await speakAuto(result.answer, result.detectedLanguage);
         }
         setAvatarState('idle');
         sendBtn.disabled = false;
     }
 
-    /* ── Text-mode mic (speech-to-text into textarea) ── */
-    let textRecognition = null;
-    let avatarRecognition = null;
-    let avatarRecognitionActive = false;
-    let avatarRecognitionHasResult = false;
-
-    if (SpeechRecognitionCtor) {
-        textRecognition = new SpeechRecognitionCtor();
-        textRecognition.continuous = false;
-        textRecognition.interimResults = true;
-        textRecognition.maxAlternatives = 1;
-
-        textRecognition.onstart = () => {
-            textMicActive = true;
-            textMicBtn.classList.add('active');
-        };
-
-        textRecognition.onresult = (event) => {
-            let transcript = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                transcript += event.results[i][0].transcript;
-            }
-            messageInput.value = transcript;
-        };
-
-        textRecognition.onerror = () => {
-            textMicActive = false;
-            textMicBtn.classList.remove('active');
-        };
-
-        textRecognition.onend = () => {
-            textMicActive = false;
-            textMicBtn.classList.remove('active');
-            // Auto-send if we captured something
-            const captured = (messageInput.value || '').trim();
-            if (captured) sendTextMessage();
-        };
-    }
-
+    /* ── Mic input uses server transcription with language auto-detection ── */
     textMicBtn.addEventListener('click', () => {
-        if (!textRecognition) { alert('Speech recognition not supported in this browser.'); return; }
-        if (textMicActive) {
-            textRecognition.stop();
-        } else {
-            const cfg = LANG_CONFIG[languageSelect.value] || LANG_CONFIG.English;
-            textRecognition.lang = cfg.recognition;
-            textRecognition.start();
-        }
+        if (currentMode !== 'text') return;
+        toggleListening('text');
     });
-
-    if (SpeechRecognitionCtor) {
-        avatarRecognition = new SpeechRecognitionCtor();
-        avatarRecognition.continuous = false;
-        avatarRecognition.interimResults = false;
-        avatarRecognition.maxAlternatives = 1;
-
-        avatarRecognition.onstart = () => {
-            avatarRecognitionActive = true;
-            avatarRecognitionHasResult = false;
-            isListening = true;
-            voiceMicBtn.classList.add('active');
-            voiceNote.textContent = 'Listening... Stop talking when done (auto-response will start).';
-            setAvatarState('listening');
-        };
-
-        avatarRecognition.onresult = async (event) => {
-            const spokenText = ((event.results[0] && event.results[0][0] && event.results[0][0].transcript) || '').trim();
-            avatarRecognitionHasResult = !!spokenText;
-            isListening = false;
-            voiceMicBtn.classList.remove('active');
-
-            if (!spokenText) {
-                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
-                setAvatarState('idle');
-                return;
-            }
-
-            voiceNote.textContent = 'Thinking…';
-            setAvatarState('thinking');
-            const answer = await queryJimmy(spokenText, false);
-            if (answer) {
-                voiceNote.textContent = 'Jimmy is responding…';
-                await speakAuto(answer);
-                voiceNote.textContent = 'Done. Tap microphone to ask next question.';
-            } else {
-                voiceNote.textContent = 'I could not get a response. Tap microphone to retry.';
-                setAvatarState('idle');
-            }
-        };
-
-        avatarRecognition.onerror = (event) => {
-            avatarRecognitionActive = false;
-            isListening = false;
-            voiceMicBtn.classList.remove('active');
-            if (event && event.error === 'no-speech') {
-                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
-            } else {
-                voiceNote.textContent = 'Voice recognition failed. Tap microphone to try again.';
-            }
-            setAvatarState('idle');
-        };
-
-        avatarRecognition.onend = () => {
-            avatarRecognitionActive = false;
-            isListening = false;
-            voiceMicBtn.classList.remove('active');
-            if (!avatarRecognitionHasResult && avatarState === 'listening') {
-                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
-                setAvatarState('idle');
-            }
-        };
-    }
 
     /* ── Speaker toggle ── */
     textSpeakerBtn.addEventListener('click', () => {
@@ -1233,17 +1147,18 @@
         rafId = requestAnimationFrame(animateFromAnalyser);
     }
 
-    async function speakAuto(text) {
+    async function speakAuto(text, language = activeLanguage) {
         stopAudioSpeech();
         setAvatarState('talking');
 
-        const langCfg = LANG_CONFIG[languageSelect.value] || LANG_CONFIG.English;
+        const normalizedLanguage = normalizeLanguage(language);
+        const langCfg = getLanguageConfig(normalizedLanguage);
 
         try {
             const ttsRes = await fetch('/api/tts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, language: langCfg.tts, gender: "male" })
+                body: JSON.stringify({ text, language: normalizedLanguage, gender: "male" })
             });
             if (!ttsRes.ok) throw new Error(`TTS ${ttsRes.status}`);
 
@@ -1333,11 +1248,54 @@
         return ctx;
     }
 
-    function finalizeRecording(noteText = 'Processing speech…') {
+    function cancelRecording() {
+        const target = listeningTarget || currentMode || 'avatar';
         isListening = false;
+        listeningTarget = null;
+        textMicBtn.classList.remove('active');
         voiceMicBtn.classList.remove('active');
-        voiceNote.textContent = noteText;
-        setAvatarState('thinking');
+        pcmChunks = [];
+
+        const ctx = stopRecording();
+        if (ctx) ctx.close();
+
+        if (target === 'text') {
+            setInputStatus(DEFAULT_MESSAGE_PLACEHOLDER);
+            return;
+        }
+
+        voiceNote.textContent = 'Tap the microphone and speak. Jimmy will listen and answer automatically by voice.';
+        setAvatarState('idle');
+    }
+
+    function setInputStatus(text, restore = false) {
+        messageInput.placeholder = text || DEFAULT_MESSAGE_PLACEHOLDER;
+        if (restore) {
+            window.setTimeout(() => {
+                if (!isListening && !(messageInput.value || '').trim()) {
+                    messageInput.placeholder = DEFAULT_MESSAGE_PLACEHOLDER;
+                }
+            }, 1800);
+        }
+    }
+
+    function setMicStatus(target, text, restore = false) {
+        if (target === 'text') {
+            setInputStatus(text, restore);
+            return;
+        }
+
+        voiceNote.textContent = text;
+    }
+
+    function finalizeRecording(noteText = 'Processing speech…') {
+        const target = listeningTarget || currentMode || 'avatar';
+        isListening = false;
+        listeningTarget = null;
+        textMicBtn.classList.remove('active');
+        voiceMicBtn.classList.remove('active');
+        setMicStatus(target, noteText);
+        if (target === 'avatar') setAvatarState('thinking');
 
         const ctx = stopRecording();
         const sampleRate = ctx ? ctx.sampleRate : 16000;
@@ -1345,8 +1303,8 @@
 
         const totalSamples = pcmChunks.reduce((acc, c) => acc + c.length, 0);
         if (totalSamples < 800) {
-            voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
-            setAvatarState('idle');
+            setMicStatus(target, 'No speech captured. Tap microphone to try again.', target === 'text');
+            if (target === 'avatar') setAvatarState('idle');
             pcmChunks = [];
             return;
         }
@@ -1364,43 +1322,42 @@
         pcmChunks = [];
 
         if (peak < 0.01) {
-            voiceNote.textContent = 'Microphone input is very quiet. Move closer and try again.';
-            setAvatarState('idle');
+            setMicStatus(target, 'Microphone input is very quiet. Move closer and try again.', target === 'text');
+            if (target === 'avatar') setAvatarState('idle');
             return;
         }
 
-        processVoiceBlob(encodeWAV(merged, sampleRate));
+        processVoiceBlob(encodeWAV(merged, sampleRate), target);
     }
 
-    function toggleListening() {
-        if (currentMode !== 'avatar') return;
-
-        if (avatarRecognition) {
-            if (avatarRecognitionActive) {
-                avatarRecognition.stop();
-                return;
-            }
-            const cfg = LANG_CONFIG[languageSelect.value] || LANG_CONFIG.English;
-            avatarRecognition.lang = cfg.recognition;
-            avatarRecognition.start();
-            return;
-        }
+    function toggleListening(target = currentMode) {
+        if (target !== 'avatar' && target !== 'text') return;
+        if (currentMode !== target) return;
 
         if (isListening) {
-            finalizeRecording('Processing speech…');
+            if (listeningTarget === target) {
+                finalizeRecording('Processing speech…');
+            }
             return;
         }
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            voiceNote.textContent = 'Microphone not supported in this browser.';
+            setMicStatus(target, 'Microphone not supported in this browser.', target === 'text');
+            return;
+        }
+
+        const RecordingAudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!RecordingAudioContext) {
+            setMicStatus(target, 'Audio recording is not supported in this browser.', target === 'text');
             return;
         }
 
         pcmChunks = [];
+        listeningTarget = target;
         navigator.mediaDevices.getUserMedia({ audio: true, video: false })
             .then(stream => {
                 recordStream = stream;
-                recAudioCtx = new AudioContext();
+                recAudioCtx = new RecordingAudioContext();
                 recAudioCtx.resume();
                 recSource = recAudioCtx.createMediaStreamSource(stream);
                 recProcessor = recAudioCtx.createScriptProcessor(4096, 1, 1);
@@ -1436,50 +1393,68 @@
                 recProcessor.connect(recAudioCtx.destination);
 
                 isListening = true;
-                voiceMicBtn.classList.add('active');
-                voiceNote.textContent = 'Listening... Stop talking when done (auto-response will start).';
-                setAvatarState('listening');
+                if (target === 'text') {
+                    textMicBtn.classList.add('active');
+                    setInputStatus('Listening... Speak now.');
+                } else {
+                    voiceMicBtn.classList.add('active');
+                    voiceNote.textContent = 'Listening... Stop talking when done (auto-response will start).';
+                    setAvatarState('listening');
+                }
             })
             .catch(err => {
                 console.error('[Jimmy mic] getUserMedia error:', err);
-                voiceNote.textContent = 'Microphone access denied. Please allow mic access and try again.';
+                isListening = false;
+                listeningTarget = null;
+                setMicStatus(target, 'Microphone access denied. Please allow mic access and try again.', target === 'text');
+                if (target === 'avatar') setAvatarState('idle');
             });
     }
 
-    async function processVoiceBlob(blob) {
-        voiceNote.textContent = 'Transcribing…';
+    async function processVoiceBlob(blob, target = 'avatar') {
+        setMicStatus(target, 'Transcribing…');
         const formData = new FormData();
         formData.append('audio', blob, 'voice.wav');
+        formData.append('language_hint', activeLanguage);
         try {
             const res = await fetch('/api/chat/transcribe', { method: 'POST', body: formData });
             const data = await res.json();
             if (!res.ok) {
                 const detailText = (data && (data.detail || data.error)) ? String(data.detail || data.error) : '';
                 if (res.status === 502 && /no speech detected/i.test(detailText)) {
-                    voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
-                    setAvatarState('idle');
+                    setMicStatus(target, 'No speech captured. Tap microphone to try again.', target === 'text');
+                    if (target === 'avatar') setAvatarState('idle');
                     return;
                 }
                 if (res.status === 502 && /speech was captured/i.test(detailText)) {
-                    voiceNote.textContent = 'Speech was captured, but transcription came back empty. Please try again.';
-                    setAvatarState('idle');
+                    setMicStatus(target, 'Speech was captured, but transcription came back empty. Please try again.', target === 'text');
+                    if (target === 'avatar') setAvatarState('idle');
                     return;
                 }
                 const detail = detailText ? ` (${detailText})` : '';
                 throw new Error(`Transcription request failed: ${res.status}${detail}`);
             }
             const spokenText = (data.transcript || '').trim();
+            const detectedLanguage = normalizeLanguage(data.detected_language);
+            setActiveLanguage(detectedLanguage);
             if (!spokenText) {
-                voiceNote.textContent = 'No speech captured. Tap microphone to try again.';
-                setAvatarState('idle');
+                setMicStatus(target, 'No speech captured. Tap microphone to try again.', target === 'text');
+                if (target === 'avatar') setAvatarState('idle');
                 return;
             }
-            voiceNote.textContent = `Heard: "${spokenText}"`;
+
+            if (target === 'text') {
+                messageInput.value = spokenText;
+                setInputStatus(DEFAULT_MESSAGE_PLACEHOLDER);
+                await sendTextMessage();
+                return;
+            }
+
             voiceNote.textContent = 'Thinking…';
-            const answer = await queryJimmy(spokenText, false);
-            if (answer) {
+            const result = await queryJimmy(spokenText, false, detectedLanguage);
+            if (result && result.answer) {
                 voiceNote.textContent = 'Jimmy is responding…';
-                await speakAuto(answer);
+                await speakAuto(result.answer, result.detectedLanguage);
                 voiceNote.textContent = 'Done. Tap microphone to ask next question.';
             } else {
                 voiceNote.textContent = 'I could not get a response. Tap microphone to retry.';
@@ -1487,8 +1462,8 @@
             }
         } catch (err) {
             console.error('[Jimmy mic] Transcription error:', err);
-            voiceNote.textContent = 'Transcription failed. Tap microphone to try again.';
-            setAvatarState('idle');
+            setMicStatus(target, 'Transcription failed. Tap microphone to try again.', target === 'text');
+            if (target === 'avatar') setAvatarState('idle');
         }
     }
 
@@ -1499,7 +1474,7 @@
             sendTextMessage();
         }
     });
-    voiceMicBtn.addEventListener('click', toggleListening);
+    voiceMicBtn.addEventListener('click', () => toggleListening('avatar'));
 
     function escapeHtml(str) {
         const div = document.createElement('div');
@@ -1508,10 +1483,7 @@
     }
 
     window.addEventListener('beforeunload', () => {
-        if (textRecognition && textMicActive) { textRecognition.stop(); }
-        if (avatarRecognition && avatarRecognitionActive) { avatarRecognition.stop(); }
-        stopRecording();
-        if (recAudioCtx) { recAudioCtx.close(); recAudioCtx = null; }
+        cancelRecording();
         stopAudioSpeech();
         window.speechSynthesis.cancel();
     });

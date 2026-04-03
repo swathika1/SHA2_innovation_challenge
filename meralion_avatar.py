@@ -8,6 +8,7 @@ import requests
 from typing import Dict, List, Optional, Tuple
 from config import MERILION_USERNAME, MERILION_API_KEY, MERILION_BASE_URL
 from database import query_db
+from language_utils import DEFAULT_JIMMY_LANGUAGE, normalize_supported_language
 
 
 class AvatarJimmy:
@@ -31,7 +32,8 @@ Guidelines:
 - Use simple, clear language
 - Reference specific patient data when relevant (e.g., "I see you scored 42.5/50 last session!")
 - NEVER provide medical diagnosis - suggest consulting their doctor for serious concerns
-- Respond in the same language the patient uses
+- Reply using only one supported language: English, Chinese, Malay, Tamil, or Singlish
+- If the patient's language is unclear or unsupported, default to English
 - Keep responses concise (2-4 sentences) and actionable
 
 Available Data:
@@ -264,14 +266,17 @@ Average quality: {avg_quality:.0f}/50, Avg pain improvement: {avg_pain_improveme
             
             # Build instruction for Meralion
             language_rules = {
-                "English": "Respond fully in clear English.",
-                "Chinese": "Respond fully in Simplified Chinese (中文).",
-                "Malay": "Respond fully in Bahasa Melayu.",
-                "Tamil": "Respond fully in Tamil (தமிழ்).",
-                "Singlish": "Respond in Singapore colloquial English (Singlish), friendly and natural, while staying clear and safe."
+                "English": "Respond fully in clear English. Do not mix in other languages.",
+                "Chinese": "Respond fully in Simplified Chinese (中文). Do not mix in other languages.",
+                "Malay": "Respond fully in Bahasa Melayu. Do not mix in other languages.",
+                "Tamil": "Respond fully in Tamil (தமிழ்). Do not mix in other languages.",
+                "Singlish": "Respond in Singapore colloquial English (Singlish), friendly and natural, while staying clear and safe. Do not mix in other languages."
             }
 
-            selected_language = preferred_language if preferred_language in language_rules else "English"
+            selected_language = normalize_supported_language(
+                preferred_language,
+                default=DEFAULT_JIMMY_LANGUAGE,
+            )
 
             # ── Build instruction — USER QUESTION FIRST so it's never truncated ──
             instruction_parts = [
