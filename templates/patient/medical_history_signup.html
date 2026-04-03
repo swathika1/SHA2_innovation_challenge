@@ -380,6 +380,15 @@ async function mhPdfUpload(input) {
     const errBanner = document.getElementById('pdf-error-banner');
     const errMsg = document.getElementById('pdf-error-msg');
     errBanner.style.display = 'none';
+
+    if (file.size > 5 * 1024 * 1024) {
+        errMsg.textContent = 'File must be under 5MB.';
+        errBanner.style.display = 'block';
+        setTimeout(() => { errBanner.style.display = 'none'; }, 7000);
+        input.value = '';
+        return;
+    }
+
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Extracting...';
 
@@ -392,12 +401,14 @@ async function mhPdfUpload(input) {
         if (!res.ok) {
             errMsg.textContent = data.message || 'Extraction failed. Please enter manually.';
             errBanner.style.display = 'block';
+            setTimeout(() => { errBanner.style.display = 'none'; }, 7000);
         } else {
             mhAutoFill(data);
         }
     } catch (e) {
         errMsg.textContent = 'Network error. Please try again.';
         errBanner.style.display = 'block';
+        setTimeout(() => { errBanner.style.display = 'none'; }, 7000);
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-file-medical"></i> Import from PDF';
@@ -448,7 +459,12 @@ function mhAutoFill(data) {
         if (!list) continue;
 
         for (const item of items) {
-            addRow(cfg.template);
+            try {
+                addRow(cfg.template);
+            } catch (e) {
+                console.error(`PDF import: failed to add row for ${section}:`, e);
+                continue;
+            }
             const lastRow = list.lastElementChild;
             if (!lastRow) continue;
 
