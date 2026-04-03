@@ -1584,7 +1584,7 @@ def api_session_report_doctor(session_id):
         ex_names   = ", ".join(r[0] for r in exercise_rows) or "general exercises"
         risk_line  = f"Re-injury risk: {risk['risk_label']} ({risk['risk_score']}/12). " if risk and risk.get('has_data') else ""
         _resp = _groq.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content":
                 f"Write a 2-sentence clinical summary for a doctor reviewing a rehab session. "
                 f"Patient: {patient_name}, Condition: {patient_condition}, Week {current_week}. "
@@ -3222,7 +3222,7 @@ def patient_medical_history_upload_pdf():
         from groq import Groq as _Groq
         _groq_client = _Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
         _resp = _groq_client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": _system_prompt},
                 {"role": "user", "content": _user_msg},
