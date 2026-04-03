@@ -63,6 +63,19 @@
 .btn-skip { color:#888; font-size:.9rem; text-decoration:none; }
 .btn-skip:hover { color:#333; }
 .save-status { font-size:.88rem; color:#22c55e; display:none; }
+.pdf-upload-btn {
+    display:inline-flex; align-items:center; gap:8px; padding:10px 20px;
+    background:#fff; color:#6366f1; border:2px solid #6366f1;
+    border-radius:10px; font-size:.92rem; font-weight:700; cursor:pointer;
+    transition:background .15s, color .15s; margin-bottom:20px;
+}
+.pdf-upload-btn:hover { background:#eef3ff; }
+.pdf-upload-btn:disabled { opacity:.5; cursor:not-allowed; }
+.pdf-fill-notice {
+    background:#f0fdf4; border:1px solid #86efac; border-radius:8px;
+    padding:12px 16px; font-size:.85rem; color:#166534; margin-bottom:20px;
+    display:none; gap:8px; align-items:flex-start;
+}
 </style>
 
 <div class="mh-layout">
@@ -76,6 +89,20 @@
 
     <h2 style="font-size:1.6rem;font-weight:800;color:#1a1a2e;margin:0 0 6px;">Your Medical History</h2>
     <p style="color:#666;margin:0 0 20px;font-size:.97rem;">This helps your care team personalise your rehab plan. All fields are optional.</p>
+
+    <!-- PDF Import -->
+    <input type="file" id="pdf-input" accept=".pdf" style="display:none" onchange="mhPdfUpload(this)">
+    <button type="button" class="pdf-upload-btn" id="pdf-upload-btn" onclick="document.getElementById('pdf-input').click()">
+        <i class="fa-solid fa-file-medical"></i> Import from PDF
+    </button>
+    <div class="pdf-fill-notice" id="pdf-fill-notice">
+        <i class="fa-solid fa-circle-check" style="flex-shrink:0;margin-top:2px;"></i>
+        <span>Medical history extracted from your PDF. Review the fields below and edit if needed before saving.</span>
+    </div>
+    <div id="pdf-error-banner" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;font-size:.85rem;color:#991b1b;margin-bottom:16px;">
+        <i class="fa-solid fa-triangle-exclamation"></i> <span id="pdf-error-msg"></span>
+        <button onclick="document.getElementById('pdf-error-banner').style.display='none'" style="float:right;background:none;border:none;cursor:pointer;color:#991b1b;">✕</button>
+    </div>
 
     <div class="mh-notice">
         <i class="fa-solid fa-shield-halved" style="flex-shrink:0;margin-top:2px;"></i>
@@ -343,6 +370,123 @@ async function submitHistory() {
         alert('Network error. Please try again.');
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save & Continue';
+    }
+}
+
+async function mhPdfUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const btn = document.getElementById('pdf-upload-btn');
+    const errBanner = document.getElementById('pdf-error-banner');
+    const errMsg = document.getElementById('pdf-error-msg');
+    errBanner.style.display = 'none';
+
+    if (file.size > 5 * 1024 * 1024) {
+        errMsg.textContent = 'File must be under 5MB.';
+        errBanner.style.display = 'block';
+        setTimeout(() => { errBanner.style.display = 'none'; }, 7000);
+        input.value = '';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Extracting...';
+
+    const formData = new FormData();
+    formData.append('pdf', file);
+
+    try {
+        const res = await fetch('/patient/medical-history/upload-pdf', {method: 'POST', body: formData});
+        const data = await res.json();
+        if (!res.ok) {
+            errMsg.textContent = data.message || 'Extraction failed. Please enter manually.';
+            errBanner.style.display = 'block';
+            setTimeout(() => { errBanner.style.display = 'none'; }, 7000);
+        } else {
+            mhAutoFill(data);
+        }
+    } catch (e) {
+        errMsg.textContent = 'Network error. Please try again.';
+        errBanner.style.display = 'block';
+        setTimeout(() => { errBanner.style.display = 'none'; }, 7000);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-file-medical"></i> Import from PDF';
+        input.value = '';
+    }
+}
+
+function mhAutoFill(data) {
+    const sectionCfg = {
+        conditions: {
+            listId: 'conditions-list',
+            template: 'conditions',
+            fields: ['name', 'onset_year', 'notes'],
+            checkboxes: []
+        },
+        surgeries: {
+            listId: 'surgeries-list',
+            template: 'surgeries',
+            fields: ['procedure', 'body_region', 'surgery_date', 'outcome', 'notes'],
+            checkboxes: []
+        },
+        injuries: {
+            listId: 'injuries-list',
+            template: 'injuries',
+            fields: ['body_region', 'injury_date', 'injury_description'],
+            checkboxes: ['related_to_current', 'recovery_complete', 'recurrence']
+        },
+        medications: {
+            listId: 'medications-list',
+            template: 'medications',
+            fields: ['drug_name', 'indication'],
+            checkboxes: ['active']
+        },
+        family_history: {
+            listId: 'family_history-list',
+            template: 'family_history',
+            fields: ['condition', 'relation', 'notes'],
+            checkboxes: []
+        }
+    };
+
+    let totalAdded = 0;
+
+    for (const [section, cfg] of Object.entries(sectionCfg)) {
+        const items = data[section] || [];
+        if (!items.length) continue;
+        const list = document.getElementById(cfg.listId);
+        if (!list) continue;
+
+        for (const item of items) {
+            try {
+                addRow(cfg.template);
+            } catch (e) {
+                console.error(`PDF import: failed to add row for ${section}:`, e);
+                continue;
+            }
+            const lastRow = list.lastElementChild;
+            if (!lastRow) continue;
+
+            for (const fieldName of cfg.fields) {
+                const el = lastRow.querySelector(`[name="${fieldName}"]`);
+                if (el && item[fieldName] != null) el.value = item[fieldName];
+            }
+            for (const cbName of cfg.checkboxes) {
+                const el = lastRow.querySelector(`[name="${cbName}"]`);
+                if (el) el.checked = !!item[cbName];
+            }
+            totalAdded++;
+        }
+
+        // Auto-open the accordion
+        const details = list.closest('details');
+        if (details) details.open = true;
+    }
+
+    if (totalAdded > 0) {
+        document.getElementById('pdf-fill-notice').style.display = 'flex';
+        window.scrollTo({top: 0, behavior: 'smooth'});
     }
 }
 </script>
