@@ -7,6 +7,11 @@ os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # Fall back to CPU for unsuppor
 # Load environment variables from .env file (explicit path to ensure it loads)
 from pathlib import Path
 from dotenv import load_dotenv
+from language_utils import (
+    DEFAULT_JIMMY_LANGUAGE,
+    detect_supported_language,
+    normalize_supported_language,
+)
 
 # Load from explicit .env path in current directory
 env_path = Path(__file__).parent / ".env"
@@ -449,7 +454,10 @@ def api_tts():
     data = request.get_json(force=True) or {}
 
     text = (data.get("text") or "").strip()
-    language = (data.get("language") or "English").strip()
+    language = normalize_supported_language(
+        data.get("language"),
+        default=DEFAULT_JIMMY_LANGUAGE,
+    )
     gender = (data.get("gender") or "male").strip().lower()   # "male" for avatar/chatbot, "female" for sessions
 
     if isinstance(text, list):
@@ -2110,10 +2118,18 @@ def avatar_chat():
         data = request.get_json()
         user_message = data.get('message', '').strip()
         history = data.get('history', [])
-        language = (data.get('language') or 'English').strip()
+        language_hint = normalize_supported_language(
+            data.get('language_hint'),
+            default="",
+        )
         
         if not user_message:
             return jsonify({'error': 'No message provided'}), 400
+
+        detected_language = detect_supported_language(
+            user_message,
+            hint=language_hint,
+        )
         
         # Import avatar service
         from meralion_avatar import get_avatar
@@ -2127,11 +2143,12 @@ def avatar_chat():
             conversation_history=history,
             include_rag=True,
             include_performance=True,
-            preferred_language=language
+            preferred_language=detected_language
         )
         
         return jsonify({
             'response': response,
+            'detected_language': detected_language,
             'status': 'success'
         })
     
@@ -2175,7 +2192,10 @@ def avatar_voice():
     try:
         data = request.get_json()
         audio_b64 = data.get('audio', '').strip()
-        language = (data.get('language') or 'English').strip()
+        language_hint = normalize_supported_language(
+            data.get('language'),
+            default=DEFAULT_JIMMY_LANGUAGE,
+        )
         history = data.get('history', [])
         
         if not audio_b64:
@@ -2199,10 +2219,10 @@ def avatar_voice():
         # Process audio with voice activity detection
         from avatar_voice_processor import process_avatar_audio_stream
         
-        transcribed_text, jimmy_response, response_audio = process_avatar_audio_stream(
+        transcribed_text, jimmy_response, response_audio, detected_language = process_avatar_audio_stream(
             audio_base64=audio_b64,
             patient_id=session['user_id'],
-            language=language,
+            language=language_hint,
             history=history
         )
         
@@ -2216,6 +2236,7 @@ def avatar_voice():
             'transcribed_text': transcribed_text,
             'response': jimmy_response,
             'response_audio': response_audio,  # Base64-encoded MP3
+            'detected_language': detected_language,
             'vad_available': vad_available,
             'status': 'success'
         })
@@ -5388,6 +5409,10 @@ def api_chat_transcribe():
     if 'audio' not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
     audio_file = request.files['audio']
+    language_hint = normalize_supported_language(
+        request.form.get('language_hint'),
+        default="",
+    )
 
     try:
         audio_bytes = audio_file.read()
@@ -5423,7 +5448,15 @@ def api_chat_transcribe():
                 "detail": " ; ".join(provider_errors) if provider_errors else "No speech detected"
             }), 502
 
-        return jsonify({"transcript": transcript})
+        detected_language = detect_supported_language(
+            transcript,
+            hint=language_hint,
+        )
+
+        return jsonify({
+            "transcript": transcript,
+            "detected_language": detected_language,
+        })
     except Exception as e:
         print(f"[TRANSCRIBE ERROR] {e}")
         return jsonify({"error": "Transcription failed", "detail": str(e)}), 500

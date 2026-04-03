@@ -10,6 +10,7 @@ import base64
 import asyncio
 from typing import Tuple, Optional
 import numpy as np
+from language_utils import DEFAULT_JIMMY_LANGUAGE, detect_supported_language, normalize_supported_language
 
 # Try to import WebRTC VAD for voice activity detection
 try:
@@ -135,7 +136,7 @@ def process_avatar_audio_stream(
     patient_id: int,
     language: str = "English",
     history: list = None
-) -> Tuple[str, Optional[str], str]:
+) -> Tuple[str, Optional[str], str, str]:
     """
     Process audio stream for avatar interaction:
     1. Detect voice activity
@@ -150,10 +151,12 @@ def process_avatar_audio_stream(
         history: Conversation history
     
     Returns:
-        (transcribed_text, jimmy_response, audio_b64_or_error)
+        (transcribed_text, jimmy_response, audio_b64_or_error, detected_language)
     """
     
     try:
+        requested_language = normalize_supported_language(language)
+
         # Decode audio
         audio_bytes = base64.b64decode(audio_base64)
         
@@ -187,7 +190,7 @@ def process_avatar_audio_stream(
                 audio_buffer.add_chunk(chunk)  # Still buffer silence in case they just pause
         
         if not speech_detected:
-            return "", None, "No speech detected"
+            return "", None, "No speech detected", requested_language
         
         # Transcribe
         from whisper_transcriber import transcribe
@@ -195,7 +198,12 @@ def process_avatar_audio_stream(
         transcribed_text = transcribe(wav_audio)
         
         if not transcribed_text or transcribed_text.strip() == "":
-            return "", None, "Could not transcribe audio"
+            return "", None, "Could not transcribe audio", requested_language
+
+        detected_language = detect_supported_language(
+            transcribed_text,
+            hint=requested_language,
+        )
         
         # Get Jimmy response
         from meralion_avatar import get_avatar
@@ -210,7 +218,7 @@ def process_avatar_audio_stream(
             conversation_history=history,
             include_rag=True,
             include_performance=True,
-            preferred_language=language
+            preferred_language=detected_language
         )
         
         # Generate TTS audio response (inline to avoid circular imports)
@@ -225,7 +233,7 @@ def process_avatar_audio_stream(
             
             # Generate voice audio using edge-tts
             sample_rate_hz = 16000
-            h = hashlib.md5(f"edge|{language}|{jimmy_response}".encode("utf-8")).hexdigest()
+            h = hashlib.md5(f"edge|{detected_language}|{jimmy_response}".encode("utf-8")).hexdigest()
             cache_dir = os.path.join(tempfile.gettempdir(), "avatar_tts_cache")
             os.makedirs(cache_dir, exist_ok=True)
             mp3_path = os.path.join(cache_dir, f"{h}.mp3")
@@ -242,7 +250,7 @@ def process_avatar_audio_stream(
                     "Tamil": "ta-IN-PallaviNeural",
                     "Singlish": "en-SG-LunaNeural"
                 }
-                voice = voice_map.get(language, "en-US-AriaNeural")
+                voice = voice_map.get(detected_language, "en-US-AriaNeural")
                 
                 communicate = edge_tts.Communicate(text=jimmy_response, voice=voice)
                 loop = asyncio.new_event_loop()
@@ -256,13 +264,13 @@ def process_avatar_audio_stream(
             print(f"[AVATAR-VOICE] TTS failed: {tts_err}")
             audio_response_b64 = ""
         
-        return transcribed_text, jimmy_response, audio_response_b64
+        return transcribed_text, jimmy_response, audio_response_b64, detected_language
     
     except Exception as e:
         print(f"[AVATAR-VOICE] Error processing audio: {e}")
         import traceback
         traceback.print_exc()
-        return "", None, f"Error: {str(e)}"
+        return "", None, f"Error: {str(e)}", DEFAULT_JIMMY_LANGUAGE
 
 
 if __name__ == "__main__":
