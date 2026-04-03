@@ -3214,7 +3214,7 @@ def patient_medical_history_upload_pdf():
         '"surgeries":[{"procedure":"string","body_region":null,"surgery_date":null,"outcome":null,"notes":null}],'
         '"injuries":[{"body_region":"string","injury_date":null,"description":null,"related_to_current":false,"recovery_complete":false,"recurrence":false}],'
         '"medications":[{"drug_name":"string","indication":null,"active":true}],'
-        '"family_history":[{"condition":"string","relation":null,"notes":null}]}'
+        '"family_history":[{"condition":"string","relation":"string (required - e.g. Mother, Father, Sibling)","notes":null}]}'
     )
     _user_msg = f"Extract medical history from the following document text:\n\n<document>\n{_text[:8000]}\n</document>"
 

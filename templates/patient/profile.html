@@ -1017,13 +1017,19 @@ async function mhSaveExtracted() {
                 if (!r.ok) failed++;
             }
         }
+    } catch (e) {
+        failed++;
     } finally {
         btn.disabled = false;
         btn.textContent = 'Save All';
+    }
+    if (failed > 0) {
+        alert(`${failed} record(s) could not be saved. The panel will remain open — please add them manually using the Add buttons below.`);
+        await mhLoad();
+    } else {
         mhCancelExtracted();
         await mhLoad();
     }
-    if (failed > 0) alert(`${failed} record(s) could not be saved. Please add them manually.`);
 }
 
 function mhCancelExtracted() {
