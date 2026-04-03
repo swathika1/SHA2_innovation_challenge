@@ -3171,6 +3171,114 @@ def patient_delete_family_history(rec_id):
     return jsonify({'status': 'deleted'})
 
 
+@app.route('/patient/medical-history/upload-pdf', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_medical_history_upload_pdf():
+    """Extract structured medical history from an uploaded PDF using pdfplumber + Groq."""
+    import io as _io
+    import json as _json
+    import pdfplumber as _pdfplumber
+
+    if 'pdf' not in request.files:
+        return jsonify({'error': 'no_file', 'message': 'No PDF file provided.'}), 400
+
+    pdf_file = request.files['pdf']
+    pdf_bytes = pdf_file.read()
+
+    if len(pdf_bytes) > 5 * 1024 * 1024:
+        return jsonify({'error': 'too_large', 'message': 'File too large. Maximum size is 5MB.'}), 413
+
+    # Extract text from PDF
+    try:
+        with _pdfplumber.open(_io.BytesIO(pdf_bytes)) as _pdf:
+            _text = '\n'.join(_page.extract_text() or '' for _page in _pdf.pages)
+    except Exception:
+        return jsonify({'error': 'parse_failed', 'message': 'Could not read PDF. Please try a different file.'}), 500
+
+    if not _text.strip():
+        return jsonify({
+            'error': 'no_text',
+            'message': 'This PDF appears to be scanned or image-based. Please enter your history manually.'
+        }), 422
+
+    _system_prompt = (
+        "You are a medical data extraction assistant. Extract structured medical history from the provided text. "
+        "Return ONLY valid JSON matching the exact schema below. Do not infer or hallucinate — only extract what is explicitly stated. "
+        "Use null for any field not mentioned. Return empty arrays [] for categories with no data found. "
+        "Dates must be in YYYY-MM-DD format; if only a year is given, use YYYY-01-01. "
+        "The boolean fields related_to_current, recovery_complete, and recurrence default to false unless clearly indicated.\n\n"
+        "Required JSON schema:\n"
+        '{"conditions":[{"name":"string","onset_year":null,"notes":null}],'
+        '"surgeries":[{"procedure":"string","body_region":null,"surgery_date":null,"outcome":null,"notes":null}],'
+        '"injuries":[{"body_region":"string","injury_date":null,"description":null,"related_to_current":false,"recovery_complete":false,"recurrence":false}],'
+        '"medications":[{"drug_name":"string","indication":null,"active":true}],'
+        '"family_history":[{"condition":"string","relation":null,"notes":null}]}'
+    )
+    _user_msg = f"Extract medical history from the following document text:\n\n<document>\n{_text[:8000]}\n</document>"
+
+    try:
+        from groq import Groq as _Groq
+        _groq_client = _Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+        _resp = _groq_client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[
+                {"role": "system", "content": _system_prompt},
+                {"role": "user", "content": _user_msg},
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=1500,
+        )
+        _raw = _resp.choices[0].message.content.strip()
+    except Exception:
+        return jsonify({'error': 'llm_error', 'message': 'Extraction service unavailable. Please try again or enter manually.'}), 500
+
+    try:
+        _extracted = _json.loads(_raw)
+    except _json.JSONDecodeError:
+        return jsonify({'error': 'parse_failed', 'message': 'Extraction failed. Please enter your history manually.'}), 500
+
+    def _cs(v):
+        return str(v).strip() if v is not None else None
+
+    def _ci(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+
+    _result = {
+        'conditions': [
+            {'name': _cs(c.get('name')), 'onset_year': _ci(c.get('onset_year')), 'notes': _cs(c.get('notes'))}
+            for c in _extracted.get('conditions', []) if c.get('name')
+        ],
+        'surgeries': [
+            {'procedure': _cs(s.get('procedure')), 'body_region': _cs(s.get('body_region')),
+             'surgery_date': _cs(s.get('surgery_date')), 'outcome': _cs(s.get('outcome')), 'notes': _cs(s.get('notes'))}
+            for s in _extracted.get('surgeries', []) if s.get('procedure')
+        ],
+        'injuries': [
+            {'body_region': _cs(i.get('body_region')), 'injury_date': _cs(i.get('injury_date')),
+             'injury_description': _cs(i.get('description')),
+             'related_to_current': bool(i.get('related_to_current', False)),
+             'recovery_complete': bool(i.get('recovery_complete', False)),
+             'recurrence': bool(i.get('recurrence', False))}
+            for i in _extracted.get('injuries', []) if i.get('body_region')
+        ],
+        'medications': [
+            {'drug_name': _cs(m.get('drug_name')), 'indication': _cs(m.get('indication')),
+             'active': bool(m.get('active', True))}
+            for m in _extracted.get('medications', []) if m.get('drug_name')
+        ],
+        'family_history': [
+            {'condition': _cs(f.get('condition')), 'relation': _cs(f.get('relation')), 'notes': _cs(f.get('notes'))}
+            for f in _extracted.get('family_history', []) if f.get('condition')
+        ],
+    }
+
+    return jsonify(_result)
+
+
 # ─── Patient: bulk submit from post-signup step ───────────────────────────
 
 @app.route('/signup/medical-history', methods=['GET', 'POST'])
