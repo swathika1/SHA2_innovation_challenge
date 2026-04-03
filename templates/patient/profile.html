@@ -1014,7 +1014,11 @@ async function mhSaveExtracted() {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(item)
                 });
-                if (!r.ok) failed++;
+                if (!r.ok) {
+                    failed++;
+                    const errBody = await r.json().catch(() => ({}));
+                    console.error(`[PDF-SAVE] failed ${category}`, JSON.stringify(item), r.status, errBody);
+                }
             }
         }
     } catch (e) {

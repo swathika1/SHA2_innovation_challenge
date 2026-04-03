@@ -3254,6 +3254,17 @@ def patient_medical_history_upload_pdf():
         except (TypeError, ValueError):
             return None
 
+    def _cd(v):
+        """Return date string only if it is a valid YYYY-MM-DD, else None."""
+        if not v:
+            return None
+        s = str(v).strip()
+        try:
+            datetime.strptime(s, '%Y-%m-%d')
+            return s
+        except ValueError:
+            return None
+
     _result = {
         'conditions': [
             {'name': _cs(c.get('name')), 'onset_year': _ci(c.get('onset_year')), 'notes': _cs(c.get('notes'))}
@@ -3261,11 +3272,11 @@ def patient_medical_history_upload_pdf():
         ],
         'surgeries': [
             {'procedure': _cs(s.get('procedure')), 'body_region': _cs(s.get('body_region')),
-             'surgery_date': _cs(s.get('surgery_date')), 'outcome': _cs(s.get('outcome')), 'notes': _cs(s.get('notes'))}
+             'surgery_date': _cd(s.get('surgery_date')), 'outcome': _cs(s.get('outcome')), 'notes': _cs(s.get('notes'))}
             for s in _extracted.get('surgeries', []) if s.get('procedure')
         ],
         'injuries': [
-            {'body_region': _cs(i.get('body_region')), 'injury_date': _cs(i.get('injury_date')),
+            {'body_region': _cs(i.get('body_region')), 'injury_date': _cd(i.get('injury_date')),
              'injury_description': _cs(i.get('description')),
              'related_to_current': bool(i.get('related_to_current', False)),
              'recovery_complete': bool(i.get('recovery_complete', False)),
@@ -3278,7 +3289,7 @@ def patient_medical_history_upload_pdf():
             for m in _extracted.get('medications', []) if m.get('drug_name')
         ],
         'family_history': [
-            {'condition': _cs(f.get('condition')), 'relation': _cs(f.get('relation')), 'notes': _cs(f.get('notes'))}
+            {'condition': _cs(f.get('condition')), 'relation': _cs(f.get('relation')) or 'Unknown', 'notes': _cs(f.get('notes'))}
             for f in _extracted.get('family_history', []) if f.get('condition')
         ],
     }
