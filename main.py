@@ -3227,7 +3227,6 @@ def patient_medical_history_upload_pdf():
                 {"role": "system", "content": _system_prompt},
                 {"role": "user", "content": _user_msg},
             ],
-            response_format={"type": "json_object"},
             max_tokens=1500,
         )
         _raw = _resp.choices[0].message.content.strip()
@@ -3235,9 +3234,15 @@ def patient_medical_history_upload_pdf():
         print(f"[PDF-UPLOAD] Groq extraction failed: {e}")
         return jsonify({'error': 'llm_error', 'message': 'Extraction service unavailable. Please try again or enter manually.'}), 500
 
+    # Strip markdown code fences if present (some models wrap JSON in ```json ... ```)
+    import re as _re
+    _json_match = _re.search(r'\{.*\}', _raw, _re.DOTALL)
+    _raw = _json_match.group(0) if _json_match else _raw
+
     try:
         _extracted = _json.loads(_raw)
     except _json.JSONDecodeError:
+        print(f"[PDF-UPLOAD] JSON parse failed, raw: {_raw[:200]}")
         return jsonify({'error': 'parse_failed', 'message': 'Extraction failed. Please enter your history manually.'}), 500
 
     def _cs(v):
