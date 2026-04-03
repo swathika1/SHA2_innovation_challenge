@@ -29,10 +29,7 @@ from Rehab_Scorer_Coach.src.keraal_pipeline import KeraalRehabPipeline
 from flask_cors import CORS # type: ignore
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
-import io
 import os
-import wave
-import audioop
 import uuid
 try:
     from optim import get_top3_recommendations, optimize_all_patients, build_demo_data, load_dataset
@@ -918,6 +915,15 @@ def signup():
                     (user_id, ts['id'], 1)
                 )
         
+        # Patients go through the medical history step before the dashboard.
+        # All other roles go to login as before.
+        if role == 'patient':
+            session['user_id'] = user_id
+            session['role'] = role
+            session['user_name'] = name
+            flash('Account created! Tell us a bit about your medical history (optional).', 'info')
+            return redirect(url_for('signup_medical_history'))
+
         flash('Account created! Please log in.', 'success')
         return redirect(url_for('login'))
     
@@ -963,7 +969,6 @@ def patient_dashboard():
             (session['user_id'],),
             one=True
         )
-    patient_info = with_live_patient_progress(patient_info)
     
     # Get patient's workouts — only exercises actively assigned/enabled for this patient
     workouts = query_db('''
@@ -1082,7 +1087,10 @@ def patient_dashboard():
     ''', (session['user_id'],))
     
     # Calculate dynamic statistics from sessions
-    total_sessions = {'count': patient_info.get('completed_sessions', 0)}
+    total_sessions = query_db('''
+        SELECT COUNT(DISTINCT COALESCE(session_group_id, id)) as count FROM sessions 
+        WHERE patient_id = ?
+    ''', (session['user_id'],), one=True)
     
     sessions_this_week = query_db('''
         SELECT COUNT(DISTINCT COALESCE(session_group_id, id)) as count FROM sessions 
@@ -1485,7 +1493,6 @@ def api_session_report_doctor(session_id):
     patient_name      = user_row['name'] if user_row else 'Patient'
     patient_condition = pat_row['condition'] if pat_row else 'General'
     current_week      = pat_row['current_week'] if pat_row else 1
-    pat_row = with_live_patient_progress({'user_id': patient_id, **(dict(pat_row) if pat_row else {})}) if pat_row else None
     adherence         = float(pat_row['adherence_rate'] or 0) if pat_row else 0
     streak_days       = int(pat_row['streak_days'] or 0) if pat_row else 0
     total_sessions    = int(pat_row['completed_sessions'] or 0) if pat_row else 0
@@ -2258,7 +2265,7 @@ def clinician_profile():
         ORDER BY u.name
     ''', (doctor_id,))
 
-    patients_with_caregivers = with_live_patient_progress_list(patients_with_caregivers)
+    patients_with_caregivers = patients_with_caregivers if patients_with_caregivers else []
 
     # Summary stats
     total_patients = len(patients_with_caregivers)
@@ -2287,72 +2294,6 @@ def clinician_profile():
                          age=age,
                          doctor_specialties=doctor_specialties,
                          all_specialties=DOCTOR_SPECIALTIES)
-
-
-@app.route('/caregiver/profile')
-@login_required
-@role_required('caregiver')
-def caregiver_profile():
-    """Caregiver profile page."""
-    caregiver_id = session['user_id']
-
-    user_info = query_db(
-        'SELECT id, name, email, role, phone, pincode, dob, created_at FROM users WHERE id = ?',
-        (caregiver_id,), one=True
-    )
-
-    monitored_patients = query_db('''
-        SELECT
-            u.id, u.name, u.email, u.phone,
-            p.condition, p.adherence_rate, p.avg_pain_level,
-            p.avg_quality_score, p.streak_days,
-            cp.relationship
-        FROM caregiver_patient cp
-        JOIN users u ON cp.patient_id = u.id
-        JOIN patients p ON u.id = p.user_id
-        WHERE cp.caregiver_id = ?
-        ORDER BY u.name
-    ''', (caregiver_id,))
-    monitored_patients = with_live_patient_progress_list(monitored_patients)
-
-    my_requests = query_db('''
-        SELECT cr.id, cr.status, cr.requested_at, u.name as patient_name
-        FROM caregiver_requests cr
-        JOIN users u ON cr.patient_id = u.id
-        WHERE cr.caregiver_id = ?
-        ORDER BY
-            CASE cr.status
-                WHEN 'pending' THEN 0
-                WHEN 'approved' THEN 1
-                ELSE 2
-            END,
-            cr.requested_at DESC
-        LIMIT 20
-    ''', (caregiver_id,))
-    my_requests = my_requests if my_requests else []
-
-    total_patients = len(monitored_patients)
-    pending_requests = sum(1 for req in my_requests if req['status'] == 'pending')
-    avg_adherence = round(
-        sum((p['adherence_rate'] or 0) for p in monitored_patients) / total_patients, 1
-    ) if total_patients else 0
-
-    age = None
-    if user_info and user_info['dob']:
-        dob = date.fromisoformat(user_info['dob'])
-        today = date.today()
-        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-
-    return render_template(
-        'caregiver/profile.html',
-        user_info=user_info,
-        monitored_patients=monitored_patients,
-        my_requests=my_requests,
-        total_patients=total_patients,
-        pending_requests=pending_requests,
-        avg_adherence=avg_adherence,
-        age=age,
-    )
 
 
 @app.route('/clinician/dashboard')
@@ -2385,7 +2326,7 @@ def clinician_dashboard():
             ORDER BY p.adherence_rate ASC
         ''')
     
-    patients = with_live_patient_progress_list(patients)
+    patients = patients if patients else []
     total_patients = len(patients)
     needs_attention = sum(1 for p in patients if p['adherence_rate'] < 50 or p['avg_pain_level'] > 6)
     avg_adherence = sum(p['adherence_rate'] for p in patients) / total_patients if total_patients > 0 else 0
@@ -2630,7 +2571,6 @@ def patient_detail(patient_id):
     if not patient:
         flash('Patient not found.', 'error')
         return redirect(url_for('clinician_dashboard'))
-    patient = with_live_patient_progress(patient)
 
     # ── Assigned exercises (from patient_exercises, synced to workouts) ──
     assigned_exercises = query_db('''
@@ -2806,6 +2746,898 @@ def api_reinjury_risk(patient_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+# ============================================================================
+# MEDICAL HISTORY — shared helpers
+# ============================================================================
+
+
+
+def _recompute_risk_cache(patient_id: int):
+    """Re-run analyze_patient_risk and upsert the patient_risk_cache row."""
+    if not REINJURY_RISK_AVAILABLE:
+        return
+    try:
+        result = analyze_patient_risk(patient_id, query_db)
+        execute_db(
+            '''INSERT INTO patient_risk_cache
+                   (patient_id, risk_score_raw, risk_score, risk_level, last_computed)
+               VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(patient_id) DO UPDATE SET
+                   risk_score_raw = excluded.risk_score_raw,
+                   risk_score     = excluded.risk_score,
+                   risk_level     = excluded.risk_level,
+                   last_computed  = excluded.last_computed''',
+            (patient_id,
+             result.get('raw_score', result.get('risk_score', 0)),
+             result.get('risk_score', 0),
+             result.get('risk_level', 'green'))
+        )
+    except Exception as _e:
+        print(f"[WARNING] Risk cache update failed for patient {patient_id}: {_e}")
+
+
+def _validate_year(value, field_name='year'):
+    """Return (int_year, None) or (None, error_message)."""
+    if value is None or value == '':
+        return None, None
+    try:
+        y = int(value)
+        if y < 1900 or y > datetime.now().year:
+            return None, f"{field_name} must be between 1900 and {datetime.now().year}"
+        return y, None
+    except (ValueError, TypeError):
+        return None, f"{field_name} must be a valid integer year"
+
+
+def _validate_date(value, field_name='date', allow_future=False):
+    """Return (date_str, None) or (None, error_message)."""
+    if value is None or value == '':
+        return None, None
+    try:
+        d = datetime.strptime(value, '%Y-%m-%d').date()
+        if not allow_future and d > date.today():
+            return None, f"{field_name} cannot be in the future"
+        return value, None
+    except ValueError:
+        return None, f"{field_name} must be a valid date (YYYY-MM-DD)"
+
+
+def _coerce_bool(value) -> int:
+    """Coerce various truthy representations to 0/1 integer."""
+    if isinstance(value, int):
+        return 1 if value else 0
+    if isinstance(value, str):
+        return 1 if value.lower() in ('1', 'true', 'yes', 'on') else 0
+    return 0
+
+
+def _build_full_history_response(patient_id: int) -> dict:
+    """Return all five medical history categories for a patient as dicts."""
+    def _rows(sql, params=()):
+        rows = query_db(sql, params) or []
+        return [dict(r) for r in rows]
+
+    return {
+        'conditions': _rows(
+            '''SELECT mc.*, u.name as entered_by_name, v.name as verified_by_name
+               FROM medical_conditions mc
+               LEFT JOIN users u ON mc.entered_by = u.id
+               LEFT JOIN users v ON mc.verified_by = v.id
+               WHERE mc.patient_id = ? ORDER BY mc.onset_year DESC, mc.updated_at DESC''',
+            (patient_id,)
+        ),
+        'surgeries': _rows(
+            '''SELECT ms.*, u.name as entered_by_name, v.name as verified_by_name
+               FROM medical_surgeries ms
+               LEFT JOIN users u ON ms.entered_by = u.id
+               LEFT JOIN users v ON ms.verified_by = v.id
+               WHERE ms.patient_id = ? ORDER BY ms.surgery_date DESC''',
+            (patient_id,)
+        ),
+        'injuries': _rows(
+            '''SELECT mi.*, u.name as entered_by_name, v.name as verified_by_name
+               FROM medical_injuries mi
+               LEFT JOIN users u ON mi.entered_by = u.id
+               LEFT JOIN users v ON mi.verified_by = v.id
+               WHERE mi.patient_id = ? ORDER BY mi.injury_date DESC, mi.updated_at DESC''',
+            (patient_id,)
+        ),
+        'medications': _rows(
+            '''SELECT mm.*, u.name as entered_by_name, v.name as verified_by_name
+               FROM medical_medications mm
+               LEFT JOIN users u ON mm.entered_by = u.id
+               LEFT JOIN users v ON mm.verified_by = v.id
+               WHERE mm.patient_id = ? ORDER BY mm.active DESC, mm.updated_at DESC''',
+            (patient_id,)
+        ),
+        'family_history': _rows(
+            '''SELECT mf.*, u.name as entered_by_name, v.name as verified_by_name
+               FROM medical_family_history mf
+               LEFT JOIN users u ON mf.entered_by = u.id
+               LEFT JOIN users v ON mf.verified_by = v.id
+               WHERE mf.patient_id = ? ORDER BY mf.updated_at DESC''',
+            (patient_id,)
+        ),
+    }
+
+
+# ============================================================================
+# MEDICAL HISTORY — patient-facing endpoints
+# ============================================================================
+
+@app.route('/patient/medical-history', methods=['GET'])
+@login_required
+@role_required('patient')
+def patient_medical_history_get():
+    """Return the current patient's full medical history as JSON."""
+    return jsonify(_build_full_history_response(session['user_id']))
+
+
+@app.route('/patient/medical-history/condition', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_condition():
+    data = request.get_json(silent=True) or request.form
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    onset_year, err = _validate_year(data.get('onset_year'), 'onset_year')
+    if err:
+        return jsonify({'error': err}), 400
+    rec_id = execute_db(
+        '''INSERT INTO medical_conditions (patient_id, name, onset_year, notes, entry_mode, verified, entered_by)
+           VALUES (?, ?, ?, ?, 'self_report', 0, ?)''',
+        (session['user_id'], name, onset_year, data.get('notes', ''), session['user_id'])
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/patient/medical-history/condition/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('patient')
+def patient_update_condition(rec_id):
+    row = query_db('SELECT patient_id FROM medical_conditions WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    onset_year, err = _validate_year(data.get('onset_year'), 'onset_year')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_conditions
+           SET name = ?, onset_year = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (name, onset_year, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/patient/medical-history/condition/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('patient')
+def patient_delete_condition(rec_id):
+    row = query_db('SELECT patient_id FROM medical_conditions WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_conditions WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/patient/medical-history/surgery', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_surgery():
+    data = request.get_json(silent=True) or request.form
+    procedure = (data.get('procedure') or '').strip()
+    if not procedure:
+        return jsonify({'error': 'procedure is required'}), 400
+    surgery_date, err = _validate_date(data.get('surgery_date'), 'surgery_date')
+    if err:
+        return jsonify({'error': err}), 400
+    body_region = (data.get('body_region') or '')[:100].strip()
+    rec_id = execute_db(
+        '''INSERT INTO medical_surgeries (patient_id, procedure, surgery_date, body_region, outcome, notes, entry_mode, verified, entered_by)
+           VALUES (?, ?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+        (session['user_id'], procedure, surgery_date, body_region,
+         data.get('outcome', ''), data.get('notes', ''), session['user_id'])
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/patient/medical-history/surgery/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('patient')
+def patient_update_surgery(rec_id):
+    row = query_db('SELECT patient_id FROM medical_surgeries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    procedure = (data.get('procedure') or '').strip()
+    if not procedure:
+        return jsonify({'error': 'procedure is required'}), 400
+    surgery_date, err = _validate_date(data.get('surgery_date'), 'surgery_date')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_surgeries
+           SET procedure = ?, surgery_date = ?, body_region = ?, outcome = ?, notes = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (procedure, surgery_date, (data.get('body_region') or '')[:100],
+         data.get('outcome', ''), data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/patient/medical-history/surgery/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('patient')
+def patient_delete_surgery(rec_id):
+    row = query_db('SELECT patient_id FROM medical_surgeries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_surgeries WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/patient/medical-history/injury', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_injury():
+    data = request.get_json(silent=True) or request.form
+    body_region = (data.get('body_region') or '').strip()
+    if not body_region:
+        return jsonify({'error': 'body_region is required'}), 400
+    injury_date, err = _validate_date(data.get('injury_date'), 'injury_date')
+    if err:
+        return jsonify({'error': err}), 400
+    rec_id = execute_db(
+        '''INSERT INTO medical_injuries
+               (patient_id, body_region, injury_description, related_to_current,
+                recovery_complete, recurrence, injury_date, notes, entry_mode, verified, entered_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+        (session['user_id'], body_region[:100], data.get('injury_description', ''),
+         _coerce_bool(data.get('related_to_current')),
+         _coerce_bool(data.get('recovery_complete')),
+         _coerce_bool(data.get('recurrence')),
+         injury_date, data.get('notes', ''), session['user_id'])
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/patient/medical-history/injury/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('patient')
+def patient_update_injury(rec_id):
+    row = query_db('SELECT patient_id FROM medical_injuries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    body_region = (data.get('body_region') or '').strip()
+    if not body_region:
+        return jsonify({'error': 'body_region is required'}), 400
+    injury_date, err = _validate_date(data.get('injury_date'), 'injury_date')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_injuries
+           SET body_region = ?, injury_description = ?, related_to_current = ?,
+               recovery_complete = ?, recurrence = ?, injury_date = ?,
+               notes = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (body_region[:100], data.get('injury_description', ''),
+         _coerce_bool(data.get('related_to_current')),
+         _coerce_bool(data.get('recovery_complete')),
+         _coerce_bool(data.get('recurrence')),
+         injury_date, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/patient/medical-history/injury/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('patient')
+def patient_delete_injury(rec_id):
+    row = query_db('SELECT patient_id FROM medical_injuries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_injuries WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/patient/medical-history/medication', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_medication():
+    data = request.get_json(silent=True) or request.form
+    drug_name = (data.get('drug_name') or '').strip()[:200]
+    if not drug_name:
+        return jsonify({'error': 'drug_name is required'}), 400
+    end_date, err = _validate_date(data.get('end_date'), 'end_date', allow_future=True)
+    if err:
+        return jsonify({'error': err}), 400
+    rec_id = execute_db(
+        '''INSERT INTO medical_medications
+               (patient_id, drug_name, indication, active, end_date, entry_mode, verified, entered_by)
+           VALUES (?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+        (session['user_id'], drug_name, data.get('indication', ''),
+         _coerce_bool(data.get('active', 1)), end_date, session['user_id'])
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/patient/medical-history/medication/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('patient')
+def patient_update_medication(rec_id):
+    row = query_db('SELECT patient_id FROM medical_medications WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    drug_name = (data.get('drug_name') or '').strip()[:200]
+    if not drug_name:
+        return jsonify({'error': 'drug_name is required'}), 400
+    end_date, err = _validate_date(data.get('end_date'), 'end_date', allow_future=True)
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_medications
+           SET drug_name = ?, indication = ?, active = ?, end_date = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (drug_name, data.get('indication', ''),
+         _coerce_bool(data.get('active', 1)), end_date, rec_id)
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/patient/medical-history/medication/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('patient')
+def patient_delete_medication(rec_id):
+    row = query_db('SELECT patient_id FROM medical_medications WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_medications WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/patient/medical-history/family-history', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_family_history():
+    data = request.get_json(silent=True) or request.form
+    condition = (data.get('condition') or '').strip()
+    relation = (data.get('relation') or '').strip()
+    if not condition or not relation:
+        return jsonify({'error': 'condition and relation are required'}), 400
+    rec_id = execute_db(
+        '''INSERT INTO medical_family_history
+               (patient_id, condition, relation, notes, entry_mode, verified, entered_by)
+           VALUES (?, ?, ?, ?, 'self_report', 0, ?)''',
+        (session['user_id'], condition, relation, data.get('notes', ''), session['user_id'])
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/patient/medical-history/family-history/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('patient')
+def patient_update_family_history(rec_id):
+    row = query_db('SELECT patient_id FROM medical_family_history WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    condition = (data.get('condition') or '').strip()
+    relation = (data.get('relation') or '').strip()
+    if not condition or not relation:
+        return jsonify({'error': 'condition and relation are required'}), 400
+    execute_db(
+        '''UPDATE medical_family_history
+           SET condition = ?, relation = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (condition, relation, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/patient/medical-history/family-history/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('patient')
+def patient_delete_family_history(rec_id):
+    row = query_db('SELECT patient_id FROM medical_family_history WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_family_history WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'deleted'})
+
+
+# ─── Patient: bulk submit from post-signup step ───────────────────────────
+
+@app.route('/signup/medical-history', methods=['GET', 'POST'])
+@login_required
+@role_required('patient')
+def signup_medical_history():
+    """Post-signup medical history step for patients."""
+    if request.method == 'GET':
+        return render_template('patient/medical_history_signup.html')
+
+    data = request.get_json(silent=True) or {}
+    uid = session['user_id']
+
+    for cond in data.get('conditions', []):
+        name = (cond.get('name') or '').strip()
+        if not name:
+            continue
+        onset_year, _ = _validate_year(cond.get('onset_year'), 'onset_year')
+        execute_db(
+            '''INSERT INTO medical_conditions (patient_id, name, onset_year, notes, entry_mode, verified, entered_by)
+               VALUES (?, ?, ?, ?, 'self_report', 0, ?)''',
+            (uid, name, onset_year, cond.get('notes', ''), uid)
+        )
+
+    for surg in data.get('surgeries', []):
+        procedure = (surg.get('procedure') or '').strip()
+        if not procedure:
+            continue
+        surgery_date, _ = _validate_date(surg.get('surgery_date'), 'surgery_date')
+        execute_db(
+            '''INSERT INTO medical_surgeries (patient_id, procedure, surgery_date, body_region, outcome, notes, entry_mode, verified, entered_by)
+               VALUES (?, ?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+            (uid, procedure, surgery_date, (surg.get('body_region') or '')[:100],
+             surg.get('outcome', ''), surg.get('notes', ''), uid)
+        )
+
+    for inj in data.get('injuries', []):
+        body_region = (inj.get('body_region') or '').strip()
+        if not body_region:
+            continue
+        injury_date, _ = _validate_date(inj.get('injury_date'), 'injury_date')
+        execute_db(
+            '''INSERT INTO medical_injuries
+                   (patient_id, body_region, injury_description, related_to_current,
+                    recovery_complete, recurrence, injury_date, notes, entry_mode, verified, entered_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+            (uid, body_region[:100], inj.get('injury_description', ''),
+             _coerce_bool(inj.get('related_to_current')),
+             _coerce_bool(inj.get('recovery_complete')),
+             _coerce_bool(inj.get('recurrence')),
+             injury_date, inj.get('notes', ''), uid)
+        )
+
+    for med in data.get('medications', []):
+        drug_name = (med.get('drug_name') or '').strip()[:200]
+        if not drug_name:
+            continue
+        end_date, _ = _validate_date(med.get('end_date'), 'end_date', allow_future=True)
+        execute_db(
+            '''INSERT INTO medical_medications
+                   (patient_id, drug_name, indication, active, end_date, entry_mode, verified, entered_by)
+               VALUES (?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+            (uid, drug_name, med.get('indication', ''),
+             _coerce_bool(med.get('active', 1)), end_date, uid)
+        )
+
+    for fh in data.get('family_history', []):
+        condition = (fh.get('condition') or '').strip()
+        relation = (fh.get('relation') or '').strip()
+        if not condition or not relation:
+            continue
+        execute_db(
+            '''INSERT INTO medical_family_history
+                   (patient_id, condition, relation, notes, entry_mode, verified, entered_by)
+               VALUES (?, ?, ?, ?, 'self_report', 0, ?)''',
+            (uid, condition, relation, fh.get('notes', ''), uid)
+        )
+
+    _recompute_risk_cache(uid)
+    return jsonify({'status': 'saved', 'redirect': url_for('patient_dashboard')})
+
+
+# ============================================================================
+# MEDICAL HISTORY — clinician-facing endpoints
+# ============================================================================
+
+@app.route('/api/patient/<int:patient_id>/medical-history', methods=['GET'])
+@login_required
+@role_required('doctor')
+def api_clinician_get_history(patient_id):
+    """Return full medical history for a patient (doctor view)."""
+    return jsonify(_build_full_history_response(patient_id))
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/condition', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_add_condition(patient_id):
+    data = request.get_json(silent=True) or request.form
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    onset_year, err = _validate_year(data.get('onset_year'), 'onset_year')
+    if err:
+        return jsonify({'error': err}), 400
+    doctor_id = session['user_id']
+    rec_id = execute_db(
+        '''INSERT INTO medical_conditions
+               (patient_id, name, onset_year, notes, entry_mode, verified, entered_by, verified_by)
+           VALUES (?, ?, ?, ?, 'clinician', 1, ?, ?)''',
+        (patient_id, name, onset_year, data.get('notes', ''), doctor_id, doctor_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/condition/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_clinician_update_condition(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_conditions WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    onset_year, err = _validate_year(data.get('onset_year'), 'onset_year')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_conditions
+           SET name = ?, onset_year = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (name, onset_year, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/condition/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_clinician_delete_condition(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_conditions WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_conditions WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/condition/<int:rec_id>/verify', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_verify_condition(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_conditions WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db(
+        'UPDATE medical_conditions SET verified = 1, verified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (session['user_id'], rec_id)
+    )
+    return jsonify({'status': 'verified'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/surgery', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_add_surgery(patient_id):
+    data = request.get_json(silent=True) or request.form
+    procedure = (data.get('procedure') or '').strip()
+    if not procedure:
+        return jsonify({'error': 'procedure is required'}), 400
+    surgery_date, err = _validate_date(data.get('surgery_date'), 'surgery_date')
+    if err:
+        return jsonify({'error': err}), 400
+    doctor_id = session['user_id']
+    rec_id = execute_db(
+        '''INSERT INTO medical_surgeries
+               (patient_id, procedure, surgery_date, body_region, outcome, notes,
+                entry_mode, verified, entered_by, verified_by)
+           VALUES (?, ?, ?, ?, ?, ?, 'clinician', 1, ?, ?)''',
+        (patient_id, procedure, surgery_date, (data.get('body_region') or '')[:100],
+         data.get('outcome', ''), data.get('notes', ''), doctor_id, doctor_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/surgery/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_clinician_update_surgery(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_surgeries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    procedure = (data.get('procedure') or '').strip()
+    if not procedure:
+        return jsonify({'error': 'procedure is required'}), 400
+    surgery_date, err = _validate_date(data.get('surgery_date'), 'surgery_date')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_surgeries
+           SET procedure = ?, surgery_date = ?, body_region = ?, outcome = ?, notes = ?,
+               updated_at = CURRENT_TIMESTAMP WHERE id = ?''',
+        (procedure, surgery_date, (data.get('body_region') or '')[:100],
+         data.get('outcome', ''), data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/surgery/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_clinician_delete_surgery(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_surgeries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_surgeries WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/surgery/<int:rec_id>/verify', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_verify_surgery(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_surgeries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db(
+        'UPDATE medical_surgeries SET verified = 1, verified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (session['user_id'], rec_id)
+    )
+    return jsonify({'status': 'verified'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/injury', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_add_injury(patient_id):
+    data = request.get_json(silent=True) or request.form
+    body_region = (data.get('body_region') or '').strip()
+    if not body_region:
+        return jsonify({'error': 'body_region is required'}), 400
+    injury_date, err = _validate_date(data.get('injury_date'), 'injury_date')
+    if err:
+        return jsonify({'error': err}), 400
+    doctor_id = session['user_id']
+    rec_id = execute_db(
+        '''INSERT INTO medical_injuries
+               (patient_id, body_region, injury_description, related_to_current,
+                recovery_complete, recurrence, injury_date, notes,
+                entry_mode, verified, entered_by, verified_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'clinician', 1, ?, ?)''',
+        (patient_id, body_region[:100], data.get('injury_description', ''),
+         _coerce_bool(data.get('related_to_current')),
+         _coerce_bool(data.get('recovery_complete')),
+         _coerce_bool(data.get('recurrence')),
+         injury_date, data.get('notes', ''), doctor_id, doctor_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/injury/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_clinician_update_injury(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_injuries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    body_region = (data.get('body_region') or '').strip()
+    if not body_region:
+        return jsonify({'error': 'body_region is required'}), 400
+    injury_date, err = _validate_date(data.get('injury_date'), 'injury_date')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_injuries
+           SET body_region = ?, injury_description = ?, related_to_current = ?,
+               recovery_complete = ?, recurrence = ?, injury_date = ?,
+               notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?''',
+        (body_region[:100], data.get('injury_description', ''),
+         _coerce_bool(data.get('related_to_current')),
+         _coerce_bool(data.get('recovery_complete')),
+         _coerce_bool(data.get('recurrence')),
+         injury_date, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/injury/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_clinician_delete_injury(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_injuries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_injuries WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/injury/<int:rec_id>/verify', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_verify_injury(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_injuries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db(
+        'UPDATE medical_injuries SET verified = 1, verified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (session['user_id'], rec_id)
+    )
+    return jsonify({'status': 'verified'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/medication', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_add_medication(patient_id):
+    data = request.get_json(silent=True) or request.form
+    drug_name = (data.get('drug_name') or '').strip()[:200]
+    if not drug_name:
+        return jsonify({'error': 'drug_name is required'}), 400
+    end_date, err = _validate_date(data.get('end_date'), 'end_date', allow_future=True)
+    if err:
+        return jsonify({'error': err}), 400
+    doctor_id = session['user_id']
+    rec_id = execute_db(
+        '''INSERT INTO medical_medications
+               (patient_id, drug_name, indication, active, end_date,
+                entry_mode, verified, entered_by, verified_by)
+           VALUES (?, ?, ?, ?, ?, 'clinician', 1, ?, ?)''',
+        (patient_id, drug_name, data.get('indication', ''),
+         _coerce_bool(data.get('active', 1)), end_date, doctor_id, doctor_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/medication/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_clinician_update_medication(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_medications WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    drug_name = (data.get('drug_name') or '').strip()[:200]
+    if not drug_name:
+        return jsonify({'error': 'drug_name is required'}), 400
+    end_date, err = _validate_date(data.get('end_date'), 'end_date', allow_future=True)
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_medications
+           SET drug_name = ?, indication = ?, active = ?, end_date = ?,
+               updated_at = CURRENT_TIMESTAMP WHERE id = ?''',
+        (drug_name, data.get('indication', ''),
+         _coerce_bool(data.get('active', 1)), end_date, rec_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/medication/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_clinician_delete_medication(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_medications WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_medications WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/medication/<int:rec_id>/verify', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_verify_medication(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_medications WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db(
+        'UPDATE medical_medications SET verified = 1, verified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (session['user_id'], rec_id)
+    )
+    return jsonify({'status': 'verified'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/family-history', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_add_family_history(patient_id):
+    data = request.get_json(silent=True) or request.form
+    condition = (data.get('condition') or '').strip()
+    relation = (data.get('relation') or '').strip()
+    if not condition or not relation:
+        return jsonify({'error': 'condition and relation are required'}), 400
+    doctor_id = session['user_id']
+    rec_id = execute_db(
+        '''INSERT INTO medical_family_history
+               (patient_id, condition, relation, notes, entry_mode, verified, entered_by, verified_by)
+           VALUES (?, ?, ?, ?, 'clinician', 1, ?, ?)''',
+        (patient_id, condition, relation, data.get('notes', ''), doctor_id, doctor_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/family-history/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_clinician_update_family_history(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_family_history WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    condition = (data.get('condition') or '').strip()
+    relation = (data.get('relation') or '').strip()
+    if not condition or not relation:
+        return jsonify({'error': 'condition and relation are required'}), 400
+    execute_db(
+        '''UPDATE medical_family_history
+           SET condition = ?, relation = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?''',
+        (condition, relation, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/family-history/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_clinician_delete_family_history(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_family_history WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_family_history WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/family-history/<int:rec_id>/verify', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_verify_family_history(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_family_history WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db(
+        'UPDATE medical_family_history SET verified = 1, verified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (session['user_id'], rec_id)
+    )
+    return jsonify({'status': 'verified'})
+
+
+# ============================================================================
 
 @app.route('/clinician/patient/<int:patient_id>/add-note', methods=['POST'])
 @login_required
@@ -3224,7 +4056,6 @@ def caregiver_dashboard():
         WHERE cp.caregiver_id = ?
     ''', (session['user_id'],))
     
-    monitored_patients = with_live_patient_progress_list(monitored_patients)
     patient_ids = [p['id'] for p in monitored_patients] if monitored_patients else []
     recent_sessions = []
     if patient_ids:
@@ -3255,11 +4086,11 @@ def caregiver_dashboard():
                     'message': f"{s['patient_name']} reported pain level {s['pain_after']}/10 after {s['exercise_name']}",
                     'time': s['completed_at']
                 })
-            if s['quality_score'] is not None and s['quality_score'] < 25:
+            if s['quality_score'] is not None and s['quality_score'] < 50:
                 alerts.append({
                     'type': 'warning',
                     'title': 'Low Quality Session',
-                    'message': f"{s['patient_name']}'s form quality dropped to {int(s['quality_score'])}/50 during {s['exercise_name']}",
+                    'message': f"{s['patient_name']}'s form quality dropped to {int(s['quality_score'])} during {s['exercise_name']}",
                     'time': s['completed_at']
                 })
 
@@ -3924,12 +4755,7 @@ def api_optimize_consultation():
         print(f"[CONSULTATION API] After filtering: {len(filtered_results)} patients have recommendations for doctor {doctor_id}")
 
         patient_list = [
-            {
-                "id": p["id"],
-                "label": p["label"],
-                "score": p["score"],
-                "score_display": p.get("score_display", f'{p["score"]:g}/50'),
-            }
+            {"id": p["id"], "label": p["label"], "score": p["score"]}
             for p in patients
         ]
 
@@ -4297,8 +5123,23 @@ def api_session_complete():
     ''', (pain_after, effort_level, notes, avg_quality, completed_perc,
           session_id, session['user_id']))
 
-    # Refresh persisted patient progress stats from completed sessions.
-    get_live_patient_progress(session['user_id'], persist=True)
+    # Update patient stats
+    try:
+        stats = query_db('''
+            SELECT AVG(quality_score) as avg_q, AVG(pain_after) as avg_p, COUNT(*) as cnt
+            FROM sessions
+            WHERE patient_id = ? AND completed_at IS NOT NULL
+        ''', (session['user_id'],), one=True)
+        if stats:
+            execute_db('''
+                UPDATE patients
+                SET avg_quality_score = ?, avg_pain_level = ?
+                WHERE user_id = ?
+            ''', (round(float(stats['avg_q'] or 0), 1),
+                  round(float(stats['avg_p'] or 0), 1),
+                  session['user_id']))
+    except Exception as e:
+        print(f"[WARN] Could not update patient stats: {e}")
 
     # Auto-adaptive suggestion trigger (no model changes; only when wrong form is detected)
     try:
@@ -4323,13 +5164,13 @@ def api_session_complete():
             reason = None
             if avg_quality < 25 or completed_perc < 50:
                 severity = 'high'
-                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames) with low quality ({avg_quality}/50) or low completion ({completed_perc}%)'
+                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames) with low quality ({avg_quality}/100) or low completion ({completed_perc}%)'
             elif pain_after >= 7:
                 severity = 'high'
                 reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames) and high pain after session ({pain_after}/10)'
             elif avg_quality < 40:
                 severity = 'medium'
-                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames); quality below target ({avg_quality}/50)'
+                reason = f'Wrong form detected ({wrong_frames}/{max(total_frames, 1)} frames); quality below target ({avg_quality}/100)'
 
             if reason:
                 workout = query_db('''
@@ -4359,6 +5200,9 @@ def api_session_complete():
                 )
     except Exception as e:
         print(f"[WARN] Adaptive suggestion auto-trigger failed: {e}")
+
+    # Recalculate adherence after every completed session
+    recalculate_adherence(session['user_id'])
 
     return jsonify({'ok': True, 'session_id': session_id})
 
@@ -4535,60 +5379,6 @@ def api_chat_clear():
     return jsonify({"ok": True})
 
 
-def _prepare_audio_for_transcription(audio_bytes, filename):
-    """Normalize WAV mic input to mono 16 kHz PCM and boost quiet recordings."""
-    normalized_name = filename or "audio.wav"
-    diagnostics = {"duration_s": None, "rms": None}
-    ext = normalized_name.rsplit(".", 1)[-1].lower() if "." in normalized_name else ""
-
-    if ext != "wav":
-        return audio_bytes, normalized_name, diagnostics
-
-    try:
-        with wave.open(io.BytesIO(audio_bytes), "rb") as wav_in:
-            channels = wav_in.getnchannels()
-            sample_width = wav_in.getsampwidth()
-            sample_rate = wav_in.getframerate()
-            frame_count = wav_in.getnframes()
-            frames = wav_in.readframes(frame_count)
-
-        if not frames:
-            return audio_bytes, normalized_name, diagnostics
-
-        if channels > 1:
-            frames = audioop.tomono(frames, sample_width, 0.5, 0.5)
-            channels = 1
-
-        if sample_width != 2:
-            frames = audioop.lin2lin(frames, sample_width, 2)
-            sample_width = 2
-
-        diagnostics["duration_s"] = round(frame_count / float(sample_rate or 1), 3)
-        diagnostics["rms"] = audioop.rms(frames, sample_width)
-        peak = audioop.max(frames, sample_width)
-
-        if 0 < peak < 12000:
-            gain = min(4.0, 16000.0 / peak)
-            frames = audioop.mul(frames, sample_width, gain)
-            diagnostics["rms"] = audioop.rms(frames, sample_width)
-
-        if sample_rate != 16000:
-            frames, _ = audioop.ratecv(frames, sample_width, channels, sample_rate, 16000, None)
-            sample_rate = 16000
-
-        out = io.BytesIO()
-        with wave.open(out, "wb") as wav_out:
-            wav_out.setnchannels(channels)
-            wav_out.setsampwidth(sample_width)
-            wav_out.setframerate(sample_rate)
-            wav_out.writeframes(frames)
-
-        return out.getvalue(), "voice_16k.wav", diagnostics
-    except Exception as prep_err:
-        print(f"[TRANSCRIBE] Audio normalization skipped: {prep_err}")
-        return audio_bytes, normalized_name, diagnostics
-
-
 @app.route('/api/chat/transcribe', methods=['POST'])
 @login_required
 def api_chat_transcribe():
@@ -4607,14 +5397,11 @@ def api_chat_transcribe():
         if not audio_bytes:
             return jsonify({"error": "Empty audio payload"}), 400
 
-        audio_bytes, filename, audio_diag = _prepare_audio_for_transcription(audio_bytes, filename)
-        print(f"[TRANSCRIBE] Prepared audio diagnostics: {audio_diag}")
-
         transcript = ""
         provider_errors = []
         if WHISPER_AVAILABLE:
             try:
-                transcript = whisper_transcribe(audio_bytes, filename, raise_on_error=True)
+                transcript = whisper_transcribe(audio_bytes, filename)
                 print(f"[Whisper] Transcript: '{transcript}'")
             except Exception as whisper_err:
                 provider_errors.append(f"Whisper: {whisper_err}")
@@ -4624,33 +5411,16 @@ def api_chat_transcribe():
         if not transcript and CHATBOT_AVAILABLE:
             try:
                 print("[TRANSCRIBE] Falling back to Meralion transcription")
-                transcript = transcribe_audio(
-                    audio_bytes,
-                    filename,
-                    raise_on_error=True,
-                    allow_whisper_fallback=False
-                )
+                transcript = transcribe_audio(audio_bytes, filename)
                 print(f"[Meralion] Transcript: '{transcript}'")
             except Exception as mer_err:
                 provider_errors.append(f"Meralion: {mer_err}")
                 print(f"[Meralion] Failed: {mer_err}")
 
         if not transcript:
-            duration_s = audio_diag.get("duration_s") or 0
-            rms = audio_diag.get("rms") or 0
-            if not provider_errors and duration_s >= 0.75 and rms >= 200:
-                return jsonify({
-                    "error": "Transcription unavailable",
-                    "detail": "Speech was captured, but the transcription service returned empty text"
-                }), 502
-            if not provider_errors:
-                return jsonify({
-                    "transcript": "",
-                    "detail": "No speech detected"
-                })
             return jsonify({
                 "error": "Transcription unavailable",
-                "detail": " ; ".join(provider_errors)
+                "detail": " ; ".join(provider_errors) if provider_errors else "No speech detected"
             }), 502
 
         return jsonify({"transcript": transcript})
@@ -4742,14 +5512,14 @@ Surgery Date: {patient_info['surgery_date'] or 'N/A'}
 Current Rehab Week: {patient_info['current_week']}
 Adherence Rate: {patient_info['adherence_rate']}%
 Avg Pain Level: {patient_info['avg_pain_level']}/10
-Avg Quality Score: {patient_info['avg_quality_score']}/50
+Avg Quality Score: {patient_info['avg_quality_score']}/100
 Completed Sessions: {patient_info['completed_sessions']}
 Streak Days: {patient_info['streak_days']}
 """
             if recent_sessions_db:
                 patient_context += "\nRecent Sessions:\n"
                 for s in recent_sessions_db:
-                    patient_context += f"- {s['exercise_name']}: Quality {s['quality_score']}/50, Pain {s['pain_after']}/10 ({s['completed_at']})\n"
+                    patient_context += f"- {s['exercise_name']}: Quality {s['quality_score']}, Pain {s['pain_after']}/10 ({s['completed_at']})\n"
 
         # Get workouts for exercise plan context
         workouts = query_db('''
@@ -4818,7 +5588,7 @@ Streak Days: {patient_info['streak_days']}
             patient_context += "\n=== FULL SESSION REPORTS (most recent 20) ===\n"
             for sess in all_sessions:
                 patient_context += f"\nSession #{sess['id']} ({sess['completed_at']}):\n"
-                patient_context += f"  Quality: {sess['quality_score']}/50, Completion: {sess['completed_perc']}%\n"
+                patient_context += f"  Quality: {sess['quality_score']}/100, Completion: {sess['completed_perc']}%\n"
                 patient_context += f"  Pain: {sess['pain_before']}/10 before → {sess['pain_after']}/10 after\n"
                 patient_context += f"  Effort Level: {sess['effort_level']}/10\n"
                 if sess['notes']:
@@ -4834,7 +5604,7 @@ Streak Days: {patient_info['streak_days']}
                 if sess_exercises:
                     for se in sess_exercises:
                         ex_name = se['exercise_name'] or 'Unknown'
-                        patient_context += f"    - {ex_name}: Quality {se['quality_score']}/50"
+                        patient_context += f"    - {ex_name}: Quality {se['quality_score']}/100"
                         if se['sets_required'] and se['sets_completed']:
                             patient_context += f", Sets required: {se['sets_required']}, completed: {se['sets_completed']}"
                         patient_context += "\n"
@@ -5519,94 +6289,52 @@ def _parse_frequency_per_week(freq_text: str) -> float:
     return 3.0  # sensible default
 
 
-def get_live_patient_progress(patient_id: int, persist: bool = True) -> dict:
+def recalculate_adherence(patient_id: int):
     """
-    Compute patient progress stats directly from completed sessions.
+    Recalculate and persist adherence_rate for a patient.
 
-    Returns a dict containing adherence_rate, avg_quality_score,
-    avg_pain_level, and completed_sessions. When ``persist`` is True,
-    the computed values are written back to the patients table so older
-    views and exports stay in sync.
+    Formula (0–100):
+      50% — Recent performance: average of (completion_perc/100 + quality_score/100) / 2
+             across the last 3 completed sessions.
+      50% — Overall history: average quality_score / 100 across all completed sessions.
+
+    If fewer than 3 sessions exist the recent score uses whatever is available.
+    If no sessions at all, adherence stays unchanged.
     """
     try:
-        overall = query_db(
-            """SELECT
-                   COUNT(DISTINCT COALESCE(session_group_id, id)) AS completed_sessions,
-                   AVG(quality_score) AS avg_q,
-                   AVG(pain_after) AS avg_p
-               FROM sessions
-               WHERE patient_id = ? AND completed_at IS NOT NULL""",
-            (patient_id,), one=True
-        )
-
+        # ── Recent: last 3 sessions ──────────────────────────────────────────
         recent = query_db(
             """SELECT quality_score, completed_perc FROM sessions
                WHERE patient_id = ? AND completed_at IS NOT NULL
                ORDER BY completed_at DESC LIMIT 3""",
             (patient_id,)
         )
+        if not recent:
+            return  # no sessions yet — leave as-is
 
-        completed_sessions = int((overall['completed_sessions'] or 0) if overall else 0)
-        avg_quality_score = round(float((overall['avg_q'] or 0) if overall else 0), 1)
-        avg_pain_level = round(float((overall['avg_p'] or 0) if overall else 0), 1)
+        recent_scores = []
+        for r in recent:
+            comp = min(float(r['completed_perc'] or 0), 100.0) / 100.0
+            qual = min(float(r['quality_score'] or 0), 100.0) / 100.0
+            recent_scores.append((comp + qual) / 2.0)
+        recent_component = (sum(recent_scores) / len(recent_scores)) * 100.0
 
-        adherence = 0.0
-        if recent:
-            recent_scores = []
-            for r in recent:
-                comp = min(float(r['completed_perc'] or 0), 100.0) / 100.0
-                qual = min(float(r['quality_score'] or 0), 100.0) / 100.0
-                recent_scores.append((comp + qual) / 2.0)
-            recent_component = (sum(recent_scores) / len(recent_scores)) * 100.0
-            overall_component = min(avg_quality_score, 100.0)
-            adherence = round(0.5 * recent_component + 0.5 * overall_component, 1)
+        # ── Overall history: all sessions ────────────────────────────────────
+        overall = query_db(
+            """SELECT AVG(quality_score) as avg_q FROM sessions
+               WHERE patient_id = ? AND completed_at IS NOT NULL""",
+            (patient_id,), one=True
+        )
+        overall_component = min(float(overall['avg_q'] or 0), 100.0) if overall else 0.0
 
-        metrics = {
-            'adherence_rate': adherence,
-            'avg_quality_score': avg_quality_score,
-            'avg_pain_level': avg_pain_level,
-            'completed_sessions': completed_sessions,
-        }
+        adherence = round(0.5 * recent_component + 0.5 * overall_component, 1)
 
-        if persist:
-            execute_db(
-                """UPDATE patients
-                   SET adherence_rate = ?, avg_quality_score = ?, avg_pain_level = ?, completed_sessions = ?
-                   WHERE user_id = ?""",
-                (
-                    adherence,
-                    avg_quality_score,
-                    avg_pain_level,
-                    completed_sessions,
-                    patient_id,
-                )
-            )
-        return metrics
+        execute_db(
+            "UPDATE patients SET adherence_rate = ? WHERE user_id = ?",
+            (adherence, patient_id)
+        )
     except Exception as _e:
-        print(f"[WARN] get_live_patient_progress failed for patient {patient_id}: {_e}")
-        return {}
-
-
-def recalculate_adherence(patient_id: int):
-    """Backward-compatible wrapper around the live progress calculator."""
-    get_live_patient_progress(patient_id, persist=True)
-
-
-def with_live_patient_progress(patient_row, persist: bool = True):
-    """Attach live adherence/progress metrics to a patient row-like object."""
-    if not patient_row:
-        return patient_row
-    row = dict(patient_row)
-    patient_id = row.get('user_id', row.get('id'))
-    if patient_id is None:
-        return row
-    row.update(get_live_patient_progress(int(patient_id), persist=persist))
-    return row
-
-
-def with_live_patient_progress_list(rows, persist: bool = True):
-    """Map live patient progress onto a list of patient row-like objects."""
-    return [with_live_patient_progress(row, persist=persist) for row in (rows or [])]
+        print(f"[WARN] recalculate_adherence failed for patient {patient_id}: {_e}")
 
 
 def assign_patient_exercises(patient_user_id, condition):
@@ -5841,138 +6569,6 @@ def _log_frame_telemetry(out: dict, program: str = 'general'):
         print(f"[FRAME_LOG] Error: {e}")
 
 
-def _ensure_live_feedback_message(out: dict) -> dict:
-    """Guarantee a user-facing coaching message for bad-form live frames."""
-    if not isinstance(out, dict):
-        return out
-
-    form_status = str(out.get("form_status") or "").strip().upper()
-    existing = out.get("llm_feedback")
-    if isinstance(existing, list):
-        feedback_items = [item.strip() for item in existing if isinstance(item, str) and item.strip()]
-    elif isinstance(existing, str) and existing.strip():
-        feedback_items = [existing.strip()]
-    else:
-        feedback_items = []
-
-    def _landmark_xy(idx: int):
-        landmarks = out.get("landmarks") or []
-        if not isinstance(landmarks, list) or idx >= len(landmarks):
-            return None
-        point = landmarks[idx]
-        if not isinstance(point, (list, tuple)) or len(point) < 2:
-            return None
-        try:
-            return float(point[0]), float(point[1])
-        except (TypeError, ValueError):
-            return None
-
-    def _is_generic_feedback(text: str) -> bool:
-        lower = text.lower().strip()
-        generic_markers = (
-            "keep going",
-            "proper form",
-            "proper posture",
-            "maintain proper form",
-            "maintain proper form and posture",
-            "posture controlled and stable",
-            "focus on proper form",
-            "move slowly and controlled",
-            "adjust your positioning",
-            "small corrections matter",
-            "almost there",
-            "fine-tune your form",
-            "try again",
-            "try once more",
-            "one more perfect rep",
-        )
-        return any(marker in lower for marker in generic_markers)
-
-    def _specific_form_cues() -> list[str]:
-        cues = []
-        exercise_name = str(out.get("exercise_name") or "").replace("_", " ").lower()
-
-        left_shoulder = _landmark_xy(11)
-        right_shoulder = _landmark_xy(12)
-        left_hip = _landmark_xy(23)
-        right_hip = _landmark_xy(24)
-        left_knee = _landmark_xy(25)
-        right_knee = _landmark_xy(26)
-        left_ankle = _landmark_xy(27)
-        right_ankle = _landmark_xy(28)
-        left_wrist = _landmark_xy(15)
-        right_wrist = _landmark_xy(16)
-        nose = _landmark_xy(0)
-
-        if left_shoulder and right_shoulder:
-            shoulder_diff = abs(left_shoulder[1] - right_shoulder[1])
-            if shoulder_diff > 0.06:
-                higher_side = "left" if left_shoulder[1] < right_shoulder[1] else "right"
-                cues.append(f"Your shoulders are uneven. Keep the {higher_side} shoulder relaxed and level with the other side.")
-
-        if left_hip and right_hip:
-            hip_diff = abs(left_hip[1] - right_hip[1])
-            if hip_diff > 0.06:
-                drop_side = "left" if left_hip[1] > right_hip[1] else "right"
-                cues.append(f"Your hips are tilting. Keep your pelvis level and avoid dropping the {drop_side} hip.")
-
-        if left_shoulder and right_shoulder and left_hip and right_hip:
-            shoulder_mid_x = (left_shoulder[0] + right_shoulder[0]) / 2.0
-            hip_mid_x = (left_hip[0] + right_hip[0]) / 2.0
-            trunk_shift = shoulder_mid_x - hip_mid_x
-            if abs(trunk_shift) > 0.08:
-                lean_side = "right" if trunk_shift > 0 else "left"
-                cues.append(f"Your trunk is leaning to the {lean_side}. Bring your chest back over your hips.")
-
-        if nose and left_hip and right_hip:
-            hip_mid_x = (left_hip[0] + right_hip[0]) / 2.0
-            head_shift = nose[0] - hip_mid_x
-            if abs(head_shift) > 0.10:
-                head_side = "right" if head_shift > 0 else "left"
-                cues.append(f"Your head and chest are drifting to the {head_side}. Keep your spine stacked and centered.")
-
-        if "squat" in exercise_name and left_knee and right_knee and left_ankle and right_ankle:
-            knee_gap = abs(left_knee[0] - right_knee[0])
-            ankle_gap = abs(left_ankle[0] - right_ankle[0])
-            if ankle_gap > 0.05 and knee_gap < ankle_gap * 0.75:
-                cues.append("Your knees are falling inward. Push them out so they track over your toes.")
-
-        if ("lifting" in exercise_name or "arm" in exercise_name) and left_wrist and right_wrist and left_shoulder and right_shoulder:
-            wrist_height_diff = abs(left_wrist[1] - right_wrist[1])
-            if wrist_height_diff > 0.08:
-                lower_arm = "left" if left_wrist[1] > right_wrist[1] else "right"
-                cues.append(f"Your arms are uneven. Lift the {lower_arm} arm to match the other side.")
-            wrists_below_shoulders = (left_wrist[1] > left_shoulder[1] + 0.05) or (right_wrist[1] > right_shoulder[1] + 0.05)
-            if wrists_below_shoulders:
-                cues.append("Raise your arms a little higher and keep both shoulders level.")
-
-        deduped = []
-        for cue in cues:
-            if cue not in deduped:
-                deduped.append(cue)
-        return deduped[:3]
-
-    specific_cues = _specific_form_cues()
-
-    if form_status in ("WRONG", "INCORRECT"):
-        if not feedback_items:
-            feedback_items = specific_cues[:]
-
-        if specific_cues:
-            generic_only = not feedback_items or all(_is_generic_feedback(item) for item in feedback_items)
-            if generic_only:
-                feedback_items = specific_cues + [item for item in feedback_items if not _is_generic_feedback(item)]
-
-    if form_status in ("WRONG", "INCORRECT") and not feedback_items:
-        exercise_name = str(out.get("exercise_name") or "this exercise").replace("_", " ").strip()
-        feedback_items = [
-            f"Posture needs correction. Slow down, stay aligned, and adjust your form before continuing with {exercise_name}."
-        ]
-
-    out["llm_feedback"] = feedback_items[:3]
-    return out
-
-
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():
     if PIPELINE is None:
@@ -5999,7 +6595,6 @@ def api_live_feedback():
             manual_exercise=manual_exercise,
             exercise_hint=exercise_hint
         )
-        out = _ensure_live_feedback_message(out)
         
         # Store landmarks for frontend polling
         global LATEST_LANDMARKS
@@ -6056,7 +6651,6 @@ def api_live_feedback_keraal():
             language=language,
             exercise_hint=exercise_hint
         )
-        out = _ensure_live_feedback_message(out)
         
         # Store landmarks for frontend polling
         global LATEST_LANDMARKS
