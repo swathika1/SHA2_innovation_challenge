@@ -206,8 +206,13 @@
         <div class="pp-stat-label">Adherence</div>
     </div>
     <div class="pp-stat">
+<<<<<<< Updated upstream
         <div class="pp-stat-value" style="color:{% if patient.avg_quality_score >= 70 %}#22c55e{% elif patient.avg_quality_score >= 45 %}#f59e0b{% else %}#ef4444{% endif %};">
             {{ patient.avg_quality_score | round(1) }}
+=======
+        <div class="pp-stat-value" style="color:{% if patient.avg_quality_score >= 35 %}#22c55e{% elif patient.avg_quality_score >= 22.5 %}#f59e0b{% else %}#ef4444{% endif %};">
+            {{ patient.avg_quality_score | round(1) }}/50
+>>>>>>> Stashed changes
         </div>
         <div class="pp-stat-label">Avg Quality</div>
     </div>
@@ -222,7 +227,11 @@
         <div class="pp-stat-label">Total Sessions</div>
     </div>
     <div class="pp-stat">
+<<<<<<< Updated upstream
         <div class="pp-stat-value" style="color:#0ea5e9;">{{ avg_quality_recent }}</div>
+=======
+        <div class="pp-stat-value" style="color:#0ea5e9;">{{ avg_quality_recent }}/50</div>
+>>>>>>> Stashed changes
         <div class="pp-stat-label">Recent Quality (5)</div>
     </div>
     <div class="pp-stat">
@@ -400,6 +409,81 @@
     </div>
 </div>
 
+<!-- ===== MEDICAL HISTORY CARD ===== -->
+<div class="pp-card pp-full" id="mh-card" style="margin-bottom:20px;">
+    <div class="pp-card-header">
+        <h3><i class="fa-solid fa-notes-medical"></i> Medical History</h3>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:0.75rem;color:#aaa;" id="mh-last-updated-label"></span>
+            <button onclick="mhToggleEdit()" id="mh-edit-btn" style="background:#f0f4ff;color:#6366f1;border:1px solid #c7d2fe;padding:5px 14px;border-radius:7px;font-size:0.8rem;font-weight:600;cursor:pointer;">
+                <i class="fa-solid fa-pen"></i> Edit
+            </button>
+        </div>
+    </div>
+    <div class="pp-card-body">
+        <p style="font-size:0.8rem;color:#aaa;margin:0 0 14px;">
+            Records entered by the patient are marked
+            <span style="background:#f9fafb;border:1px solid #e5e7eb;padding:1px 7px;border-radius:10px;font-size:0.73rem;">Unverified</span>.
+            Use the verify button to confirm accuracy.
+        </p>
+
+        <!-- Chronic Conditions -->
+        <details open style="margin-bottom:12px;">
+            <summary style="font-weight:700;font-size:0.88rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
+                <i class="fa-solid fa-heart-pulse" style="color:#6366f1;"></i> Chronic Conditions
+                <i class="fa-solid fa-chevron-down" style="margin-left:auto;color:#aaa;font-size:0.75rem;"></i>
+            </summary>
+            <div id="mhc-conditions" style="margin-top:8px;"></div>
+            <div id="mhc-cond-form" style="display:none;"></div>
+            <button class="mhc-add" onclick="mhcShowForm('condition')" style="display:none;"><i class="fa-solid fa-plus"></i> Add</button>
+        </details>
+
+        <!-- Past Surgeries -->
+        <details style="margin-bottom:12px;">
+            <summary style="font-weight:700;font-size:0.88rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
+                <i class="fa-solid fa-scalpel" style="color:#6366f1;"></i> Past Surgeries
+                <i class="fa-solid fa-chevron-down" style="margin-left:auto;color:#aaa;font-size:0.75rem;"></i>
+            </summary>
+            <div id="mhc-surgeries" style="margin-top:8px;"></div>
+            <div id="mhc-surg-form" style="display:none;"></div>
+            <button class="mhc-add" onclick="mhcShowForm('surgery')" style="display:none;"><i class="fa-solid fa-plus"></i> Add</button>
+        </details>
+
+        <!-- Past Injuries -->
+        <details style="margin-bottom:12px;">
+            <summary style="font-weight:700;font-size:0.88rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
+                <i class="fa-solid fa-bone" style="color:#6366f1;"></i> Past Injuries
+                <i class="fa-solid fa-chevron-down" style="margin-left:auto;color:#aaa;font-size:0.75rem;"></i>
+            </summary>
+            <div id="mhc-injuries" style="margin-top:8px;"></div>
+            <div id="mhc-inj-form" style="display:none;"></div>
+            <button class="mhc-add" onclick="mhcShowForm('injury')" style="display:none;"><i class="fa-solid fa-plus"></i> Add</button>
+        </details>
+
+        <!-- Medications -->
+        <details style="margin-bottom:12px;">
+            <summary style="font-weight:700;font-size:0.88rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
+                <i class="fa-solid fa-pills" style="color:#6366f1;"></i> Medications
+                <i class="fa-solid fa-chevron-down" style="margin-left:auto;color:#aaa;font-size:0.75rem;"></i>
+            </summary>
+            <div id="mhc-medications" style="margin-top:8px;"></div>
+            <div id="mhc-med-form" style="display:none;"></div>
+            <button class="mhc-add" onclick="mhcShowForm('medication')" style="display:none;"><i class="fa-solid fa-plus"></i> Add</button>
+        </details>
+
+        <!-- Family History -->
+        <details style="margin-bottom:4px;">
+            <summary style="font-weight:700;font-size:0.88rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
+                <i class="fa-solid fa-people-roof" style="color:#6366f1;"></i> Family History
+                <i class="fa-solid fa-chevron-down" style="margin-left:auto;color:#aaa;font-size:0.75rem;"></i>
+            </summary>
+            <div id="mhc-family_history" style="margin-top:8px;"></div>
+            <div id="mhc-fam-form" style="display:none;"></div>
+            <button class="mhc-add" onclick="mhcShowForm('family_history')" style="display:none;"><i class="fa-solid fa-plus"></i> Add</button>
+        </details>
+    </div>
+</div>
+
 <!-- ===== RE-INJURY RISK ===== -->
 {% if risk_data %}
 {% set lvl = risk_data.risk_level %}
@@ -484,9 +568,15 @@
                     </td>
                     <td>
                         {% set qs = s.quality_score | default(0) %}
+<<<<<<< Updated upstream
                         <span style="font-weight:600;color:{% if qs >= 70 %}#22c55e{% elif qs >= 45 %}#f59e0b{% else %}#ef4444{% endif %};">{{ qs | round(0) | int }}</span>
                         <div class="pp-quality-bar">
                             <div class="pp-quality-bar-fill" style="width:{{ qs }}%;background:{% if qs >= 70 %}#22c55e{% elif qs >= 45 %}#f59e0b{% else %}#ef4444{% endif %};"></div>
+=======
+                        <span style="font-weight:600;color:{% if qs >= 35 %}#22c55e{% elif qs >= 22.5 %}#f59e0b{% else %}#ef4444{% endif %};">{{ qs | round(0) | int }}/50</span>
+                        <div class="pp-quality-bar">
+                            <div class="pp-quality-bar-fill" style="width:{{ (qs * 2) | round(1) }}%;background:{% if qs >= 35 %}#22c55e{% elif qs >= 22.5 %}#f59e0b{% else %}#ef4444{% endif %};"></div>
+>>>>>>> Stashed changes
                         </div>
                     </td>
                     <td>
@@ -736,4 +826,213 @@ function resolveMessage(msgId) {
 }
 </script>
 
+<<<<<<< Updated upstream
 {% endblock %}
+=======
+<style>
+/* Medical history card — clinician view */
+.mhc-rec { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; background:#f9fafb; border-radius:7px; border:1px solid #eee; margin-bottom:5px; font-size:0.83rem; }
+.mhc-rec-body { flex:1; min-width:0; }
+.mhc-rec-title { font-weight:600; color:#1a1a2e; font-size:0.85rem; }
+.mhc-rec-meta { color:#aaa; font-size:0.75rem; margin-top:2px; }
+.mhc-badge { display:inline-block; padding:1px 8px; border-radius:20px; font-size:0.7rem; font-weight:700; margin-left:5px; vertical-align:middle; }
+.mhc-badge-unverified { background:#f5f5f5; color:#888; }
+.mhc-badge-verified   { background:#f0fdf4; color:#166534; }
+.mhc-badge-warn       { background:#fffbeb; color:#92400e; }
+.mhc-badge-danger     { background:#fef2f2; color:#991b1b; }
+.mhc-rec-actions { display:flex; gap:4px; flex-shrink:0; }
+.mhc-btn { background:none; border:none; cursor:pointer; padding:3px 7px; border-radius:5px; font-size:0.75rem; color:#aaa; }
+.mhc-btn:hover { background:#f0f0f0; color:#555; }
+.mhc-btn.verify:hover { background:#f0fdf4; color:#16a34a; }
+.mhc-btn.del:hover { background:#fee2e2; color:#dc2626; }
+.mhc-add { align-items:center; gap:4px; margin-top:6px; padding:5px 12px; background:#eef3ff; color:#6366f1; border:1px dashed #6366f1; border-radius:6px; font-size:0.78rem; font-weight:600; cursor:pointer; }
+.mhc-inline-form { background:#f0f4ff; border:1px solid #c7d2fe; border-radius:8px; padding:12px 14px; margin-top:8px; }
+.mhc-inline-form .mf { display:flex; flex-direction:column; gap:3px; margin-bottom:7px; }
+.mhc-inline-form .mf label { font-size:0.72rem; font-weight:700; color:#555; text-transform:uppercase; }
+.mhc-inline-form .mf input, .mhc-inline-form .mf textarea { padding:6px 9px; border:1px solid #ddd; border-radius:5px; font-size:0.83rem; font-family:inherit; }
+.mhc-inline-form .mf input:focus, .mhc-inline-form .mf textarea:focus { outline:none; border-color:#6366f1; }
+.mhc-2col { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.mhc-checks { display:flex; gap:10px; flex-wrap:wrap; margin-top:3px; }
+.mhc-checks label { display:flex; align-items:center; gap:3px; font-size:0.8rem; cursor:pointer; font-weight:400; }
+.mhc-form-btns { display:flex; gap:7px; margin-top:8px; }
+.mhc-save { padding:5px 16px; background:#6366f1; color:#fff; border:none; border-radius:6px; font-size:0.8rem; font-weight:700; cursor:pointer; }
+.mhc-cancel { padding:5px 12px; background:#f0f0f0; color:#555; border:none; border-radius:6px; font-size:0.8rem; cursor:pointer; }
+</style>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────
+   Medical History — clinician patient detail JS
+   ───────────────────────────────────────────────────────────────── */
+const _PID = {{ patient_id }};
+const MHC_BASE = `/api/patient/${_PID}/medical-history`;
+let _mhcData = {};
+let _mhcEditMode = false;
+
+async function mhcLoad() {
+    try {
+        const res = await fetch(MHC_BASE);
+        _mhcData = await res.json();
+        mhcRender();
+        let latest = null;
+        ['conditions','surgeries','injuries','medications','family_history'].forEach(cat => {
+            (_mhcData[cat] || []).forEach(r => {
+                if (!latest || (r.updated_at && r.updated_at > latest)) latest = r.updated_at;
+            });
+        });
+        if (latest) document.getElementById('mh-last-updated-label').textContent = 'Updated ' + latest.slice(0,10);
+    } catch(e) { console.warn('MH load failed', e); }
+}
+
+function mhcVeriBadge(r) {
+    if (r.verified) {
+        const by = r.verified_by_name ? ` by ${r.verified_by_name}` : '';
+        return `<span class="mhc-badge mhc-badge-verified">✓ Verified${by}</span>`;
+    }
+    return `<span class="mhc-badge mhc-badge-unverified">Unverified</span>`;
+}
+
+function mhcRiskFlags(r) {
+    const out = [];
+    if (r.related_to_current && !r.recovery_complete) out.push(`<span class="mhc-badge mhc-badge-warn">⚠ Incomplete recovery</span>`);
+    if (r.recurrence) out.push(`<span class="mhc-badge mhc-badge-danger">↻ Prior recurrence</span>`);
+    return out.join('');
+}
+
+function mhcConditionFlag(name) {
+    const healingRisk = ['diabetes','hypertension','obesity','osteoporosis','rheumatoid','lupus','hypothyroid'];
+    if (healingRisk.some(k => name.toLowerCase().includes(k)))
+        return `<span class="mhc-badge mhc-badge-warn">⚕ Healing risk</span>`;
+    return '';
+}
+
+function mhcActions(type, id, verified) {
+    if (!_mhcEditMode) return '';
+    const verifyBtn = !verified
+        ? `<button class="mhc-btn verify" onclick="mhcVerify('${type}',${id})" title="Verify"><i class="fa-solid fa-check"></i> Verify</button>`
+        : '';
+    return `<div class="mhc-rec-actions">
+        ${verifyBtn}
+        <button class="mhc-btn del" onclick="mhcDelete('${type}',${id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+    </div>`;
+}
+
+function mhcRenderSection(cat, rows, renderFn) {
+    const el = document.getElementById('mhc-' + cat);
+    if (!el) return;
+    el.innerHTML = rows.length
+        ? rows.map(renderFn).join('')
+        : `<p style="color:#aaa;font-size:0.8rem;padding:3px 0;">No records.</p>`;
+}
+
+function mhcRender() {
+    mhcRenderSection('conditions', _mhcData.conditions || [], r => `
+        <div class="mhc-rec"><div class="mhc-rec-body">
+            <div class="mhc-rec-title">${r.name}${mhcVeriBadge(r)}${mhcConditionFlag(r.name)}</div>
+            <div class="mhc-rec-meta">${r.onset_year ? 'Since ' + r.onset_year + ' · ' : ''}Entered by ${r.entered_by_name || '?'} · ${(r.updated_at||'').slice(0,10)}</div>
+        </div>${mhcActions('condition', r.id, r.verified)}</div>`);
+
+    mhcRenderSection('surgeries', _mhcData.surgeries || [], r => `
+        <div class="mhc-rec"><div class="mhc-rec-body">
+            <div class="mhc-rec-title">${r.procedure}${r.body_region ? ' — ' + r.body_region : ''}${mhcVeriBadge(r)}</div>
+            <div class="mhc-rec-meta">${r.surgery_date || ''}${r.outcome ? ' · ' + r.outcome : ''} · Entered by ${r.entered_by_name || '?'}</div>
+        </div>${mhcActions('surgery', r.id, r.verified)}</div>`);
+
+    mhcRenderSection('injuries', _mhcData.injuries || [], r => `
+        <div class="mhc-rec"><div class="mhc-rec-body">
+            <div class="mhc-rec-title">${r.body_region}${r.injury_description ? ' — ' + r.injury_description : ''}${mhcVeriBadge(r)}${mhcRiskFlags(r)}</div>
+            <div class="mhc-rec-meta">${r.injury_date || ''}${r.related_to_current ? ' · Related to current' : ''} · Entered by ${r.entered_by_name || '?'}</div>
+        </div>${mhcActions('injury', r.id, r.verified)}</div>`);
+
+    mhcRenderSection('medications', _mhcData.medications || [], r => `
+        <div class="mhc-rec"><div class="mhc-rec-body">
+            <div class="mhc-rec-title">${r.drug_name}<span class="mhc-badge ${r.active ? 'mhc-badge-verified' : 'mhc-badge-unverified'}">${r.active ? 'Active' : 'Stopped'}</span>${mhcVeriBadge(r)}</div>
+            <div class="mhc-rec-meta">${r.indication || ''} · Entered by ${r.entered_by_name || '?'}</div>
+        </div>${mhcActions('medication', r.id, r.verified)}</div>`);
+
+    mhcRenderSection('family_history', _mhcData.family_history || [], r => `
+        <div class="mhc-rec"><div class="mhc-rec-body">
+            <div class="mhc-rec-title">${r.condition} <span style="font-weight:400;color:#555;">— ${r.relation}</span>${mhcVeriBadge(r)}</div>
+            <div class="mhc-rec-meta">Entered by ${r.entered_by_name || '?'} · ${(r.updated_at||'').slice(0,10)}</div>
+        </div>${mhcActions('family_history', r.id, r.verified)}</div>`);
+}
+
+function mhcToggleEdit() {
+    _mhcEditMode = !_mhcEditMode;
+    const btn = document.getElementById('mh-edit-btn');
+    btn.innerHTML = _mhcEditMode ? '<i class="fa-solid fa-xmark"></i> Done' : '<i class="fa-solid fa-pen"></i> Edit';
+    btn.style.background  = _mhcEditMode ? '#fef2f2' : '#f0f4ff';
+    btn.style.color       = _mhcEditMode ? '#dc2626' : '#6366f1';
+    btn.style.borderColor = _mhcEditMode ? '#fecaca' : '#c7d2fe';
+    document.querySelectorAll('.mhc-add').forEach(b => b.style.display = _mhcEditMode ? 'inline-flex' : 'none');
+    mhcRender();
+}
+
+const MHC_FORMS = {
+    condition: `<div class="mhc-inline-form"><div class="mhc-2col">
+        <div class="mf"><label>Condition *</label><input id="mc-name" placeholder="e.g. Hypertension"></div>
+        <div class="mf"><label>Onset Year</label><input id="mc-year" type="number" placeholder="${new Date().getFullYear()-5}"></div>
+    </div><div class="mf"><label>Notes</label><textarea id="mc-notes" rows="2"></textarea></div>
+    <div class="mhc-form-btns"><button class="mhc-save" onclick="mhcSave('condition')">Save</button><button class="mhc-cancel" onclick="mhcHideForm('condition')">Cancel</button></div></div>`,
+
+    surgery: `<div class="mhc-inline-form"><div class="mf"><label>Procedure *</label><input id="mc-proc" placeholder="e.g. Spinal Fusion"></div>
+    <div class="mhc-2col"><div class="mf"><label>Body Region</label><input id="mc-region" placeholder="e.g. Lumbar"></div>
+    <div class="mf"><label>Date</label><input id="mc-date" type="date"></div></div>
+    <div class="mf"><label>Outcome</label><input id="mc-outcome" placeholder="e.g. Partial recovery"></div>
+    <div class="mhc-form-btns"><button class="mhc-save" onclick="mhcSave('surgery')">Save</button><button class="mhc-cancel" onclick="mhcHideForm('surgery')">Cancel</button></div></div>`,
+
+    injury: `<div class="mhc-inline-form"><div class="mhc-2col">
+        <div class="mf"><label>Body Region *</label><input id="mc-region" placeholder="e.g. Right Knee"></div>
+        <div class="mf"><label>Date</label><input id="mc-date" type="date"></div>
+    </div><div class="mf"><label>Description</label><input id="mc-desc" placeholder="e.g. Grade II MCL sprain"></div>
+    <div class="mf"><div class="mhc-checks">
+        <label><input type="checkbox" id="mc-related"> Related to current</label>
+        <label><input type="checkbox" id="mc-recovered"> Fully recovered</label>
+        <label><input type="checkbox" id="mc-recur"> Prior recurrence</label>
+    </div></div>
+    <div class="mhc-form-btns"><button class="mhc-save" onclick="mhcSave('injury')">Save</button><button class="mhc-cancel" onclick="mhcHideForm('injury')">Cancel</button></div></div>`,
+
+    medication: `<div class="mhc-inline-form"><div class="mhc-2col">
+        <div class="mf"><label>Drug Name *</label><input id="mc-drug" placeholder="e.g. Lisinopril 10mg"></div>
+        <div class="mf"><label>Indication</label><input id="mc-indication" placeholder="e.g. Hypertension"></div>
+    </div><div class="mf"><div class="mhc-checks"><label><input type="checkbox" id="mc-active" checked> Currently active</label></div></div>
+    <div class="mhc-form-btns"><button class="mhc-save" onclick="mhcSave('medication')">Save</button><button class="mhc-cancel" onclick="mhcHideForm('medication')">Cancel</button></div></div>`,
+
+    family_history: `<div class="mhc-inline-form"><div class="mhc-2col">
+        <div class="mf"><label>Condition *</label><input id="mc-cond" placeholder="e.g. Connective Tissue Disorder"></div>
+        <div class="mf"><label>Relation *</label><input id="mc-rel" placeholder="e.g. Father"></div>
+    </div><div class="mhc-form-btns"><button class="mhc-save" onclick="mhcSave('family_history')">Save</button><button class="mhc-cancel" onclick="mhcHideForm('family_history')">Cancel</button></div></div>`,
+};
+
+const MHC_FORM_IDS = { condition:'mhc-cond-form', surgery:'mhc-surg-form', injury:'mhc-inj-form', medication:'mhc-med-form', family_history:'mhc-fam-form' };
+function mhcShowForm(t) { const el=document.getElementById(MHC_FORM_IDS[t]); el.innerHTML=MHC_FORMS[t]; el.style.display='block'; }
+function mhcHideForm(t) { const el=document.getElementById(MHC_FORM_IDS[t]); el.style.display='none'; el.innerHTML=''; }
+
+function _mv(id){ const e=document.getElementById(id); return e?e.value.trim():null; }
+function _mcb(id){ const e=document.getElementById(id); return (e&&e.checked)?1:0; }
+
+async function mhcSave(type) {
+    let body={};
+    if (type==='condition') body={name:_mv('mc-name'),onset_year:_mv('mc-year'),notes:_mv('mc-notes')};
+    else if (type==='surgery') body={procedure:_mv('mc-proc'),body_region:_mv('mc-region'),surgery_date:_mv('mc-date'),outcome:_mv('mc-outcome')};
+    else if (type==='injury') body={body_region:_mv('mc-region'),injury_date:_mv('mc-date'),injury_description:_mv('mc-desc'),related_to_current:_mcb('mc-related'),recovery_complete:_mcb('mc-recovered'),recurrence:_mcb('mc-recur')};
+    else if (type==='medication') body={drug_name:_mv('mc-drug'),indication:_mv('mc-indication'),active:_mcb('mc-active')};
+    else if (type==='family_history') body={condition:_mv('mc-cond'),relation:_mv('mc-rel')};
+    const res=await fetch(`${MHC_BASE}/${type}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await res.json(); if(data.error){alert(data.error);return;}
+    mhcHideForm(type); await mhcLoad();
+}
+async function mhcDelete(type,id){
+    if(!confirm('Delete this record?'))return;
+    await fetch(`${MHC_BASE}/${type}/${id}`,{method:'DELETE'});
+    await mhcLoad();
+}
+async function mhcVerify(type,id){
+    await fetch(`${MHC_BASE}/${type}/${id}/verify`,{method:'POST'});
+    await mhcLoad();
+}
+
+mhcLoad();
+</script>
+
+{% endblock %}
+>>>>>>> Stashed changes

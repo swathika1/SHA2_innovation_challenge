@@ -915,6 +915,15 @@ def signup():
                     (user_id, ts['id'], 1)
                 )
         
+        # Patients go through the medical history step before the dashboard.
+        # All other roles go to login as before.
+        if role == 'patient':
+            session['user_id'] = user_id
+            session['role'] = role
+            session['user_name'] = name
+            flash('Account created! Tell us a bit about your medical history (optional).', 'info')
+            return redirect(url_for('signup_medical_history'))
+
         flash('Account created! Please log in.', 'success')
         return redirect(url_for('login'))
     
@@ -2737,6 +2746,898 @@ def api_reinjury_risk(patient_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+# ============================================================================
+# MEDICAL HISTORY — shared helpers
+# ============================================================================
+
+
+
+def _recompute_risk_cache(patient_id: int):
+    """Re-run analyze_patient_risk and upsert the patient_risk_cache row."""
+    if not REINJURY_RISK_AVAILABLE:
+        return
+    try:
+        result = analyze_patient_risk(patient_id, query_db)
+        execute_db(
+            '''INSERT INTO patient_risk_cache
+                   (patient_id, risk_score_raw, risk_score, risk_level, last_computed)
+               VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(patient_id) DO UPDATE SET
+                   risk_score_raw = excluded.risk_score_raw,
+                   risk_score     = excluded.risk_score,
+                   risk_level     = excluded.risk_level,
+                   last_computed  = excluded.last_computed''',
+            (patient_id,
+             result.get('raw_score', result.get('risk_score', 0)),
+             result.get('risk_score', 0),
+             result.get('risk_level', 'green'))
+        )
+    except Exception as _e:
+        print(f"[WARNING] Risk cache update failed for patient {patient_id}: {_e}")
+
+
+def _validate_year(value, field_name='year'):
+    """Return (int_year, None) or (None, error_message)."""
+    if value is None or value == '':
+        return None, None
+    try:
+        y = int(value)
+        if y < 1900 or y > datetime.now().year:
+            return None, f"{field_name} must be between 1900 and {datetime.now().year}"
+        return y, None
+    except (ValueError, TypeError):
+        return None, f"{field_name} must be a valid integer year"
+
+
+def _validate_date(value, field_name='date', allow_future=False):
+    """Return (date_str, None) or (None, error_message)."""
+    if value is None or value == '':
+        return None, None
+    try:
+        d = datetime.strptime(value, '%Y-%m-%d').date()
+        if not allow_future and d > date.today():
+            return None, f"{field_name} cannot be in the future"
+        return value, None
+    except ValueError:
+        return None, f"{field_name} must be a valid date (YYYY-MM-DD)"
+
+
+def _coerce_bool(value) -> int:
+    """Coerce various truthy representations to 0/1 integer."""
+    if isinstance(value, int):
+        return 1 if value else 0
+    if isinstance(value, str):
+        return 1 if value.lower() in ('1', 'true', 'yes', 'on') else 0
+    return 0
+
+
+def _build_full_history_response(patient_id: int) -> dict:
+    """Return all five medical history categories for a patient as dicts."""
+    def _rows(sql, params=()):
+        rows = query_db(sql, params) or []
+        return [dict(r) for r in rows]
+
+    return {
+        'conditions': _rows(
+            '''SELECT mc.*, u.name as entered_by_name, v.name as verified_by_name
+               FROM medical_conditions mc
+               LEFT JOIN users u ON mc.entered_by = u.id
+               LEFT JOIN users v ON mc.verified_by = v.id
+               WHERE mc.patient_id = ? ORDER BY mc.onset_year DESC, mc.updated_at DESC''',
+            (patient_id,)
+        ),
+        'surgeries': _rows(
+            '''SELECT ms.*, u.name as entered_by_name, v.name as verified_by_name
+               FROM medical_surgeries ms
+               LEFT JOIN users u ON ms.entered_by = u.id
+               LEFT JOIN users v ON ms.verified_by = v.id
+               WHERE ms.patient_id = ? ORDER BY ms.surgery_date DESC''',
+            (patient_id,)
+        ),
+        'injuries': _rows(
+            '''SELECT mi.*, u.name as entered_by_name, v.name as verified_by_name
+               FROM medical_injuries mi
+               LEFT JOIN users u ON mi.entered_by = u.id
+               LEFT JOIN users v ON mi.verified_by = v.id
+               WHERE mi.patient_id = ? ORDER BY mi.injury_date DESC, mi.updated_at DESC''',
+            (patient_id,)
+        ),
+        'medications': _rows(
+            '''SELECT mm.*, u.name as entered_by_name, v.name as verified_by_name
+               FROM medical_medications mm
+               LEFT JOIN users u ON mm.entered_by = u.id
+               LEFT JOIN users v ON mm.verified_by = v.id
+               WHERE mm.patient_id = ? ORDER BY mm.active DESC, mm.updated_at DESC''',
+            (patient_id,)
+        ),
+        'family_history': _rows(
+            '''SELECT mf.*, u.name as entered_by_name, v.name as verified_by_name
+               FROM medical_family_history mf
+               LEFT JOIN users u ON mf.entered_by = u.id
+               LEFT JOIN users v ON mf.verified_by = v.id
+               WHERE mf.patient_id = ? ORDER BY mf.updated_at DESC''',
+            (patient_id,)
+        ),
+    }
+
+
+# ============================================================================
+# MEDICAL HISTORY — patient-facing endpoints
+# ============================================================================
+
+@app.route('/patient/medical-history', methods=['GET'])
+@login_required
+@role_required('patient')
+def patient_medical_history_get():
+    """Return the current patient's full medical history as JSON."""
+    return jsonify(_build_full_history_response(session['user_id']))
+
+
+@app.route('/patient/medical-history/condition', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_condition():
+    data = request.get_json(silent=True) or request.form
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    onset_year, err = _validate_year(data.get('onset_year'), 'onset_year')
+    if err:
+        return jsonify({'error': err}), 400
+    rec_id = execute_db(
+        '''INSERT INTO medical_conditions (patient_id, name, onset_year, notes, entry_mode, verified, entered_by)
+           VALUES (?, ?, ?, ?, 'self_report', 0, ?)''',
+        (session['user_id'], name, onset_year, data.get('notes', ''), session['user_id'])
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/patient/medical-history/condition/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('patient')
+def patient_update_condition(rec_id):
+    row = query_db('SELECT patient_id FROM medical_conditions WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    onset_year, err = _validate_year(data.get('onset_year'), 'onset_year')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_conditions
+           SET name = ?, onset_year = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (name, onset_year, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/patient/medical-history/condition/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('patient')
+def patient_delete_condition(rec_id):
+    row = query_db('SELECT patient_id FROM medical_conditions WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_conditions WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/patient/medical-history/surgery', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_surgery():
+    data = request.get_json(silent=True) or request.form
+    procedure = (data.get('procedure') or '').strip()
+    if not procedure:
+        return jsonify({'error': 'procedure is required'}), 400
+    surgery_date, err = _validate_date(data.get('surgery_date'), 'surgery_date')
+    if err:
+        return jsonify({'error': err}), 400
+    body_region = (data.get('body_region') or '')[:100].strip()
+    rec_id = execute_db(
+        '''INSERT INTO medical_surgeries (patient_id, procedure, surgery_date, body_region, outcome, notes, entry_mode, verified, entered_by)
+           VALUES (?, ?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+        (session['user_id'], procedure, surgery_date, body_region,
+         data.get('outcome', ''), data.get('notes', ''), session['user_id'])
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/patient/medical-history/surgery/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('patient')
+def patient_update_surgery(rec_id):
+    row = query_db('SELECT patient_id FROM medical_surgeries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    procedure = (data.get('procedure') or '').strip()
+    if not procedure:
+        return jsonify({'error': 'procedure is required'}), 400
+    surgery_date, err = _validate_date(data.get('surgery_date'), 'surgery_date')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_surgeries
+           SET procedure = ?, surgery_date = ?, body_region = ?, outcome = ?, notes = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (procedure, surgery_date, (data.get('body_region') or '')[:100],
+         data.get('outcome', ''), data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/patient/medical-history/surgery/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('patient')
+def patient_delete_surgery(rec_id):
+    row = query_db('SELECT patient_id FROM medical_surgeries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_surgeries WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/patient/medical-history/injury', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_injury():
+    data = request.get_json(silent=True) or request.form
+    body_region = (data.get('body_region') or '').strip()
+    if not body_region:
+        return jsonify({'error': 'body_region is required'}), 400
+    injury_date, err = _validate_date(data.get('injury_date'), 'injury_date')
+    if err:
+        return jsonify({'error': err}), 400
+    rec_id = execute_db(
+        '''INSERT INTO medical_injuries
+               (patient_id, body_region, injury_description, related_to_current,
+                recovery_complete, recurrence, injury_date, notes, entry_mode, verified, entered_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+        (session['user_id'], body_region[:100], data.get('injury_description', ''),
+         _coerce_bool(data.get('related_to_current')),
+         _coerce_bool(data.get('recovery_complete')),
+         _coerce_bool(data.get('recurrence')),
+         injury_date, data.get('notes', ''), session['user_id'])
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/patient/medical-history/injury/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('patient')
+def patient_update_injury(rec_id):
+    row = query_db('SELECT patient_id FROM medical_injuries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    body_region = (data.get('body_region') or '').strip()
+    if not body_region:
+        return jsonify({'error': 'body_region is required'}), 400
+    injury_date, err = _validate_date(data.get('injury_date'), 'injury_date')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_injuries
+           SET body_region = ?, injury_description = ?, related_to_current = ?,
+               recovery_complete = ?, recurrence = ?, injury_date = ?,
+               notes = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (body_region[:100], data.get('injury_description', ''),
+         _coerce_bool(data.get('related_to_current')),
+         _coerce_bool(data.get('recovery_complete')),
+         _coerce_bool(data.get('recurrence')),
+         injury_date, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/patient/medical-history/injury/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('patient')
+def patient_delete_injury(rec_id):
+    row = query_db('SELECT patient_id FROM medical_injuries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_injuries WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/patient/medical-history/medication', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_medication():
+    data = request.get_json(silent=True) or request.form
+    drug_name = (data.get('drug_name') or '').strip()[:200]
+    if not drug_name:
+        return jsonify({'error': 'drug_name is required'}), 400
+    end_date, err = _validate_date(data.get('end_date'), 'end_date', allow_future=True)
+    if err:
+        return jsonify({'error': err}), 400
+    rec_id = execute_db(
+        '''INSERT INTO medical_medications
+               (patient_id, drug_name, indication, active, end_date, entry_mode, verified, entered_by)
+           VALUES (?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+        (session['user_id'], drug_name, data.get('indication', ''),
+         _coerce_bool(data.get('active', 1)), end_date, session['user_id'])
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/patient/medical-history/medication/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('patient')
+def patient_update_medication(rec_id):
+    row = query_db('SELECT patient_id FROM medical_medications WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    drug_name = (data.get('drug_name') or '').strip()[:200]
+    if not drug_name:
+        return jsonify({'error': 'drug_name is required'}), 400
+    end_date, err = _validate_date(data.get('end_date'), 'end_date', allow_future=True)
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_medications
+           SET drug_name = ?, indication = ?, active = ?, end_date = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (drug_name, data.get('indication', ''),
+         _coerce_bool(data.get('active', 1)), end_date, rec_id)
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/patient/medical-history/medication/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('patient')
+def patient_delete_medication(rec_id):
+    row = query_db('SELECT patient_id FROM medical_medications WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_medications WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/patient/medical-history/family-history', methods=['POST'])
+@login_required
+@role_required('patient')
+def patient_add_family_history():
+    data = request.get_json(silent=True) or request.form
+    condition = (data.get('condition') or '').strip()
+    relation = (data.get('relation') or '').strip()
+    if not condition or not relation:
+        return jsonify({'error': 'condition and relation are required'}), 400
+    rec_id = execute_db(
+        '''INSERT INTO medical_family_history
+               (patient_id, condition, relation, notes, entry_mode, verified, entered_by)
+           VALUES (?, ?, ?, ?, 'self_report', 0, ?)''',
+        (session['user_id'], condition, relation, data.get('notes', ''), session['user_id'])
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/patient/medical-history/family-history/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('patient')
+def patient_update_family_history(rec_id):
+    row = query_db('SELECT patient_id FROM medical_family_history WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    condition = (data.get('condition') or '').strip()
+    relation = (data.get('relation') or '').strip()
+    if not condition or not relation:
+        return jsonify({'error': 'condition and relation are required'}), 400
+    execute_db(
+        '''UPDATE medical_family_history
+           SET condition = ?, relation = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (condition, relation, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/patient/medical-history/family-history/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('patient')
+def patient_delete_family_history(rec_id):
+    row = query_db('SELECT patient_id FROM medical_family_history WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != session['user_id']:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_family_history WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(session['user_id'])
+    return jsonify({'status': 'deleted'})
+
+
+# ─── Patient: bulk submit from post-signup step ───────────────────────────
+
+@app.route('/signup/medical-history', methods=['GET', 'POST'])
+@login_required
+@role_required('patient')
+def signup_medical_history():
+    """Post-signup medical history step for patients."""
+    if request.method == 'GET':
+        return render_template('patient/medical_history_signup.html')
+
+    data = request.get_json(silent=True) or {}
+    uid = session['user_id']
+
+    for cond in data.get('conditions', []):
+        name = (cond.get('name') or '').strip()
+        if not name:
+            continue
+        onset_year, _ = _validate_year(cond.get('onset_year'), 'onset_year')
+        execute_db(
+            '''INSERT INTO medical_conditions (patient_id, name, onset_year, notes, entry_mode, verified, entered_by)
+               VALUES (?, ?, ?, ?, 'self_report', 0, ?)''',
+            (uid, name, onset_year, cond.get('notes', ''), uid)
+        )
+
+    for surg in data.get('surgeries', []):
+        procedure = (surg.get('procedure') or '').strip()
+        if not procedure:
+            continue
+        surgery_date, _ = _validate_date(surg.get('surgery_date'), 'surgery_date')
+        execute_db(
+            '''INSERT INTO medical_surgeries (patient_id, procedure, surgery_date, body_region, outcome, notes, entry_mode, verified, entered_by)
+               VALUES (?, ?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+            (uid, procedure, surgery_date, (surg.get('body_region') or '')[:100],
+             surg.get('outcome', ''), surg.get('notes', ''), uid)
+        )
+
+    for inj in data.get('injuries', []):
+        body_region = (inj.get('body_region') or '').strip()
+        if not body_region:
+            continue
+        injury_date, _ = _validate_date(inj.get('injury_date'), 'injury_date')
+        execute_db(
+            '''INSERT INTO medical_injuries
+                   (patient_id, body_region, injury_description, related_to_current,
+                    recovery_complete, recurrence, injury_date, notes, entry_mode, verified, entered_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+            (uid, body_region[:100], inj.get('injury_description', ''),
+             _coerce_bool(inj.get('related_to_current')),
+             _coerce_bool(inj.get('recovery_complete')),
+             _coerce_bool(inj.get('recurrence')),
+             injury_date, inj.get('notes', ''), uid)
+        )
+
+    for med in data.get('medications', []):
+        drug_name = (med.get('drug_name') or '').strip()[:200]
+        if not drug_name:
+            continue
+        end_date, _ = _validate_date(med.get('end_date'), 'end_date', allow_future=True)
+        execute_db(
+            '''INSERT INTO medical_medications
+                   (patient_id, drug_name, indication, active, end_date, entry_mode, verified, entered_by)
+               VALUES (?, ?, ?, ?, ?, 'self_report', 0, ?)''',
+            (uid, drug_name, med.get('indication', ''),
+             _coerce_bool(med.get('active', 1)), end_date, uid)
+        )
+
+    for fh in data.get('family_history', []):
+        condition = (fh.get('condition') or '').strip()
+        relation = (fh.get('relation') or '').strip()
+        if not condition or not relation:
+            continue
+        execute_db(
+            '''INSERT INTO medical_family_history
+                   (patient_id, condition, relation, notes, entry_mode, verified, entered_by)
+               VALUES (?, ?, ?, ?, 'self_report', 0, ?)''',
+            (uid, condition, relation, fh.get('notes', ''), uid)
+        )
+
+    _recompute_risk_cache(uid)
+    return jsonify({'status': 'saved', 'redirect': url_for('patient_dashboard')})
+
+
+# ============================================================================
+# MEDICAL HISTORY — clinician-facing endpoints
+# ============================================================================
+
+@app.route('/api/patient/<int:patient_id>/medical-history', methods=['GET'])
+@login_required
+@role_required('doctor')
+def api_clinician_get_history(patient_id):
+    """Return full medical history for a patient (doctor view)."""
+    return jsonify(_build_full_history_response(patient_id))
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/condition', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_add_condition(patient_id):
+    data = request.get_json(silent=True) or request.form
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    onset_year, err = _validate_year(data.get('onset_year'), 'onset_year')
+    if err:
+        return jsonify({'error': err}), 400
+    doctor_id = session['user_id']
+    rec_id = execute_db(
+        '''INSERT INTO medical_conditions
+               (patient_id, name, onset_year, notes, entry_mode, verified, entered_by, verified_by)
+           VALUES (?, ?, ?, ?, 'clinician', 1, ?, ?)''',
+        (patient_id, name, onset_year, data.get('notes', ''), doctor_id, doctor_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/condition/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_clinician_update_condition(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_conditions WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    onset_year, err = _validate_year(data.get('onset_year'), 'onset_year')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_conditions
+           SET name = ?, onset_year = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?''',
+        (name, onset_year, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/condition/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_clinician_delete_condition(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_conditions WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_conditions WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/condition/<int:rec_id>/verify', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_verify_condition(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_conditions WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db(
+        'UPDATE medical_conditions SET verified = 1, verified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (session['user_id'], rec_id)
+    )
+    return jsonify({'status': 'verified'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/surgery', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_add_surgery(patient_id):
+    data = request.get_json(silent=True) or request.form
+    procedure = (data.get('procedure') or '').strip()
+    if not procedure:
+        return jsonify({'error': 'procedure is required'}), 400
+    surgery_date, err = _validate_date(data.get('surgery_date'), 'surgery_date')
+    if err:
+        return jsonify({'error': err}), 400
+    doctor_id = session['user_id']
+    rec_id = execute_db(
+        '''INSERT INTO medical_surgeries
+               (patient_id, procedure, surgery_date, body_region, outcome, notes,
+                entry_mode, verified, entered_by, verified_by)
+           VALUES (?, ?, ?, ?, ?, ?, 'clinician', 1, ?, ?)''',
+        (patient_id, procedure, surgery_date, (data.get('body_region') or '')[:100],
+         data.get('outcome', ''), data.get('notes', ''), doctor_id, doctor_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/surgery/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_clinician_update_surgery(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_surgeries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    procedure = (data.get('procedure') or '').strip()
+    if not procedure:
+        return jsonify({'error': 'procedure is required'}), 400
+    surgery_date, err = _validate_date(data.get('surgery_date'), 'surgery_date')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_surgeries
+           SET procedure = ?, surgery_date = ?, body_region = ?, outcome = ?, notes = ?,
+               updated_at = CURRENT_TIMESTAMP WHERE id = ?''',
+        (procedure, surgery_date, (data.get('body_region') or '')[:100],
+         data.get('outcome', ''), data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/surgery/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_clinician_delete_surgery(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_surgeries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_surgeries WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/surgery/<int:rec_id>/verify', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_verify_surgery(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_surgeries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db(
+        'UPDATE medical_surgeries SET verified = 1, verified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (session['user_id'], rec_id)
+    )
+    return jsonify({'status': 'verified'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/injury', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_add_injury(patient_id):
+    data = request.get_json(silent=True) or request.form
+    body_region = (data.get('body_region') or '').strip()
+    if not body_region:
+        return jsonify({'error': 'body_region is required'}), 400
+    injury_date, err = _validate_date(data.get('injury_date'), 'injury_date')
+    if err:
+        return jsonify({'error': err}), 400
+    doctor_id = session['user_id']
+    rec_id = execute_db(
+        '''INSERT INTO medical_injuries
+               (patient_id, body_region, injury_description, related_to_current,
+                recovery_complete, recurrence, injury_date, notes,
+                entry_mode, verified, entered_by, verified_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'clinician', 1, ?, ?)''',
+        (patient_id, body_region[:100], data.get('injury_description', ''),
+         _coerce_bool(data.get('related_to_current')),
+         _coerce_bool(data.get('recovery_complete')),
+         _coerce_bool(data.get('recurrence')),
+         injury_date, data.get('notes', ''), doctor_id, doctor_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/injury/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_clinician_update_injury(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_injuries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    body_region = (data.get('body_region') or '').strip()
+    if not body_region:
+        return jsonify({'error': 'body_region is required'}), 400
+    injury_date, err = _validate_date(data.get('injury_date'), 'injury_date')
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_injuries
+           SET body_region = ?, injury_description = ?, related_to_current = ?,
+               recovery_complete = ?, recurrence = ?, injury_date = ?,
+               notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?''',
+        (body_region[:100], data.get('injury_description', ''),
+         _coerce_bool(data.get('related_to_current')),
+         _coerce_bool(data.get('recovery_complete')),
+         _coerce_bool(data.get('recurrence')),
+         injury_date, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/injury/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_clinician_delete_injury(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_injuries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_injuries WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/injury/<int:rec_id>/verify', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_verify_injury(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_injuries WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db(
+        'UPDATE medical_injuries SET verified = 1, verified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (session['user_id'], rec_id)
+    )
+    return jsonify({'status': 'verified'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/medication', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_add_medication(patient_id):
+    data = request.get_json(silent=True) or request.form
+    drug_name = (data.get('drug_name') or '').strip()[:200]
+    if not drug_name:
+        return jsonify({'error': 'drug_name is required'}), 400
+    end_date, err = _validate_date(data.get('end_date'), 'end_date', allow_future=True)
+    if err:
+        return jsonify({'error': err}), 400
+    doctor_id = session['user_id']
+    rec_id = execute_db(
+        '''INSERT INTO medical_medications
+               (patient_id, drug_name, indication, active, end_date,
+                entry_mode, verified, entered_by, verified_by)
+           VALUES (?, ?, ?, ?, ?, 'clinician', 1, ?, ?)''',
+        (patient_id, drug_name, data.get('indication', ''),
+         _coerce_bool(data.get('active', 1)), end_date, doctor_id, doctor_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/medication/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_clinician_update_medication(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_medications WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    drug_name = (data.get('drug_name') or '').strip()[:200]
+    if not drug_name:
+        return jsonify({'error': 'drug_name is required'}), 400
+    end_date, err = _validate_date(data.get('end_date'), 'end_date', allow_future=True)
+    if err:
+        return jsonify({'error': err}), 400
+    execute_db(
+        '''UPDATE medical_medications
+           SET drug_name = ?, indication = ?, active = ?, end_date = ?,
+               updated_at = CURRENT_TIMESTAMP WHERE id = ?''',
+        (drug_name, data.get('indication', ''),
+         _coerce_bool(data.get('active', 1)), end_date, rec_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/medication/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_clinician_delete_medication(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_medications WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_medications WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/medication/<int:rec_id>/verify', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_verify_medication(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_medications WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db(
+        'UPDATE medical_medications SET verified = 1, verified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (session['user_id'], rec_id)
+    )
+    return jsonify({'status': 'verified'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/family-history', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_add_family_history(patient_id):
+    data = request.get_json(silent=True) or request.form
+    condition = (data.get('condition') or '').strip()
+    relation = (data.get('relation') or '').strip()
+    if not condition or not relation:
+        return jsonify({'error': 'condition and relation are required'}), 400
+    doctor_id = session['user_id']
+    rec_id = execute_db(
+        '''INSERT INTO medical_family_history
+               (patient_id, condition, relation, notes, entry_mode, verified, entered_by, verified_by)
+           VALUES (?, ?, ?, ?, 'clinician', 1, ?, ?)''',
+        (patient_id, condition, relation, data.get('notes', ''), doctor_id, doctor_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'id': rec_id, 'status': 'created'}), 201
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/family-history/<int:rec_id>', methods=['PUT'])
+@login_required
+@role_required('doctor')
+def api_clinician_update_family_history(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_family_history WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    data = request.get_json(silent=True) or request.form
+    condition = (data.get('condition') or '').strip()
+    relation = (data.get('relation') or '').strip()
+    if not condition or not relation:
+        return jsonify({'error': 'condition and relation are required'}), 400
+    execute_db(
+        '''UPDATE medical_family_history
+           SET condition = ?, relation = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?''',
+        (condition, relation, data.get('notes', ''), rec_id)
+    )
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'updated'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/family-history/<int:rec_id>', methods=['DELETE'])
+@login_required
+@role_required('doctor')
+def api_clinician_delete_family_history(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_family_history WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db('DELETE FROM medical_family_history WHERE id = ?', (rec_id,))
+    _recompute_risk_cache(patient_id)
+    return jsonify({'status': 'deleted'})
+
+
+@app.route('/api/patient/<int:patient_id>/medical-history/family-history/<int:rec_id>/verify', methods=['POST'])
+@login_required
+@role_required('doctor')
+def api_clinician_verify_family_history(patient_id, rec_id):
+    row = query_db('SELECT patient_id FROM medical_family_history WHERE id = ?', (rec_id,), one=True)
+    if not row or row['patient_id'] != patient_id:
+        return jsonify({'error': 'not found'}), 404
+    execute_db(
+        'UPDATE medical_family_history SET verified = 1, verified_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (session['user_id'], rec_id)
+    )
+    return jsonify({'status': 'verified'})
+
+
+# ============================================================================
 
 @app.route('/clinician/patient/<int:patient_id>/add-note', methods=['POST'])
 @login_required

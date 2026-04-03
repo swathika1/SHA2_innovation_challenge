@@ -136,6 +136,7 @@ def _score_rom(rom_avg: float | None, rom_slope: float) -> tuple[int, str]:
 
 def _score_effort_quality_gap(effort_avg: float, quality_avg: float) -> tuple[int, str]:
     """
+<<<<<<< Updated upstream
     Effort is 0-10, quality is 0-100. Normalise effort to same scale.
     A large gap means the patient is working hard but movement quality is poor.
     """
@@ -148,6 +149,20 @@ def _score_effort_quality_gap(effort_avg: float, quality_avg: float) -> tuple[in
     if gap < 35:
         return 2, f"Patient working hard but form declining (effort {effort_avg:.1f}/10, form {quality_avg:.0f}/100)"
     return 3, f"Large effort-quality gap — compensatory movement likely (effort {effort_avg:.1f}/10, form {quality_avg:.0f}/100)"
+=======
+    Effort is 0-10, quality is 0-50. Normalise effort to same scale.
+    A large gap means the patient is working hard but movement quality is poor.
+    """
+    effort_norm = effort_avg * 5   # 0-50
+    gap = effort_norm - quality_avg
+    if gap < 5:
+        return 0, None
+    if gap < 10:
+        return 1, f"Slight effort-quality mismatch (effort {effort_avg:.1f}/10, form {quality_avg:.0f}/50)"
+    if gap < 17.5:
+        return 2, f"Patient working hard but form declining (effort {effort_avg:.1f}/10, form {quality_avg:.0f}/50)"
+    return 3, f"Large effort-quality gap — compensatory movement likely (effort {effort_avg:.1f}/10, form {quality_avg:.0f}/50)"
+>>>>>>> Stashed changes
 
 
 def _risk_level(score: int) -> str:
@@ -163,6 +178,163 @@ def _risk_level(score: int) -> str:
 def _risk_label(level: str) -> str:
     return {"green": "On Track", "yellow": "Monitor Closely",
             "orange": "Notify Therapist", "red": "Pause Progression"}[level]
+
+
+# ---------------------------------------------------------------------------
+# Medical history scoring
+# ---------------------------------------------------------------------------
+
+# Chronic conditions that impair tissue healing or load tolerance.
+# Matched case-insensitively as substrings against medical_conditions.name.
+_HEALING_RISK_CONDITIONS = {
+    "diabetes":          1.0,  # Microvascular disease slows wound/tissue healing
+    "hypertension":      0.5,  # Reduces peripheral circulation and recovery capacity
+    "obesity":           0.5,  # Increased joint load and systemic inflammation
+    "osteoporosis":      1.0,  # Reduced bone density raises fracture re-injury risk
+    "rheumatoid":        1.0,  # Autoimmune-driven joint degradation
+    "lupus":             0.5,  # Connective tissue involvement increases injury susceptibility
+    "hypothyroid":       0.5,  # Slows metabolic recovery and muscle regeneration
+}
+
+# Family history conditions that raise hereditary tissue risk.
+_FAMILY_RISK_CONDITIONS = {
+    "osteoporosis":           1.0,  # Hereditary bone-density deficit
+    "connective tissue":      1.0,  # Heritable disorders (e.g. Marfan, EDS) weaken tendons/ligaments
+    "rheumatoid":             0.5,  # Genetic predisposition to inflammatory joint disease
+    "cardiovascular":         0.5,  # Reduced healing perfusion risk is partly heritable
+    "diabetes":               0.5,  # Type-2 heritability impacts healing potential
+}
+
+# Maximum additive points the medical history layer can contribute.
+# Keeps history as a contextual modifier without overriding biomechanical signals.
+_HISTORY_MAX_PTS = 4.0
+
+
+def _score_medical_history(history: dict | None) -> tuple[float, list[str]]:
+    """
+    Score the patient's structured medical history and return additive risk
+    points and human-readable signal strings.
+
+    If history is None or empty, returns (0, []) — the existing biomechanical
+    score is left unchanged.
+
+    Parameters
+    ----------
+    history : dict with optional keys:
+        conditions    : list of dicts {name, onset_year}
+        injuries      : list of dicts {body_region, related_to_current,
+                                       recovery_complete, recurrence}
+        surgeries     : list of dicts {body_region}
+        family_history: list of dicts {condition}
+
+    Returns
+    -------
+    (pts, signal_strings) — pts is a float capped at _HISTORY_MAX_PTS
+    """
+    if not history:
+        return 0.0, []
+
+    pts = 0.0
+    signals: list[str] = []
+
+    # ── Chronic conditions ─────────────────────────────────────────────── #
+    conditions = history.get("conditions") or []
+    for cond in conditions:
+        name_lower = (cond.get("name") or "").lower()
+        for keyword, weight in _HEALING_RISK_CONDITIONS.items():
+            if keyword in name_lower:
+                pts += weight
+                signals.append(
+                    f"{cond['name']} (chronic condition — {keyword} impairs healing, +{weight:.1f} pts)"
+                )
+                break  # one match per condition record is enough
+
+    # ── Prior injuries ────────────────────────────────────────────────── #
+    injuries = history.get("injuries") or []
+    for inj in injuries:
+        region = inj.get("body_region", "unspecified region")
+
+        # Incomplete recovery on the same body region is a primary risk driver.
+        # Clinical basis: unresolved tissue damage significantly increases
+        # the likelihood of re-injury under renewed mechanical load.
+        if inj.get("related_to_current") and not inj.get("recovery_complete"):
+            pts += 2.0
+            signals.append(
+                f"Incomplete recovery — prior {region} injury related to current problem (+2.0 pts)"
+            )
+
+        # Recurrence flag: prior re-injury is the single strongest predictor
+        # of future re-injury (higher than biomechanical signals alone).
+        if inj.get("recurrence"):
+            pts += 2.0
+            signals.append(
+                f"Recurrence history — {region} injury has occurred before (+2.0 pts)"
+            )
+
+    # ── Prior surgeries on the same body region ───────────────────────── #
+    # Each surgery leaves scar tissue and alters biomechanics; the effect
+    # is cumulative but diminishing, so we cap the total contribution at +2.
+    surgeries = history.get("surgeries") or []
+    surgery_pts = min(len(surgeries) * 0.5, 2.0)
+    if surgery_pts > 0:
+        pts += surgery_pts
+        signals.append(
+            f"{len(surgeries)} prior surger{'y' if len(surgeries) == 1 else 'ies'} on record "
+            f"— cumulative scar tissue and biomechanical changes (+{surgery_pts:.1f} pts)"
+        )
+
+    # ── Family history of hereditary conditions ──────────────────────── #
+    family = history.get("family_history") or []
+    for entry in family:
+        cond_lower = (entry.get("condition") or "").lower()
+        for keyword, weight in _FAMILY_RISK_CONDITIONS.items():
+            if keyword in cond_lower:
+                relation = entry.get("relation", "family member")
+                pts += weight
+                signals.append(
+                    f"Family history: {entry['condition']} ({relation}) "
+                    f"— hereditary tissue risk factor (+{weight:.1f} pts)"
+                )
+                break
+
+    # Cap total history contribution
+    pts = min(pts, _HISTORY_MAX_PTS)
+    return pts, signals
+
+
+def _fetch_medical_history(patient_id: int, query_fn: "Callable") -> dict:
+    """
+    Pull all five medical history categories for a patient in one pass.
+    Returns a dict keyed by category; values are lists of dicts.
+    Returns empty dict if the medical history tables do not yet exist.
+    """
+    try:
+        conditions = query_fn(
+            "SELECT name, onset_year FROM medical_conditions WHERE patient_id = ?",
+            (patient_id,)
+        ) or []
+        injuries = query_fn(
+            """SELECT body_region, related_to_current, recovery_complete, recurrence
+               FROM medical_injuries WHERE patient_id = ?""",
+            (patient_id,)
+        ) or []
+        surgeries = query_fn(
+            "SELECT body_region FROM medical_surgeries WHERE patient_id = ?",
+            (patient_id,)
+        ) or []
+        family = query_fn(
+            "SELECT condition, relation FROM medical_family_history WHERE patient_id = ?",
+            (patient_id,)
+        ) or []
+        return {
+            "conditions":     [dict(r) for r in conditions],
+            "injuries":       [dict(r) for r in injuries],
+            "surgeries":      [dict(r) for r in surgeries],
+            "family_history": [dict(r) for r in family],
+        }
+    except Exception:
+        # Tables may not exist yet (pre-migration). Degrade gracefully.
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -321,9 +493,16 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
     pts_gap, msg_gap = _score_effort_quality_gap(effort_avg, quality_avg)
 
     # ------------------------------------------------------------------ #
-    # 6. Composite score
+    # 6. Medical history — optional additive layer
+    # ------------------------------------------------------------------ #
+    history = _fetch_medical_history(patient_id, query_fn)
+    pts_history, msgs_history = _score_medical_history(history)
+
+    # ------------------------------------------------------------------ #
+    # 7. Composite score
     # Weights: form + asymmetry + pain are primary biomechanical signals
     #          ROM + fatigue are secondary, effort-gap is contextual
+    #          medical history is additive, capped at _HISTORY_MAX_PTS
     # ------------------------------------------------------------------ #
     raw_score = (
         pts_form    * 1.4 +
@@ -331,16 +510,18 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
         pts_pain    * 1.2 +
         pts_rom     * 1.1 +
         pts_fatigue * 1.0 +
-        pts_gap     * 0.8
+        pts_gap     * 0.8 +
+        pts_history          # already capped inside _score_medical_history
     )
     risk_score = min(12, round(raw_score))
 
     signal_details = [m for m in [msg_form, msg_asym, msg_pain, msg_rom, msg_fatigue, msg_gap] if m]
-    signals_fired  = sum(1 for p in [pts_form, pts_asym, pts_pain, pts_rom, pts_fatigue, pts_gap] if p > 0)
+    signal_details += msgs_history
+    signals_fired  = sum(1 for p in [pts_form, pts_asym, pts_pain, pts_rom, pts_fatigue, pts_gap, pts_history] if p > 0)
     level = _risk_level(risk_score)
 
     # ------------------------------------------------------------------ #
-    # 7. Build explanation
+    # 8. Build explanation
     # ------------------------------------------------------------------ #
     if not signal_details:
         explanation = "All signals look healthy. Patient is progressing well — no re-injury risk detected."
@@ -355,7 +536,7 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
         explanation = f"{parts}. {action}"
 
     # ------------------------------------------------------------------ #
-    # 8. Trend data for charting
+    # 9. Trend data for charting
     # ------------------------------------------------------------------ #
     trend_data = {
         "dates":          dates,
@@ -382,5 +563,7 @@ def analyze_patient_risk(patient_id: int, query_fn: "Callable") -> dict:
             "rom":       {"pts": pts_rom,     "avg_angle": round(rom_avg, 1) if rom_avg is not None else None, "slope": round(rom_slope, 2)},
             "fatigue":   {"pts": pts_fatigue, "drop_pct": round(fatigue_drop_pct, 1) if fatigue_drop_pct is not None else None},
             "gap":       {"pts": pts_gap,     "effort_avg": round(effort_avg, 1), "quality_avg": round(quality_avg, 1)},
-        }
+            "history":   {"pts": round(pts_history, 2), "signals": msgs_history},
+        },
+        "raw_score": round(raw_score, 4),
     }
