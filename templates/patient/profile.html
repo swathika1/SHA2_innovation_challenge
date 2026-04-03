@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 
-{% block title %}My Profile - SHA2 Rehab Coach{% endblock %}
+{% block title %}My Profile - Home Rehab Coach{% endblock %}
 
 {% block header %}
 <header class="header">
-    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="SHA2 Rehab Coach logo" class="brand-logo"> SHA2 Rehab Coach</a></h1>
+    <h1><a href="{{ url_for('patient_dashboard') }}"><img src="{{ url_for('static', filename='rehab-logo.png') }}" alt="Home Rehab Coach logo" class="brand-logo"> Home Rehab Coach</a></h1>
     <nav class="nav-links">
         <a href="{{ url_for('patient_dashboard') }}">Dashboard</a>
         <a href="{{ url_for('patient_appointments') }}">Consultations</a>
@@ -360,6 +360,74 @@
             </div>
         </div>
 
+        <!-- Medical History -->
+        <div class="info-card" id="mh-section">
+            <div class="info-card-title" style="justify-content:space-between;">
+                <span><span class="card-icon"><i class="fa-solid fa-notes-medical"></i></span> Medical History</span>
+                <span style="font-size:.8rem;color:#aaa;font-weight:400;" id="mh-last-updated"></span>
+            </div>
+            <p style="font-size:.85rem;color:#888;margin:0 0 16px;">
+                Self-reported — reviewed by your clinician. Records marked
+                <span style="background:#f0fdf4;color:#166534;padding:1px 8px;border-radius:20px;font-size:.77rem;font-weight:600;">Verified</span>
+                have been confirmed by your care team.
+            </p>
+
+            <!-- Chronic Conditions -->
+            <details open style="margin-bottom:14px;">
+                <summary style="font-weight:700;font-size:.92rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">
+                    <i class="fa-solid fa-heart-pulse" style="color:#6366f1;"></i> Chronic Conditions
+                    <i class="fa-solid fa-chevron-down" style="margin-left:auto;color:#aaa;font-size:.8rem;"></i>
+                </summary>
+                <div id="mh-conditions" style="margin-top:10px;"></div>
+                <div id="mh-cond-form" style="display:none;margin-top:8px;"></div>
+                <button class="mh-add-btn" onclick="mhShowAddForm('condition')"><i class="fa-solid fa-plus"></i> Add Condition</button>
+            </details>
+
+            <!-- Past Surgeries -->
+            <details style="margin-bottom:14px;">
+                <summary style="font-weight:700;font-size:.92rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">
+                    <i class="fa-solid fa-scalpel" style="color:#6366f1;"></i> Past Surgeries
+                    <i class="fa-solid fa-chevron-down" style="margin-left:auto;color:#aaa;font-size:.8rem;"></i>
+                </summary>
+                <div id="mh-surgeries" style="margin-top:10px;"></div>
+                <div id="mh-surg-form" style="display:none;margin-top:8px;"></div>
+                <button class="mh-add-btn" onclick="mhShowAddForm('surgery')"><i class="fa-solid fa-plus"></i> Add Surgery</button>
+            </details>
+
+            <!-- Past Injuries -->
+            <details style="margin-bottom:14px;">
+                <summary style="font-weight:700;font-size:.92rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">
+                    <i class="fa-solid fa-bone" style="color:#6366f1;"></i> Past Injuries
+                    <i class="fa-solid fa-chevron-down" style="margin-left:auto;color:#aaa;font-size:.8rem;"></i>
+                </summary>
+                <div id="mh-injuries" style="margin-top:10px;"></div>
+                <div id="mh-inj-form" style="display:none;margin-top:8px;"></div>
+                <button class="mh-add-btn" onclick="mhShowAddForm('injury')"><i class="fa-solid fa-plus"></i> Add Injury</button>
+            </details>
+
+            <!-- Current Medications -->
+            <details style="margin-bottom:14px;">
+                <summary style="font-weight:700;font-size:.92rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">
+                    <i class="fa-solid fa-pills" style="color:#6366f1;"></i> Medications
+                    <i class="fa-solid fa-chevron-down" style="margin-left:auto;color:#aaa;font-size:.8rem;"></i>
+                </summary>
+                <div id="mh-medications" style="margin-top:10px;"></div>
+                <div id="mh-med-form" style="display:none;margin-top:8px;"></div>
+                <button class="mh-add-btn" onclick="mhShowAddForm('medication')"><i class="fa-solid fa-plus"></i> Add Medication</button>
+            </details>
+
+            <!-- Family History -->
+            <details style="margin-bottom:14px;">
+                <summary style="font-weight:700;font-size:.92rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">
+                    <i class="fa-solid fa-people-roof" style="color:#6366f1;"></i> Family History
+                    <i class="fa-solid fa-chevron-down" style="margin-left:auto;color:#aaa;font-size:.8rem;"></i>
+                </summary>
+                <div id="mh-family_history" style="margin-top:10px;"></div>
+                <div id="mh-fam-form" style="display:none;margin-top:8px;"></div>
+                <button class="mh-add-btn" onclick="mhShowAddForm('family_history')"><i class="fa-solid fa-plus"></i> Add Family History</button>
+            </details>
+        </div>
+
         <!-- Appointment Preferences -->
         <div class="info-card">
             <div class="info-card-title">
@@ -401,9 +469,9 @@
                 <div class="info-item">
                     <span class="info-label">Current Rehab Score</span>
                     <span class="info-value">
-                        {{ patient.avg_quality_score if patient.avg_quality_score else '—' }}/50
+                        {{ patient.avg_quality_score if patient.avg_quality_score else '—' }}/10
                         {% if patient.avg_quality_score %}
-                            {% if patient.avg_quality_score < 15 %}<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i>{% elif patient.avg_quality_score < 25 %}<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i>{% else %}<i class="fa-solid fa-circle-check" style="color: #22c55e;"></i>{% endif %}
+                            {% if patient.avg_quality_score < 3 %}<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i>{% elif patient.avg_quality_score < 5 %}<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i>{% else %}<i class="fa-solid fa-circle-check" style="color: #22c55e;"></i>{% endif %}
                         {% endif %}
                     </span>
                 </div>
@@ -506,5 +574,292 @@ async function saveProfile() {
         status.style.color = '#dc2626';
     }
 }
+</script>
+
+<style>
+/* ── Medical History section ── */
+.mh-add-btn {
+    display:inline-flex; align-items:center; gap:5px; margin-top:8px;
+    padding:6px 14px; background:#eef3ff; color:#6366f1;
+    border:1px dashed #6366f1; border-radius:7px; font-size:.83rem;
+    font-weight:600; cursor:pointer;
+}
+.mh-add-btn:hover { background:#e0e7ff; }
+.mh-rec {
+    display:flex; align-items:flex-start; gap:10px; padding:9px 12px;
+    background:#f8f9fc; border-radius:8px; border:1px solid #eee;
+    margin-bottom:6px; font-size:.88rem;
+}
+.mh-rec-body { flex:1; min-width:0; }
+.mh-rec-title { font-weight:600; color:#1a1a2e; }
+.mh-rec-meta { color:#888; font-size:.78rem; margin-top:2px; }
+.mh-badge {
+    display:inline-block; padding:1px 9px; border-radius:20px; font-size:.73rem;
+    font-weight:700; margin-left:6px; vertical-align:middle;
+}
+.mh-badge-unverified { background:#f0f0f0; color:#888; }
+.mh-badge-verified   { background:#f0fdf4; color:#166534; }
+.mh-badge-warn       { background:#fffbeb; color:#92400e; }
+.mh-badge-danger     { background:#fef2f2; color:#991b1b; }
+.mh-rec-actions { display:flex; gap:6px; flex-shrink:0; }
+.mh-icon-btn {
+    background:none; border:none; cursor:pointer; padding:4px 6px;
+    border-radius:5px; font-size:.82rem; color:#aaa; transition:color .15s, background .15s;
+}
+.mh-icon-btn:hover { background:#f0f0f0; color:#555; }
+.mh-icon-btn.del:hover { background:#fee2e2; color:#dc2626; }
+/* inline add form */
+.mh-inline-form {
+    background:#f0f4ff; border:1px solid #c7d2fe; border-radius:9px;
+    padding:14px 16px; margin-bottom:8px;
+}
+.mh-inline-form .mh-fg { display:flex; flex-direction:column; gap:3px; margin-bottom:8px; }
+.mh-inline-form .mh-fg label { font-size:.75rem; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:.5px; }
+.mh-inline-form .mh-fg input,
+.mh-inline-form .mh-fg textarea {
+    padding:7px 10px; border:1px solid #ddd; border-radius:6px;
+    font-size:.88rem; font-family:inherit;
+}
+.mh-inline-form .mh-fg input:focus,
+.mh-inline-form .mh-fg textarea:focus { outline:none; border-color:#6366f1; }
+.mh-inline-form .mh-row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.mh-inline-form .mh-checks { display:flex; gap:12px; flex-wrap:wrap; margin-top:4px; }
+.mh-inline-form .mh-checks label { display:flex; align-items:center; gap:4px; font-size:.83rem; cursor:pointer; font-weight:400; }
+.mh-form-actions { display:flex; gap:8px; margin-top:10px; }
+.mh-form-save { padding:6px 18px; background:#6366f1; color:#fff; border:none; border-radius:7px; font-size:.85rem; font-weight:700; cursor:pointer; }
+.mh-form-save:hover { background:#4f46e5; }
+.mh-form-cancel { padding:6px 14px; background:#f0f0f0; color:#555; border:none; border-radius:7px; font-size:.85rem; cursor:pointer; }
+</style>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────
+   Medical History — patient profile JS
+   ───────────────────────────────────────────────────────────────── */
+
+const MH_ENDPOINTS = {
+    condition:      '/patient/medical-history/condition',
+    surgery:        '/patient/medical-history/surgery',
+    injury:         '/patient/medical-history/injury',
+    medication:     '/patient/medical-history/medication',
+    family_history: '/patient/medical-history/family-history',
+};
+
+let _mhData = {};
+
+async function mhLoad() {
+    try {
+        const res  = await fetch('/patient/medical-history');
+        _mhData = await res.json();
+        mhRender();
+    } catch(e) { console.warn('Medical history load failed', e); }
+}
+
+function mhVeriLabel(rec) {
+    if (rec.verified) {
+        const by = rec.verified_by_name ? ` by ${rec.verified_by_name}` : '';
+        return `<span class="mh-badge mh-badge-verified">Verified${by}</span>`;
+    }
+    return `<span class="mh-badge mh-badge-unverified">Unverified</span>`;
+}
+
+function mhRender() {
+    // Conditions
+    const condEl = document.getElementById('mh-conditions');
+    condEl.innerHTML = (_mhData.conditions || []).map(r => `
+        <div class="mh-rec">
+            <div class="mh-rec-body">
+                <div class="mh-rec-title">${r.name}${mhVeriLabel(r)}</div>
+                <div class="mh-rec-meta">${r.onset_year ? 'Since ' + r.onset_year : ''}
+                    ${r.entered_by_name ? ' · Entered by ' + r.entered_by_name : ''}
+                    · ${r.updated_at ? r.updated_at.slice(0,10) : ''}</div>
+                ${r.notes ? `<div style="color:#555;margin-top:3px;font-size:.82rem;">${r.notes}</div>` : ''}
+            </div>
+            <div class="mh-rec-actions">
+                <button class="mh-icon-btn del" onclick="mhDelete('condition',${r.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </div>
+        </div>`).join('') || '<p style="color:#aaa;font-size:.85rem;padding:4px 0;">No conditions recorded.</p>';
+
+    // Surgeries
+    const surgEl = document.getElementById('mh-surgeries');
+    surgEl.innerHTML = (_mhData.surgeries || []).map(r => `
+        <div class="mh-rec">
+            <div class="mh-rec-body">
+                <div class="mh-rec-title">${r.procedure}${r.body_region ? ' — ' + r.body_region : ''}${mhVeriLabel(r)}</div>
+                <div class="mh-rec-meta">${r.surgery_date || ''}${r.outcome ? ' · ' + r.outcome : ''}
+                    ${r.entered_by_name ? ' · Entered by ' + r.entered_by_name : ''}</div>
+            </div>
+            <div class="mh-rec-actions">
+                <button class="mh-icon-btn del" onclick="mhDelete('surgery',${r.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </div>
+        </div>`).join('') || '<p style="color:#aaa;font-size:.85rem;padding:4px 0;">No surgeries recorded.</p>';
+
+    // Injuries
+    const injEl = document.getElementById('mh-injuries');
+    injEl.innerHTML = (_mhData.injuries || []).map(r => {
+        const flags = [];
+        if (r.related_to_current && !r.recovery_complete) flags.push(`<span class="mh-badge mh-badge-warn">⚠ Incomplete recovery</span>`);
+        if (r.recurrence) flags.push(`<span class="mh-badge mh-badge-danger">↻ Prior recurrence</span>`);
+        return `<div class="mh-rec">
+            <div class="mh-rec-body">
+                <div class="mh-rec-title">${r.body_region}${r.injury_description ? ' — ' + r.injury_description : ''}${mhVeriLabel(r)}${flags.join('')}</div>
+                <div class="mh-rec-meta">${r.injury_date || ''}${r.related_to_current ? ' · Related to current problem' : ''}
+                    ${r.entered_by_name ? ' · Entered by ' + r.entered_by_name : ''}</div>
+            </div>
+            <div class="mh-rec-actions">
+                <button class="mh-icon-btn del" onclick="mhDelete('injury',${r.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </div>
+        </div>`;
+    }).join('') || '<p style="color:#aaa;font-size:.85rem;padding:4px 0;">No injuries recorded.</p>';
+
+    // Medications
+    const medEl = document.getElementById('mh-medications');
+    medEl.innerHTML = (_mhData.medications || []).map(r => {
+        const activeClass = r.active ? 'mh-badge-verified' : 'mh-badge-unverified';
+        const activeLabel = r.active ? 'Active' : 'Stopped';
+        return `<div class="mh-rec">
+            <div class="mh-rec-body">
+                <div class="mh-rec-title">${r.drug_name}<span class="mh-badge ${activeClass}">${activeLabel}</span>${mhVeriLabel(r)}</div>
+                <div class="mh-rec-meta">${r.indication || ''}
+                    ${r.entered_by_name ? ' · Entered by ' + r.entered_by_name : ''}</div>
+            </div>
+            <div class="mh-rec-actions">
+                <button class="mh-icon-btn del" onclick="mhDelete('medication',${r.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </div>
+        </div>`;
+    }).join('') || '<p style="color:#aaa;font-size:.85rem;padding:4px 0;">No medications recorded.</p>';
+
+    // Family history
+    const famEl = document.getElementById('mh-family_history');
+    famEl.innerHTML = (_mhData.family_history || []).map(r => `
+        <div class="mh-rec">
+            <div class="mh-rec-body">
+                <div class="mh-rec-title">${r.condition} <span style="font-weight:400;color:#555;">— ${r.relation}</span>${mhVeriLabel(r)}</div>
+                <div class="mh-rec-meta">${r.entered_by_name ? 'Entered by ' + r.entered_by_name : ''}
+                    · ${r.updated_at ? r.updated_at.slice(0,10) : ''}</div>
+            </div>
+            <div class="mh-rec-actions">
+                <button class="mh-icon-btn del" onclick="mhDelete('family_history',${r.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </div>
+        </div>`).join('') || '<p style="color:#aaa;font-size:.85rem;padding:4px 0;">No family history recorded.</p>';
+}
+
+const ADD_FORMS = {
+    condition: `
+        <div class="mh-inline-form">
+            <div class="mh-row2">
+                <div class="mh-fg"><label>Condition Name *</label><input id="mhf-name" type="text" placeholder="e.g. Type 2 Diabetes"></div>
+                <div class="mh-fg"><label>Onset Year</label><input id="mhf-onset" type="number" placeholder="${new Date().getFullYear()-5}" min="1900" max="${new Date().getFullYear()}"></div>
+            </div>
+            <div class="mh-fg"><label>Notes</label><textarea id="mhf-notes" rows="2"></textarea></div>
+            <div class="mh-form-actions">
+                <button class="mh-form-save" onclick="mhSave('condition')">Save</button>
+                <button class="mh-form-cancel" onclick="mhHideForm('condition')">Cancel</button>
+            </div>
+        </div>`,
+    surgery: `
+        <div class="mh-inline-form">
+            <div class="mh-fg"><label>Procedure *</label><input id="mhf-proc" type="text" placeholder="e.g. ACL Reconstruction"></div>
+            <div class="mh-row2">
+                <div class="mh-fg"><label>Body Region</label><input id="mhf-region" type="text" placeholder="e.g. Right Knee"></div>
+                <div class="mh-fg"><label>Date</label><input id="mhf-date" type="date"></div>
+            </div>
+            <div class="mh-fg"><label>Outcome</label><input id="mhf-outcome" type="text" placeholder="e.g. Full recovery"></div>
+            <div class="mh-form-actions">
+                <button class="mh-form-save" onclick="mhSave('surgery')">Save</button>
+                <button class="mh-form-cancel" onclick="mhHideForm('surgery')">Cancel</button>
+            </div>
+        </div>`,
+    injury: `
+        <div class="mh-inline-form">
+            <div class="mh-row2">
+                <div class="mh-fg"><label>Body Region *</label><input id="mhf-region" type="text" placeholder="e.g. Lower Back"></div>
+                <div class="mh-fg"><label>Date (approx)</label><input id="mhf-date" type="date"></div>
+            </div>
+            <div class="mh-fg"><label>Description</label><input id="mhf-desc" type="text" placeholder="e.g. Herniated disc L4-L5"></div>
+            <div class="mh-fg">
+                <div class="mh-checks">
+                    <label><input type="checkbox" id="mhf-related"> Related to current problem</label>
+                    <label><input type="checkbox" id="mhf-recovered"> Fully recovered</label>
+                    <label><input type="checkbox" id="mhf-recur"> Prior recurrence</label>
+                </div>
+            </div>
+            <div class="mh-form-actions">
+                <button class="mh-form-save" onclick="mhSave('injury')">Save</button>
+                <button class="mh-form-cancel" onclick="mhHideForm('injury')">Cancel</button>
+            </div>
+        </div>`,
+    medication: `
+        <div class="mh-inline-form">
+            <div class="mh-row2">
+                <div class="mh-fg"><label>Drug Name *</label><input id="mhf-drug" type="text" placeholder="e.g. Metformin 500mg"></div>
+                <div class="mh-fg"><label>Indication</label><input id="mhf-indication" type="text" placeholder="e.g. Type 2 Diabetes"></div>
+            </div>
+            <div class="mh-fg">
+                <div class="mh-checks"><label><input type="checkbox" id="mhf-active" checked> Currently taking</label></div>
+            </div>
+            <div class="mh-form-actions">
+                <button class="mh-form-save" onclick="mhSave('medication')">Save</button>
+                <button class="mh-form-cancel" onclick="mhHideForm('medication')">Cancel</button>
+            </div>
+        </div>`,
+    family_history: `
+        <div class="mh-inline-form">
+            <div class="mh-row2">
+                <div class="mh-fg"><label>Condition *</label><input id="mhf-cond" type="text" placeholder="e.g. Osteoporosis"></div>
+                <div class="mh-fg"><label>Relation *</label><input id="mhf-rel" type="text" placeholder="e.g. Mother"></div>
+            </div>
+            <div class="mh-fg"><label>Notes</label><textarea id="mhf-notes" rows="2"></textarea></div>
+            <div class="mh-form-actions">
+                <button class="mh-form-save" onclick="mhSave('family_history')">Save</button>
+                <button class="mh-form-cancel" onclick="mhHideForm('family_history')">Cancel</button>
+            </div>
+        </div>`,
+};
+
+const FORM_CONTAINER = { condition:'mh-cond-form', surgery:'mh-surg-form', injury:'mh-inj-form', medication:'mh-med-form', family_history:'mh-fam-form' };
+
+function mhShowAddForm(type) {
+    const el = document.getElementById(FORM_CONTAINER[type]);
+    el.innerHTML = ADD_FORMS[type];
+    el.style.display = 'block';
+}
+function mhHideForm(type) {
+    const el = document.getElementById(FORM_CONTAINER[type]);
+    el.style.display = 'none';
+    el.innerHTML = '';
+}
+
+function _v(id) { const el = document.getElementById(id); return el ? el.value.trim() : null; }
+function _cb(id) { const el = document.getElementById(id); return el && el.checked ? 1 : 0; }
+
+async function mhSave(type) {
+    let body = {};
+    if (type === 'condition')
+        body = {name: _v('mhf-name'), onset_year: _v('mhf-onset'), notes: _v('mhf-notes')};
+    else if (type === 'surgery')
+        body = {procedure: _v('mhf-proc'), body_region: _v('mhf-region'), surgery_date: _v('mhf-date'), outcome: _v('mhf-outcome')};
+    else if (type === 'injury')
+        body = {body_region: _v('mhf-region'), injury_date: _v('mhf-date'), injury_description: _v('mhf-desc'),
+                related_to_current: _cb('mhf-related'), recovery_complete: _cb('mhf-recovered'), recurrence: _cb('mhf-recur')};
+    else if (type === 'medication')
+        body = {drug_name: _v('mhf-drug'), indication: _v('mhf-indication'), active: _cb('mhf-active')};
+    else if (type === 'family_history')
+        body = {condition: _v('mhf-cond'), relation: _v('mhf-rel'), notes: _v('mhf-notes')};
+
+    const res = await fetch(MH_ENDPOINTS[type], {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    mhHideForm(type);
+    await mhLoad();
+}
+
+async function mhDelete(type, id) {
+    if (!confirm('Delete this record?')) return;
+    await fetch(MH_ENDPOINTS[type] + '/' + id, {method:'DELETE'});
+    await mhLoad();
+}
+
+// Load on page init
+mhLoad();
 </script>
 {% endblock %}
