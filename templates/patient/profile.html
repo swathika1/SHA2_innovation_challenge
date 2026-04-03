@@ -371,7 +371,7 @@
             <button type="button" class="pdf-upload-btn" id="pdf-profile-btn" onclick="document.getElementById('pdf-profile-input').click()">
                 <i class="fa-solid fa-file-medical"></i> Import from PDF
             </button>
-            <div id="pdf-profile-error">
+            <div id="pdf-profile-error" style="display:none;">
                 <i class="fa-solid fa-triangle-exclamation"></i> <span id="pdf-profile-error-msg"></span>
                 <button onclick="document.getElementById('pdf-profile-error').style.display='none'" style="float:right;background:none;border:none;cursor:pointer;color:#991b1b;" aria-label="Close error message">✕</button>
             </div>
@@ -699,17 +699,22 @@ function mhVeriLabel(rec) {
     return `<span class="mh-badge mh-badge-unverified">Unverified</span>`;
 }
 
+function _esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function mhRender() {
     // Conditions
     const condEl = document.getElementById('mh-conditions');
     condEl.innerHTML = (_mhData.conditions || []).map(r => `
         <div class="mh-rec">
             <div class="mh-rec-body">
-                <div class="mh-rec-title">${r.name}${mhVeriLabel(r)}</div>
-                <div class="mh-rec-meta">${r.onset_year ? 'Since ' + r.onset_year : ''}
-                    ${r.entered_by_name ? ' · Entered by ' + r.entered_by_name : ''}
+                <div class="mh-rec-title">${_esc(r.name)}${mhVeriLabel(r)}</div>
+                <div class="mh-rec-meta">${r.onset_year ? 'Since ' + _esc(r.onset_year) : ''}
+                    ${r.entered_by_name ? ' · Entered by ' + _esc(r.entered_by_name) : ''}
                     · ${r.updated_at ? r.updated_at.slice(0,10) : ''}</div>
-                ${r.notes ? `<div style="color:#555;margin-top:3px;font-size:.82rem;">${r.notes}</div>` : ''}
+                ${r.notes ? `<div style="color:#555;margin-top:3px;font-size:.82rem;">${_esc(r.notes)}</div>` : ''}
             </div>
             <div class="mh-rec-actions">
                 <button class="mh-icon-btn del" onclick="mhDelete('condition',${r.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
@@ -721,9 +726,9 @@ function mhRender() {
     surgEl.innerHTML = (_mhData.surgeries || []).map(r => `
         <div class="mh-rec">
             <div class="mh-rec-body">
-                <div class="mh-rec-title">${r.procedure}${r.body_region ? ' — ' + r.body_region : ''}${mhVeriLabel(r)}</div>
-                <div class="mh-rec-meta">${r.surgery_date || ''}${r.outcome ? ' · ' + r.outcome : ''}
-                    ${r.entered_by_name ? ' · Entered by ' + r.entered_by_name : ''}</div>
+                <div class="mh-rec-title">${_esc(r.procedure)}${r.body_region ? ' — ' + _esc(r.body_region) : ''}${mhVeriLabel(r)}</div>
+                <div class="mh-rec-meta">${_esc(r.surgery_date) || ''}${r.outcome ? ' · ' + _esc(r.outcome) : ''}
+                    ${r.entered_by_name ? ' · Entered by ' + _esc(r.entered_by_name) : ''}</div>
             </div>
             <div class="mh-rec-actions">
                 <button class="mh-icon-btn del" onclick="mhDelete('surgery',${r.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
@@ -738,9 +743,9 @@ function mhRender() {
         if (r.recurrence) flags.push(`<span class="mh-badge mh-badge-danger">↻ Prior recurrence</span>`);
         return `<div class="mh-rec">
             <div class="mh-rec-body">
-                <div class="mh-rec-title">${r.body_region}${r.injury_description ? ' — ' + r.injury_description : ''}${mhVeriLabel(r)}${flags.join('')}</div>
-                <div class="mh-rec-meta">${r.injury_date || ''}${r.related_to_current ? ' · Related to current problem' : ''}
-                    ${r.entered_by_name ? ' · Entered by ' + r.entered_by_name : ''}</div>
+                <div class="mh-rec-title">${_esc(r.body_region)}${r.injury_description ? ' — ' + _esc(r.injury_description) : ''}${mhVeriLabel(r)}${flags.join('')}</div>
+                <div class="mh-rec-meta">${_esc(r.injury_date) || ''}${r.related_to_current ? ' · Related to current problem' : ''}
+                    ${r.entered_by_name ? ' · Entered by ' + _esc(r.entered_by_name) : ''}</div>
             </div>
             <div class="mh-rec-actions">
                 <button class="mh-icon-btn del" onclick="mhDelete('injury',${r.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
@@ -755,9 +760,9 @@ function mhRender() {
         const activeLabel = r.active ? 'Active' : 'Stopped';
         return `<div class="mh-rec">
             <div class="mh-rec-body">
-                <div class="mh-rec-title">${r.drug_name}<span class="mh-badge ${activeClass}">${activeLabel}</span>${mhVeriLabel(r)}</div>
-                <div class="mh-rec-meta">${r.indication || ''}
-                    ${r.entered_by_name ? ' · Entered by ' + r.entered_by_name : ''}</div>
+                <div class="mh-rec-title">${_esc(r.drug_name)}<span class="mh-badge ${activeClass}">${activeLabel}</span>${mhVeriLabel(r)}</div>
+                <div class="mh-rec-meta">${_esc(r.indication) || ''}
+                    ${r.entered_by_name ? ' · Entered by ' + _esc(r.entered_by_name) : ''}</div>
             </div>
             <div class="mh-rec-actions">
                 <button class="mh-icon-btn del" onclick="mhDelete('medication',${r.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
@@ -770,8 +775,8 @@ function mhRender() {
     famEl.innerHTML = (_mhData.family_history || []).map(r => `
         <div class="mh-rec">
             <div class="mh-rec-body">
-                <div class="mh-rec-title">${r.condition} <span style="font-weight:400;color:#555;">— ${r.relation}</span>${mhVeriLabel(r)}</div>
-                <div class="mh-rec-meta">${r.entered_by_name ? 'Entered by ' + r.entered_by_name : ''}
+                <div class="mh-rec-title">${_esc(r.condition)} <span style="font-weight:400;color:#555;">— ${_esc(r.relation)}</span>${mhVeriLabel(r)}</div>
+                <div class="mh-rec-meta">${r.entered_by_name ? 'Entered by ' + _esc(r.entered_by_name) : ''}
                     · ${r.updated_at ? r.updated_at.slice(0,10) : ''}</div>
             </div>
             <div class="mh-rec-actions">
@@ -998,20 +1003,27 @@ async function mhSaveExtracted() {
         family_history: '/patient/medical-history/family-history'
     };
 
-    for (const [category, items] of Object.entries(data)) {
-        const endpoint = endpointMap[category];
-        if (!endpoint || !items.length) continue;
-        for (const item of items) {
-            await fetch(endpoint, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(item)
-            });
+    let failed = 0;
+    try {
+        for (const [category, items] of Object.entries(data)) {
+            const endpoint = endpointMap[category];
+            if (!endpoint || !items.length) continue;
+            for (const item of items) {
+                const r = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(item)
+                });
+                if (!r.ok) failed++;
+            }
         }
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save All';
+        mhCancelExtracted();
+        await mhLoad();
     }
-
-    mhCancelExtracted();
-    await mhLoad();
+    if (failed > 0) alert(`${failed} record(s) could not be saved. Please add them manually.`);
 }
 
 function mhCancelExtracted() {
