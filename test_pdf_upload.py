@@ -83,7 +83,7 @@ def test_result_filters_empty_required_fields():
 
 def _get_app():
     """Import the Flask app with test config."""
-    sys.path.insert(0, '/Users/hrithikkannankrishnan/Desktop/Innovation Challenge /SHA2_innovation_challenge')
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     os.environ.setdefault('SECRET_KEY', 'test-secret-key-for-testing')
     os.environ.setdefault('GROQ_API_KEY', 'test-key')
     from main import app as flask_app

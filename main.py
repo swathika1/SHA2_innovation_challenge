@@ -3193,7 +3193,8 @@ def patient_medical_history_upload_pdf():
     try:
         with _pdfplumber.open(_io.BytesIO(pdf_bytes)) as _pdf:
             _text = '\n'.join(_page.extract_text() or '' for _page in _pdf.pages)
-    except Exception:
+    except Exception as e:
+        print(f"[PDF-UPLOAD] pdfplumber failed: {e}")
         return jsonify({'error': 'parse_failed', 'message': 'Could not read PDF. Please try a different file.'}), 500
 
     if not _text.strip():
@@ -3230,7 +3231,8 @@ def patient_medical_history_upload_pdf():
             max_tokens=1500,
         )
         _raw = _resp.choices[0].message.content.strip()
-    except Exception:
+    except Exception as e:
+        print(f"[PDF-UPLOAD] Groq extraction failed: {e}")
         return jsonify({'error': 'llm_error', 'message': 'Extraction service unavailable. Please try again or enter manually.'}), 500
 
     try:
