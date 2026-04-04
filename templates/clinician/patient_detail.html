@@ -206,13 +206,8 @@
         <div class="pp-stat-label">Adherence</div>
     </div>
     <div class="pp-stat">
-<<<<<<< Updated upstream
-        <div class="pp-stat-value" style="color:{% if patient.avg_quality_score >= 70 %}#22c55e{% elif patient.avg_quality_score >= 45 %}#f59e0b{% else %}#ef4444{% endif %};">
-            {{ patient.avg_quality_score | round(1) }}
-=======
         <div class="pp-stat-value" style="color:{% if patient.avg_quality_score >= 35 %}#22c55e{% elif patient.avg_quality_score >= 22.5 %}#f59e0b{% else %}#ef4444{% endif %};">
             {{ patient.avg_quality_score | round(1) }}/50
->>>>>>> Stashed changes
         </div>
         <div class="pp-stat-label">Avg Quality</div>
     </div>
@@ -227,11 +222,7 @@
         <div class="pp-stat-label">Total Sessions</div>
     </div>
     <div class="pp-stat">
-<<<<<<< Updated upstream
-        <div class="pp-stat-value" style="color:#0ea5e9;">{{ avg_quality_recent }}</div>
-=======
         <div class="pp-stat-value" style="color:#0ea5e9;">{{ avg_quality_recent }}/50</div>
->>>>>>> Stashed changes
         <div class="pp-stat-label">Recent Quality (5)</div>
     </div>
     <div class="pp-stat">
@@ -415,7 +406,7 @@
         <h3><i class="fa-solid fa-notes-medical"></i> Medical History</h3>
         <div style="display:flex;align-items:center;gap:10px;">
             <span style="font-size:0.75rem;color:#aaa;" id="mh-last-updated-label"></span>
-            <button onclick="mhToggleEdit()" id="mh-edit-btn" style="background:#f0f4ff;color:#6366f1;border:1px solid #c7d2fe;padding:5px 14px;border-radius:7px;font-size:0.8rem;font-weight:600;cursor:pointer;">
+            <button onclick="mhcToggleEdit()" id="mh-edit-btn" style="background:#f0f4ff;color:#6366f1;border:1px solid #c7d2fe;padding:5px 14px;border-radius:7px;font-size:0.8rem;font-weight:600;cursor:pointer;">
                 <i class="fa-solid fa-pen"></i> Edit
             </button>
         </div>
@@ -568,15 +559,9 @@
                     </td>
                     <td>
                         {% set qs = s.quality_score | default(0) %}
-<<<<<<< Updated upstream
-                        <span style="font-weight:600;color:{% if qs >= 70 %}#22c55e{% elif qs >= 45 %}#f59e0b{% else %}#ef4444{% endif %};">{{ qs | round(0) | int }}</span>
-                        <div class="pp-quality-bar">
-                            <div class="pp-quality-bar-fill" style="width:{{ qs }}%;background:{% if qs >= 70 %}#22c55e{% elif qs >= 45 %}#f59e0b{% else %}#ef4444{% endif %};"></div>
-=======
                         <span style="font-weight:600;color:{% if qs >= 35 %}#22c55e{% elif qs >= 22.5 %}#f59e0b{% else %}#ef4444{% endif %};">{{ qs | round(0) | int }}/50</span>
                         <div class="pp-quality-bar">
                             <div class="pp-quality-bar-fill" style="width:{{ (qs * 2) | round(1) }}%;background:{% if qs >= 35 %}#22c55e{% elif qs >= 22.5 %}#f59e0b{% else %}#ef4444{% endif %};"></div>
->>>>>>> Stashed changes
                         </div>
                     </td>
                     <td>
@@ -826,9 +811,6 @@ function resolveMessage(msgId) {
 }
 </script>
 
-<<<<<<< Updated upstream
-{% endblock %}
-=======
 <style>
 /* Medical history card — clinician view */
 .mhc-rec { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; background:#f9fafb; border-radius:7px; border:1px solid #eee; margin-bottom:5px; font-size:0.83rem; }
@@ -1035,4 +1017,3 @@ mhcLoad();
 </script>
 
 {% endblock %}
->>>>>>> Stashed changes
