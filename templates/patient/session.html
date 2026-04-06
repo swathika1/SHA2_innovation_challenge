@@ -818,7 +818,127 @@
         background: #1e293b !important; color: #e2e8f0 !important;
         border: 1px solid rgba(99,102,241,.3) !important;
     }
+
+    /* ===== Safety Disclaimer Modal ===== */
+    #safetyDisclaimerOverlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.72);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+    #safetyDisclaimerOverlay.active {
+        display: flex;
+    }
+    .safety-modal {
+        background: #fff;
+        border-radius: 16px;
+        max-width: 520px;
+        width: 100%;
+        padding: 36px 36px 28px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+        text-align: center;
+        animation: safetyModalIn 0.22s ease;
+    }
+    @keyframes safetyModalIn {
+        from { transform: scale(0.92); opacity: 0; }
+        to   { transform: scale(1);    opacity: 1; }
+    }
+    .safety-modal .safety-icon {
+        font-size: 3.2rem;
+        margin-bottom: 16px;
+        display: block;
+    }
+    .safety-modal h2 {
+        font-size: 1.35rem;
+        color: #c0392b;
+        margin: 0 0 14px;
+        font-weight: 700;
+    }
+    .safety-modal .safety-body {
+        background: #fff8f0;
+        border: 1.5px solid #f39c12;
+        border-radius: 10px;
+        padding: 18px 20px;
+        margin-bottom: 22px;
+        text-align: left;
+    }
+    .safety-modal .safety-body ul {
+        margin: 10px 0 0;
+        padding-left: 18px;
+        color: #444;
+        line-height: 1.8;
+        font-size: 0.97rem;
+    }
+    .safety-modal .safety-body p {
+        color: #555;
+        font-size: 0.97rem;
+        margin: 0 0 6px;
+        font-weight: 600;
+    }
+    .safety-modal .safety-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+    }
+    .btn-safety-proceed {
+        padding: 12px 28px;
+        background: linear-gradient(135deg, #27ae60, #1e8449);
+        color: #fff;
+        border: none;
+        border-radius: 9px;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .btn-safety-proceed:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(39,174,96,.4); }
+    .btn-safety-cancel {
+        padding: 12px 22px;
+        background: #f1f3f4;
+        color: #555;
+        border: none;
+        border-radius: 9px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .btn-safety-cancel:hover { background: #e2e6ea; }
 </style>
+
+<!-- ===== Safety Disclaimer Modal ===== -->
+<div id="safetyDisclaimerOverlay" role="dialog" aria-modal="true" aria-labelledby="safetyModalTitle">
+    <div class="safety-modal">
+        <span class="safety-icon">⚠️</span>
+        <h2 id="safetyModalTitle">Safety Disclaimer — Read Before Starting</h2>
+        <div class="safety-body">
+            <p>Stop immediately and consult your clinician if you experience any of the following:</p>
+            <ul>
+                <li>Pain or sharp discomfort during any exercise</li>
+                <li>Dizziness, light-headedness, or nausea</li>
+                <li>Shortness of breath or chest tightness</li>
+                <li>Numbness, tingling, or loss of balance</li>
+                <li>Any unusual sensation not present before the session</li>
+            </ul>
+        </div>
+        <p style="font-size:0.88rem;color:#888;margin-bottom:20px;">
+            This platform is a rehabilitation aid. It does not replace professional medical supervision.<br>
+            Consult your clinician before continuing if you have any concerns.
+        </p>
+        <div class="safety-actions">
+            <button class="btn-safety-cancel" onclick="closeSafetyDisclaimer()">
+                <i class="fa-solid fa-arrow-left"></i> Go Back
+            </button>
+            <button class="btn-safety-proceed" onclick="acknowledgeSafetyAndStart()">
+                <i class="fa-solid fa-circle-check"></i> I Understand — Start Session
+            </button>
+        </div>
+    </div>
+</div>
 
 <!-- ===================== PHASE 1 — PRE-SESSION ===================== -->
 <div id="phasePreSession" class="phase-screen active">
@@ -933,7 +1053,7 @@
                    oninput="document.getElementById('painBeforeVal').textContent=this.value">
         </div>
 
-        <button class="btn-start-session" onclick="startSession()"><i class="fa-solid fa-play"></i> START</button>
+        <button class="btn-start-session" onclick="showSafetyDisclaimer()"><i class="fa-solid fa-play"></i> START</button>
     </div>
 
 </div>
@@ -3251,6 +3371,21 @@ function startSessionTimers() {
     exerciseTimerInterval = setInterval(function() {
         if (!isPaused) document.getElementById('exerciseTimer').textContent = fmt(Math.floor((Date.now() - exerciseStartTs) / 1000));
     }, 1000);
+}
+
+function showSafetyDisclaimer() {
+    if (!buildSelectedWorkouts()) return;
+    document.getElementById('safetyDisclaimerOverlay').classList.add('active');
+    document.getElementById('safetyDisclaimerOverlay').querySelector('.btn-safety-proceed').focus();
+}
+
+function closeSafetyDisclaimer() {
+    document.getElementById('safetyDisclaimerOverlay').classList.remove('active');
+}
+
+function acknowledgeSafetyAndStart() {
+    closeSafetyDisclaimer();
+    startSession();
 }
 
 async function startSession() {

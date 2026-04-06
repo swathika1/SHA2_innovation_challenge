@@ -762,10 +762,20 @@ def postal_search():
     return jsonify([{'postal_code': r['postal_code'], 'street_name': r['street_name']} for r in results] if results else [])
 
 
+@app.route('/terms')
+def terms():
+    """Terms and Conditions / Privacy Policy page"""
+    return render_template('terms.html')
+
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     """Signup Page"""
     if request.method == 'POST':
+        if not request.form.get('terms_accepted'):
+            flash('You must accept the Terms and Conditions and Privacy Policy to create an account.', 'error')
+            return redirect(url_for('signup'))
+
         email = request.form['email']
         password = request.form['password']
         first_name = request.form.get('first_name', '')
@@ -1913,12 +1923,21 @@ def patient_profile():
         today = date.today()
         age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
+    # Re-injury risk
+    risk_data = None
+    if REINJURY_RISK_AVAILABLE:
+        try:
+            risk_data = analyze_patient_risk(session['user_id'], query_db)
+        except Exception as _re:
+            print(f"[WARNING] Re-injury risk analysis failed for patient {session['user_id']}: {_re}")
+
     return render_template('patient/profile.html',
                          user_info=user_info,
                          patient=patient_info,
                          doctor=doctor,
                          caregiver=caregiver,
                          age=age,
+                         risk_data=risk_data,
                          active_tab='personal')
 
 
