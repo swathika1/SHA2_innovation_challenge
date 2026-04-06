@@ -48,13 +48,13 @@ def _slope(values: list[float]) -> float:
 def _score_form_trend(slope: float) -> tuple[int, str]:
     """
     Convert quality_score slope → signal points + description.
-    Slope is in quality-score-units per session.
+    Slope is in quality-score-units per session (scale: 0-50).
     """
     if slope >= 0:
         return 0, None
-    if slope >= -1.5:
+    if slope >= -0.75:
         return 1, f"Form score declining slowly ({slope:+.1f} pts/session)"
-    if slope >= -3.5:
+    if slope >= -1.75:
         return 2, f"Form score declining steadily ({slope:+.1f} pts/session)"
     return 3, f"Form score falling sharply ({slope:+.1f} pts/session)"
 
@@ -136,20 +136,6 @@ def _score_rom(rom_avg: float | None, rom_slope: float) -> tuple[int, str]:
 
 def _score_effort_quality_gap(effort_avg: float, quality_avg: float) -> tuple[int, str]:
     """
-<<<<<<< Updated upstream
-    Effort is 0-10, quality is 0-100. Normalise effort to same scale.
-    A large gap means the patient is working hard but movement quality is poor.
-    """
-    effort_norm = effort_avg * 10   # 0-100
-    gap = effort_norm - quality_avg
-    if gap < 10:
-        return 0, None
-    if gap < 20:
-        return 1, f"Slight effort-quality mismatch (effort {effort_avg:.1f}/10, form {quality_avg:.0f}/100)"
-    if gap < 35:
-        return 2, f"Patient working hard but form declining (effort {effort_avg:.1f}/10, form {quality_avg:.0f}/100)"
-    return 3, f"Large effort-quality gap — compensatory movement likely (effort {effort_avg:.1f}/10, form {quality_avg:.0f}/100)"
-=======
     Effort is 0-10, quality is 0-50. Normalise effort to same scale.
     A large gap means the patient is working hard but movement quality is poor.
     """
@@ -162,7 +148,6 @@ def _score_effort_quality_gap(effort_avg: float, quality_avg: float) -> tuple[in
     if gap < 17.5:
         return 2, f"Patient working hard but form declining (effort {effort_avg:.1f}/10, form {quality_avg:.0f}/50)"
     return 3, f"Large effort-quality gap — compensatory movement likely (effort {effort_avg:.1f}/10, form {quality_avg:.0f}/50)"
->>>>>>> Stashed changes
 
 
 def _risk_level(score: int) -> str:

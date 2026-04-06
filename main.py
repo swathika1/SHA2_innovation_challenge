@@ -770,10 +770,20 @@ def postal_search():
     return jsonify([{'postal_code': r['postal_code'], 'street_name': r['street_name']} for r in results] if results else [])
 
 
+@app.route('/terms')
+def terms():
+    """Terms and Conditions / Privacy Policy page"""
+    return render_template('terms.html')
+
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     """Signup Page"""
     if request.method == 'POST':
+        if not request.form.get('terms_accepted'):
+            flash('You must accept the Terms and Conditions and Privacy Policy to create an account.', 'error')
+            return redirect(url_for('signup'))
+
         email = request.form['email']
         password = request.form['password']
         first_name = request.form.get('first_name', '')
@@ -1921,12 +1931,21 @@ def patient_profile():
         today = date.today()
         age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
+    # Re-injury risk
+    risk_data = None
+    if REINJURY_RISK_AVAILABLE:
+        try:
+            risk_data = analyze_patient_risk(session['user_id'], query_db)
+        except Exception as _re:
+            print(f"[WARNING] Re-injury risk analysis failed for patient {session['user_id']}: {_re}")
+
     return render_template('patient/profile.html',
                          user_info=user_info,
                          patient=patient_info,
                          doctor=doctor,
                          caregiver=caregiver,
                          age=age,
+                         risk_data=risk_data,
                          active_tab='personal')
 
 
@@ -6311,6 +6330,105 @@ def ensure_tables_exist():
             FOREIGN KEY (patient_id) REFERENCES users(id),
             FOREIGN KEY (resolved_by) REFERENCES users(id)
         )
+    ''')
+
+    # ── Medical history tables (added in Patient Medical History feature) ──────
+    cursor.executescript('''
+        CREATE TABLE IF NOT EXISTS medical_conditions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id  INTEGER NOT NULL,
+            name        TEXT    NOT NULL,
+            onset_year  INTEGER,
+            notes       TEXT,
+            entry_mode  TEXT    NOT NULL DEFAULT 'self_report'
+                                CHECK(entry_mode IN ('self_report', 'clinician')),
+            verified    INTEGER NOT NULL DEFAULT 0,
+            entered_by  INTEGER,
+            verified_by INTEGER,
+            updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id)  REFERENCES users(id),
+            FOREIGN KEY (entered_by)  REFERENCES users(id),
+            FOREIGN KEY (verified_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS medical_surgeries (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id   INTEGER NOT NULL,
+            procedure    TEXT    NOT NULL,
+            surgery_date DATE,
+            body_region  TEXT,
+            outcome      TEXT,
+            notes        TEXT,
+            entry_mode   TEXT    NOT NULL DEFAULT 'self_report'
+                                 CHECK(entry_mode IN ('self_report', 'clinician')),
+            verified     INTEGER NOT NULL DEFAULT 0,
+            entered_by   INTEGER,
+            verified_by  INTEGER,
+            updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id)  REFERENCES users(id),
+            FOREIGN KEY (entered_by)  REFERENCES users(id),
+            FOREIGN KEY (verified_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS medical_injuries (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id           INTEGER NOT NULL,
+            body_region          TEXT    NOT NULL,
+            injury_description   TEXT,
+            related_to_current   INTEGER NOT NULL DEFAULT 0,
+            recovery_complete    INTEGER NOT NULL DEFAULT 0,
+            recurrence           INTEGER NOT NULL DEFAULT 0,
+            injury_date          DATE,
+            notes                TEXT,
+            entry_mode           TEXT    NOT NULL DEFAULT 'self_report'
+                                         CHECK(entry_mode IN ('self_report', 'clinician')),
+            verified             INTEGER NOT NULL DEFAULT 0,
+            entered_by           INTEGER,
+            verified_by          INTEGER,
+            updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id)  REFERENCES users(id),
+            FOREIGN KEY (entered_by)  REFERENCES users(id),
+            FOREIGN KEY (verified_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS medical_medications (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id  INTEGER NOT NULL,
+            drug_name   TEXT    NOT NULL,
+            indication  TEXT,
+            active      INTEGER NOT NULL DEFAULT 1,
+            end_date    DATE,
+            entry_mode  TEXT    NOT NULL DEFAULT 'self_report'
+                                CHECK(entry_mode IN ('self_report', 'clinician')),
+            verified    INTEGER NOT NULL DEFAULT 0,
+            entered_by  INTEGER,
+            verified_by INTEGER,
+            updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id)  REFERENCES users(id),
+            FOREIGN KEY (entered_by)  REFERENCES users(id),
+            FOREIGN KEY (verified_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS medical_family_history (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id  INTEGER NOT NULL,
+            condition   TEXT    NOT NULL,
+            relation    TEXT    NOT NULL,
+            notes       TEXT,
+            entry_mode  TEXT    NOT NULL DEFAULT 'self_report'
+                                CHECK(entry_mode IN ('self_report', 'clinician')),
+            verified    INTEGER NOT NULL DEFAULT 0,
+            entered_by  INTEGER,
+            verified_by INTEGER,
+            updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id)  REFERENCES users(id),
+            FOREIGN KEY (entered_by)  REFERENCES users(id),
+            FOREIGN KEY (verified_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS patient_risk_cache (
+            patient_id      INTEGER PRIMARY KEY,
+            risk_score      INTEGER,
+            risk_score_raw  REAL,
+            risk_label      TEXT,
+            computed_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES users(id)
+        );
     ''')
 
     conn.commit()

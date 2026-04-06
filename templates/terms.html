@@ -1,0 +1,332 @@
+{% extends 'base.html' %}
+
+{% block title %}Terms & Conditions and Privacy Policy - SHA2 Rehab Coach{% endblock %}
+
+{% block content %}
+<style>
+    .terms-page {
+        max-width: 860px;
+        margin: 40px auto 60px;
+        padding: 0 20px;
+    }
+
+    .terms-page h1 {
+        font-size: 2rem;
+        color: var(--dark);
+        margin-bottom: 6px;
+    }
+
+    .terms-page .last-updated {
+        color: var(--gray);
+        font-size: 0.92rem;
+        margin-bottom: 36px;
+    }
+
+    .terms-nav {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 40px;
+        flex-wrap: wrap;
+    }
+
+    .terms-nav a {
+        padding: 10px 22px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        text-decoration: none;
+        transition: all 0.2s ease;
+    }
+
+    .terms-nav a.nav-terms {
+        background: var(--primary);
+        color: #fff;
+    }
+
+    .terms-nav a.nav-privacy {
+        background: var(--success);
+        color: #fff;
+    }
+
+    .terms-nav a:hover {
+        opacity: 0.85;
+    }
+
+    .terms-section {
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+        padding: 36px 40px;
+        margin-bottom: 36px;
+        scroll-margin-top: 30px;
+    }
+
+    .terms-section h2 {
+        font-size: 1.5rem;
+        color: var(--dark);
+        margin-bottom: 24px;
+        padding-bottom: 14px;
+        border-bottom: 2px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .terms-section h2 i {
+        color: var(--primary);
+        font-size: 1.3rem;
+    }
+
+    .terms-section h3 {
+        font-size: 1.05rem;
+        color: var(--dark);
+        margin: 22px 0 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .terms-section h3 i {
+        color: var(--primary);
+        font-size: 0.95rem;
+        width: 18px;
+    }
+
+    .terms-section p {
+        color: #444;
+        line-height: 1.8;
+        margin-bottom: 12px;
+        font-size: 0.97rem;
+    }
+
+    .terms-section ul {
+        color: #444;
+        line-height: 1.8;
+        font-size: 0.97rem;
+        padding-left: 20px;
+        margin-bottom: 12px;
+    }
+
+    .terms-section ul li {
+        margin-bottom: 6px;
+    }
+
+    .alert-box {
+        background: rgba(255, 193, 7, 0.1);
+        border: 1px solid rgba(255, 193, 7, 0.4);
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin: 16px 0;
+        font-size: 0.95rem;
+        color: #7a5c00;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+    }
+
+    .alert-box i {
+        margin-top: 2px;
+        flex-shrink: 0;
+    }
+
+    .info-box {
+        background: rgba(26, 115, 232, 0.06);
+        border: 1px solid rgba(26, 115, 232, 0.2);
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin: 16px 0;
+        font-size: 0.95rem;
+        color: #1a4a8a;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+    }
+
+    .info-box i {
+        margin-top: 2px;
+        flex-shrink: 0;
+    }
+
+    .section-divider {
+        border: none;
+        border-top: 3px dashed var(--border);
+        margin: 40px 0;
+    }
+
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--gray);
+        text-decoration: none;
+        font-size: 0.95rem;
+        margin-bottom: 20px;
+        transition: color 0.2s;
+    }
+
+    .back-link:hover {
+        color: var(--primary);
+    }
+
+    @media (max-width: 600px) {
+        .terms-section {
+            padding: 24px 18px;
+        }
+    }
+</style>
+
+<div class="terms-page">
+    <a href="{{ url_for('signup') }}" class="back-link">
+        <i class="fas fa-arrow-left"></i> Back to Sign Up
+    </a>
+
+    <h1><i class="fas fa-file-contract" style="color:var(--primary);margin-right:10px;"></i>Legal Documents</h1>
+    <p class="last-updated">Last updated: 7 April 2026 &nbsp;·&nbsp; SHA2 Rehab Coach &nbsp;·&nbsp; National University of Singapore</p>
+
+    <div class="terms-nav">
+        <a href="#terms" class="nav-terms"><i class="fas fa-scroll"></i> Terms and Conditions</a>
+        <a href="#privacy" class="nav-privacy"><i class="fas fa-shield-alt"></i> Privacy Policy</a>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+         SECTION 1 — TERMS AND CONDITIONS
+         ═══════════════════════════════════════════════ -->
+    <div class="terms-section" id="terms">
+        <h2><i class="fas fa-scroll"></i> Terms and Conditions</h2>
+
+        <p>These Terms and Conditions govern your use of the SHA2 Rehab Coach platform ("Platform"), operated under the National University of Singapore ("NUS"). By creating an account or continuing to use the Platform, you agree to these terms in full.</p>
+
+        <h3><i class="fas fa-robot"></i> AI and Predictive Modelling Disclosure</h3>
+        <p>The Platform uses a computational reinjury risk model to generate risk scores based on patient biomechanical data, medical history, and rehabilitation progress.</p>
+        <div class="alert-box">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span><strong>Important:</strong> Reinjury risk scores are computational aids only. They do not constitute a medical diagnosis, prognosis, or clinical recommendation. Clinicians remain solely responsible for all treatment and rehabilitation decisions. Patients must not act on any risk score without consulting their assigned clinician.</span>
+        </div>
+        <p>The AI model may be updated periodically. Past outputs do not guarantee future accuracy.</p>
+
+        <h3><i class="fas fa-user-md"></i> Medical Disclaimer</h3>
+        <p>The Platform does not replace professional medical advice, diagnosis, or treatment. Always seek the advice of a qualified healthcare provider with any questions you may have regarding a medical condition. Never disregard professional medical advice or delay seeking it because of something you have read or seen on this Platform.</p>
+
+        <h3><i class="fas fa-users"></i> Acceptable Use</h3>
+        <p>You agree to:</p>
+        <ul>
+            <li>Provide accurate and truthful information during registration and throughout your use of the Platform.</li>
+            <li>Use the Platform only for its intended rehabilitation and clinical management purposes.</li>
+            <li>Not attempt to access data belonging to other patients or users.</li>
+            <li>Not reverse-engineer, scrape, or otherwise tamper with Platform systems.</li>
+        </ul>
+
+        <h3><i class="fas fa-door-open"></i> Account Termination</h3>
+        <p>You may request account deactivation at any time by contacting the Platform administrator. Upon deactivation:</p>
+        <ul>
+            <li>Your account will be marked inactive and you will lose access to the Platform.</li>
+            <li>Clinical records that have been verified or reviewed by a clinician may be retained for a minimum of 5 years in accordance with Singapore's healthcare records guidelines, even after account deactivation, to preserve medical continuity.</li>
+            <li>Non-clinical account data (preferences, usage logs) will be deleted within 30 days of deactivation.</li>
+        </ul>
+        <p>The Platform reserves the right to suspend or terminate accounts found to be in violation of these Terms.</p>
+
+        <h3><i class="fas fa-bell"></i> Changes to These Terms</h3>
+        <p>We may update these Terms and Conditions from time to time. When material changes are made:</p>
+        <ul>
+            <li>Registered users will be notified via the email address on their account.</li>
+            <li>A notice will be displayed on the Platform upon next login.</li>
+            <li>Continued use of the Platform after notification constitutes acceptance of the revised terms.</li>
+        </ul>
+        <p>If you do not agree to revised terms, you must stop using the Platform and request account deactivation.</p>
+
+        <h3><i class="fas fa-balance-scale"></i> Governing Law</h3>
+        <p>These Terms and Conditions are governed by and construed in accordance with the laws of the Republic of Singapore. Any disputes arising from use of the Platform shall be subject to the exclusive jurisdiction of the courts of Singapore.</p>
+    </div>
+
+    <hr class="section-divider">
+
+    <!-- ═══════════════════════════════════════════════
+         SECTION 2 — PRIVACY POLICY
+         ═══════════════════════════════════════════════ -->
+    <div class="terms-section" id="privacy">
+        <h2><i class="fas fa-shield-alt"></i> Privacy Policy</h2>
+
+        <p>This Privacy Policy explains how SHA2 Rehab Coach collects, uses, stores, and protects your personal data. It applies to all users of the Platform including patients, clinicians, and caregivers.</p>
+
+        <div class="info-box">
+            <i class="fas fa-info-circle"></i>
+            <span>This Platform operates in Singapore. Your personal data is handled in accordance with the <strong>Personal Data Protection Act 2012 (PDPA)</strong> of Singapore.</span>
+        </div>
+
+        <h3><i class="fas fa-database"></i> What Data We Collect</h3>
+        <p>We collect the following categories of personal data:</p>
+        <ul>
+            <li><strong>Account credentials:</strong> Email address, hashed password, role.</li>
+            <li><strong>Personal details:</strong> Full name, date of birth, phone number, postal code.</li>
+            <li><strong>Medical history:</strong> Diagnosed conditions, past surgeries, current medications, allergies, family medical history — entered directly by you or uploaded via document scan.</li>
+            <li><strong>Biomechanical assessment data:</strong> Pose and movement data captured during rehabilitation sessions.</li>
+            <li><strong>Injury records:</strong> Historical and current injury information linked to your profile.</li>
+            <li><strong>Usage logs:</strong> Session timestamps, feature interactions, and system-generated activity records.</li>
+        </ul>
+
+        <h3><i class="fas fa-cogs"></i> How We Use Your Data</h3>
+        <p>Your data is used for the following purposes:</p>
+        <ul>
+            <li>Calculating reinjury risk scores using the Platform's predictive model.</li>
+            <li>Displaying your medical and rehabilitation history to your assigned clinician.</li>
+            <li>Enabling clinicians to create, monitor, and adjust personalised rehabilitation plans.</li>
+            <li>Generating session summaries and progress reports visible to you and your clinician.</li>
+            <li>Sending appointment reminders and clinical notifications.</li>
+        </ul>
+        <div class="info-box">
+            <i class="fas fa-info-circle"></i>
+            <span><strong>Model retraining:</strong> Your data is not currently used to retrain or update the predictive model. If this changes, you will be notified and your consent will be sought separately before your data is used for that purpose.</span>
+        </div>
+
+        <h3><i class="fas fa-eye"></i> Who Can See Your Data</h3>
+        <p>Access to your data is strictly role-based:</p>
+        <ul>
+            <li><strong>Patients</strong> can view only their own records, history, and risk scores.</li>
+            <li><strong>Clinicians</strong> can view records belonging only to patients assigned to them. No cross-patient visibility is permitted.</li>
+            <li><strong>Caregivers</strong> can view basic progress information for the patient they are linked to.</li>
+            <li><strong>Platform administrators</strong> have system-level access for maintenance and support purposes only, subject to internal access controls.</li>
+        </ul>
+        <p>No user can access another user's data outside of the permissions described above.</p>
+
+        <h3><i class="fas fa-server"></i> Data Storage and Security</h3>
+        <ul>
+            <li>Data is stored in a SQLite database on a secured server within the NUS infrastructure.</li>
+            <li>Passwords are stored as one-way cryptographic hashes — they are never stored in plain text.</li>
+            <li>Data in transit is protected using HTTPS/TLS encryption.</li>
+            <li>Access to the server and database is restricted to authorised personnel only.</li>
+        </ul>
+
+        <h3><i class="fas fa-clock"></i> Data Retention and Deletion</h3>
+        <p>We retain your data for as long as your account is active. Upon account deactivation:</p>
+        <ul>
+            <li>Non-clinical data (account preferences, usage logs) is deleted within 30 days.</li>
+            <li>Clinical records that have been reviewed or verified by a clinician are retained for a minimum of 5 years in line with Singapore healthcare records guidelines.</li>
+            <li>You may request deletion of your personal data by contacting us (see below). Requests involving clinician-verified records will be reviewed on a case-by-case basis, and retention may be required by law or for medical continuity.</li>
+        </ul>
+
+        <h3><i class="fas fa-user-shield"></i> Your Rights Under the PDPA</h3>
+        <p>As a data subject under Singapore's Personal Data Protection Act 2012, you have the right to:</p>
+        <ul>
+            <li><strong>Access</strong> the personal data we hold about you.</li>
+            <li><strong>Correct</strong> any inaccurate or incomplete personal data.</li>
+            <li><strong>Withdraw consent</strong> for the collection, use, or disclosure of your personal data, subject to legal and contractual restrictions.</li>
+        </ul>
+        <p>To exercise any of these rights, please contact us at: <strong>sha2rehab@nus.edu.sg</strong></p>
+        <p>We will respond to all data access and correction requests within 30 days.</p>
+
+        <h3><i class="fas fa-handshake"></i> Third-Party Sharing</h3>
+        <p>We do not sell, rent, or share your personal data with any third-party organisations for commercial purposes. Your data is not disclosed to external parties except:</p>
+        <ul>
+            <li>Where required by Singapore law or a valid court order.</li>
+            <li>Where necessary to prevent serious harm or protect patient safety, in line with PDPA exceptions.</li>
+        </ul>
+
+        <h3><i class="fas fa-sign-out-alt"></i> Account Termination and Data</h3>
+        <p>If you leave the rehabilitation programme or your account is deactivated, the data retention policy described above applies. You will not be able to access the Platform after deactivation, but you may request a copy of your personal data before deactivation is finalised.</p>
+    </div>
+
+    <div style="text-align:center; margin-top: 20px; color: var(--gray); font-size: 0.9rem;">
+        For any questions about these documents, contact <strong>sha2rehab@nus.edu.sg</strong>
+    </div>
+</div>
+{% endblock %}
