@@ -6286,14 +6286,23 @@ def api_camera_calibration():
     """
     Run pose detection on a single webcam frame for pre-session camera setup.
     Returns raw landmarks so the frontend can compute framing score/guidance.
+    Also checks for stop word in any audio chunks provided.
     """
     if PIPELINE is None and KERAAL_PIPELINE is None:
         return jsonify({"ok": False, "error": "Pose pipeline not available"}), 503
 
     data = request.get_json(force=True) or {}
     frame_b64 = data.get("frame_b64", "")
+    audio_chunk = data.get("audio_chunk")  # Optional audio chunk for stop word detection
+    
     if not frame_b64:
         return jsonify({"ok": False, "error": "frame_b64 missing"}), 400
+
+    # ========== STOP WORD DETECTION: Check audio even during calibration ==========
+    if audio_chunk and _detect_stop_word(audio_chunk):
+        print("[STOP-WORD] Stop detected during camera calibration")
+        return jsonify({"stopped": True, "status": "session_stopped_by_voice"})
+    # ============================================================================
 
     try:
         frame, landmarks = _extract_pose_landmarks_for_calibration(frame_b64)

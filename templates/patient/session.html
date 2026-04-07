@@ -3352,12 +3352,25 @@ async function pollCameraCalibration() {
 
     calibrationInflight = true;
     try {
+        // ========== STOP WORD DETECTION: Get audio chunk during calibration ==========
+        const audioChunk = await getAudioChunk();
+        // ============================================================================
+        
         const resp = await fetch('/api/camera/calibration', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ frame_b64 })
+            body: JSON.stringify({ frame_b64, audio_chunk: audioChunk })
         });
         const data = await resp.json();
+        
+        // Check for stop word detection during calibration
+        if (data && data.stopped) {
+            console.log('[STOP-WORD] Stop detected during calibration!');
+            showNotification('Session stopped by voice command', 'info', 3000);
+            await handleSessionStop();
+            return;
+        }
+        
         if (!resp.ok || !data.ok) {
             calibrationStablePasses = 0;
             renderCameraSetup({
