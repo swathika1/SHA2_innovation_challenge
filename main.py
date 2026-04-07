@@ -8058,6 +8058,156 @@ def _log_frame_telemetry(out: dict, program: str = 'general'):
         print(f"[FRAME_LOG] Error: {e}")
 
 
+# ==================== STOP WORD DETECTION FOR CV SESSIONS ====================
+
+def _detect_stop_word(audio_base64: str) -> bool:
+    """
+    Detect if the user said "stop" during a CV session.
+    
+    Args:
+        audio_base64: Base64-encoded audio data (webm, mp4, wav, mp3, etc.)
+    
+    Returns:
+        True if "stop" word is detected, False otherwise
+    
+    Implementation:
+    - Uses existing Whisper transcriber to convert audio to text
+    - Case-insensitive search for "stop" word
+    - Silently returns False if transcription fails (non-blocking)
+    """
+    if not audio_base64:
+        return False
+    
+    try:
+        # Import transcriber
+        from whisper_transcriber import transcribe
+        
+        # Decode base64 audio
+        import base64
+        try:
+            audio_bytes = base64.b64decode(audio_base64)
+        except Exception as e:
+            print(f"[STOP-WORD] Failed to decode audio: {e}")
+            return False
+        
+        # Transcribe using existing Whisper API
+        # We don't have the original filename, so we guess .wav is safe for most audio
+        transcribed_text = transcribe(audio_bytes, filename='audio.wav', raise_on_error=False)
+        
+        if not transcribed_text:
+            return False
+        
+        # Check for "stop" word (case-insensitive, whole word)
+        import re
+        # Match "stop" as a whole word (not as part of another word)
+        if re.search(r'\bstop\b', transcribed_text.lower()):
+            print(f"[STOP-WORD] Detected: '{transcribed_text}'")
+            return True
+        
+        return False
+    
+    except Exception as e:
+        # Never block the main pipeline if audio processing fails
+        print(f"[STOP-WORD] Error during transcription: {e}")
+        return False
+
+
+def _complete_session_by_stop_word(session_id: int, patient_id: int) -> bool:
+    """
+    Immediately complete a session when stop word is detected.
+    Uses default values for completion fields.
+    
+    Args:
+        session_id: Current session ID
+        patient_id: Current patient ID
+    
+    Returns:
+        True if successfully completed, False otherwise
+    """
+    try:
+        # Get current session state
+        sess = query_db(
+            'SELECT id, completed_at FROM sessions WHERE id = ? AND patient_id = ?',
+            (session_id, patient_id), one=True
+        )
+        
+        if not sess:
+            print(f"[STOP-WORD] Session {session_id} not found")
+            return False
+        
+        if sess['completed_at']:
+            print(f"[STOP-WORD] Session {session_id} already completed")
+            return False
+        
+        # Get exercise scores for this session
+        exercises = query_db(
+            'SELECT quality_score, sets_required, sets_completed FROM session_exercises WHERE session_id = ?',
+            (session_id,)
+        )
+        
+        # Calculate metrics
+        total_quality = 0
+        total_req = 0
+        total_comp = 0
+        count = 0
+        
+        for ex in (exercises or []):
+            total_quality += float(ex['quality_score'] or 0)
+            count += 1
+            req = json.loads(ex['sets_required']) if ex['sets_required'] else {}
+            comp = json.loads(ex['sets_completed']) if ex['sets_completed'] else {}
+            total_req += sum(int(v) for v in req.values())
+            total_comp += sum(int(v) for v in comp.values())
+        
+        avg_quality = round(total_quality / count, 1) if count > 0 else 0
+        completed_perc = round(total_comp / total_req * 100, 1) if total_req > 0 else 0
+        
+        # Use default pain_after = pain_before (no change)
+        sess_row = query_db(
+            'SELECT pain_before FROM sessions WHERE id = ?',
+            (session_id,), one=True
+        )
+        pain_after = sess_row['pain_before'] if sess_row else 0
+        
+        # Complete the session with stop word flag
+        execute_db('''
+            UPDATE sessions
+            SET pain_after = ?, effort_level = 5, notes = ?,
+                quality_score = ?, completed_perc = ?,
+                completed_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND patient_id = ?
+        ''', (pain_after, 'Session stopped by voice command ("stop")', avg_quality, completed_perc,
+              session_id, patient_id))
+        
+        # Update patient stats
+        try:
+            stats = query_db('''
+                SELECT AVG(quality_score) as avg_q, AVG(pain_after) as avg_p
+                FROM sessions
+                WHERE patient_id = ? AND completed_at IS NOT NULL
+            ''', (patient_id,), one=True)
+            
+            if stats:
+                execute_db('''
+                    UPDATE patients
+                    SET avg_quality_score = ?, avg_pain_level = ?
+                    WHERE user_id = ?
+                ''', (round(float(stats['avg_q'] or 0), 1),
+                      round(float(stats['avg_p'] or 0), 1),
+                      patient_id))
+        except Exception as e:
+            print(f"[STOP-WORD] Could not update patient stats: {e}")
+        
+        print(f"[STOP-WORD] Session {session_id} completed successfully")
+        return True
+    
+    except Exception as e:
+        print(f"[STOP-WORD] Error completing session: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 @app.route("/api/live_feedback", methods=["POST"])
 def api_live_feedback():
     if PIPELINE is None:
@@ -8073,6 +8223,43 @@ def api_live_feedback():
     mode = data.get("mode", "auto")
     manual_exercise = data.get("manual_exercise", None)
     exercise_hint = data.get("exercise_hint", "")
+    
+    # ───────────────────────────────────────────────────────────────────────
+    # STOP WORD DETECTION: Check if user said "stop" during session
+    # ───────────────────────────────────────────────────────────────────────
+    audio_chunk = data.get("audio_chunk", "")
+    if audio_chunk:
+        patient_id = session.get('user_id')
+        session_id = session.get('current_session_id')
+        
+        if patient_id and session_id:
+            # Check if stop word is detected
+            if _detect_stop_word(audio_chunk):
+                # Stop word detected! Immediately complete the session
+                success = _complete_session_by_stop_word(session_id, patient_id)
+                if success:
+                    # Clear current session from Flask session
+                    session.pop('current_session_id', None)
+                    
+                    return jsonify({
+                        "stopped": True,
+                        "status": "session_stopped",
+                        "message": "Session stopped by voice command.",
+                        "session_id": session_id,
+                    }), 200
+                else:
+                    # Completion failed but stop word was detected
+                    # Return error so frontend knows to handle this
+                    return jsonify({
+                        "stopped": True,
+                        "status": "stop_word_detected_error",
+                        "message": "Stop word detected but session completion failed. Please complete manually.",
+                        "session_id": session_id,
+                    }), 500
+    
+    # ───────────────────────────────────────────────────────────────────────
+    # Normal frame processing continues here
+    # ───────────────────────────────────────────────────────────────────────
     
     PIPELINE.language = language  # keep it simple
     
