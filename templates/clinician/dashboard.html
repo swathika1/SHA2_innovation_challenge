@@ -109,7 +109,7 @@
         <div class="patient-item">
             <div class="patient-info">
                 <h4>{{ patient.name }}</h4>
-                <span class="meta">ID: #{{ patient.id }} | {{ patient.condition or 'General Rehab' }} | Week {{ patient.current_week or 1 }}</span>
+                <span class="meta">ID: #{{ patient.id }} | {{ patient.condition or 'Deconditioning Syndrome' }} | Week {{ patient.current_week or 1 }}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
                 {% if patient.adherence_rate < 50 %}

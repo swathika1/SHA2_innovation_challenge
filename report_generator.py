@@ -588,7 +588,7 @@ def generate_session_report(
         for key, a in ex_agg.items():
             avg = a["total"] / a["n"] if a["n"] else 0
             cp  = a["correct"] / a["n"] * 100 if a["n"] else 0
-            plbl = "Low Back Pain" if a["prog"] == "low_back_pain" else "General"
+            plbl = "Low Back Pain" if a["prog"] == "low_back_pain" else "Deconditioning"
             fb  = _llm_exercise_feedback(gclient, a["display"], avg, cp,
                                          a["max_rep"], a["max_set"], plbl)
             ex_fb[key] = fb
@@ -597,7 +597,7 @@ def generate_session_report(
 
         print("[REPORT] Generating LLM session summary …")
         session_summary_text = _llm_session_summary(
-            gclient, patient_name or "Patient", patient_condition or "General",
+            gclient, patient_name or "Patient", patient_condition or "Deconditioning Syndrome",
             quality, comp_perc, pain_b, pain_a, effort, _dur(overall_duration),
             ex_summary_rows, needs_center)
 
@@ -628,10 +628,10 @@ def generate_session_report(
     # ━━━━ 2. PATIENT INFORMATION CARD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     pi = [
         ["Patient Name",  patient_name or "N/A",
-         "Condition",      patient_condition or "General Rehabilitation"],
+         "Condition",      patient_condition or "Deconditioning Syndrome"],
         ["Session Date",   started[:16].replace("T","  ") if started else "N/A",
          "Duration",       _dur(overall_duration)],
-        ["Program",        "Low Back Pain" if any(a["prog"]=="low_back_pain" for a in ex_agg.values()) else "General (Kimore)",
+        ["Program",        "Low Back Pain" if any(a["prog"]=="low_back_pain" for a in ex_agg.values()) else "Deconditioning (Kimore)",
          "Exercises",      str(len(selected_norm) or len(ex_agg))],
     ]
     # Fix: use Kimore (correct spelling)
@@ -1039,7 +1039,7 @@ def generate_session_report(
         for key, a in ex_agg.items():
             avg = a["total"] / a["n"] if a["n"] else 0
             cp  = a["correct"] / a["n"] * 100 if a["n"] else 0
-            plbl = "Low Back Pain" if a["prog"] == "low_back_pain" else "General"
+            plbl = "Low Back Pain" if a["prog"] == "low_back_pain" else "Deconditioning"
             pc = _pct_col(cp)
             rc = _score_col(avg)
             prows.append([

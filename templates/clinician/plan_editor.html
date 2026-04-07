@@ -59,9 +59,7 @@
                 <option value="Knee">Knee</option>
                 <option value="Hip">Hip</option>
                 <option value="Shoulder">Shoulder</option>
-                <option value="Back">Back</option>
-                <option value="Ankle">Ankle</option>
-                <option value="General">General</option>
+                <option value="Spine">Spine</option>
             </select>
         </div>
 
@@ -110,7 +108,7 @@
             <div class="pe-patient-header">
                 <div class="pe-patient-info">
                     <h3>{{ patient.name }}</h3>
-                    <span class="pe-condition">{{ patient.condition or 'General Rehab' }}</span>
+                    <span class="pe-condition">{{ patient.condition or 'Deconditioning Syndrome' }}</span>
                     <span class="pe-badge">{{ patient.workouts | length }} exercise{{ 's' if patient.workouts | length != 1 }}</span>
                 </div>
                 <div class="pe-header-right">

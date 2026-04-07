@@ -350,11 +350,9 @@ def _optimize_single_greedy(patients, doctors, timeslots, weights=None, blocked=
                 continue
             
             # Check specialty constraint
-            need = p.get("specialty_need", "General")
+            need = p.get("specialty_need")
             has_match = (
-                not need or 
-                need == "General" or 
-                "General" in d.get("specialties", []) or 
+                not need or
                 need in d.get("specialties", [])
             )
             if not has_match:
@@ -570,16 +568,14 @@ def _optimize_single_gurobi(patients, doctors, timeslots, weights=None, blocked=
                     model.addConstr(X[i, j, t] == 0,
                                     name=f"dist_{i}_{j}_{t}")
 
-    # C6: Specialty matching (flexible - General doctors match anyone)
+    # C6: Specialty matching
     for i in p_ids:
         p = p_map[i]
         need = p["specialty_need"]
         for j in d_ids:
             d = d_map[j]
             has_match = (
-                not need or 
-                need == "General" or 
-                "General" in d["specialties"] or 
+                not need or
                 need in d["specialties"]
             )
             if not has_match:

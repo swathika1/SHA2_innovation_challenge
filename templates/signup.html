@@ -407,12 +407,9 @@
                         </label>
                         <select id="condition" name="condition" class="form-control">
                             <option value="">Select your condition</option>
-                            <option value="General Rehabilitation">General Rehabilitation</option>
-                            <option value="Spine &amp; MSK">Spine &amp; MSK (back, spine, posture)</option>
-                            <option value="Post-Surgical Recovery">Post-Surgical Recovery</option>
-                            <option value="Sports Injury">Sports Injury</option>
-                            <option value="Neurological Rehab">Neurological Rehab</option>
-                            <option value="Orthopaedic Rehab">Orthopaedic Rehab (joint, bone)</option>
+                            {% for condition in all_conditions %}
+                            <option value="{{ condition }}">{{ condition }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     
@@ -459,24 +456,11 @@
                         </label>
                         <div style="background: var(--light); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
                             <small style="color: var(--gray); display: block; margin-bottom: 8px;">Select all that apply — you will only see patients matching your specialties.</small>
+                            {% for specialty in all_specialties %}
                             <label style="display: block; margin: 8px 0; font-weight: 400;">
-                                <input type="checkbox" name="specialties" value="General Rehabilitation"> General Rehabilitation
+                                <input type="checkbox" name="specialties" value="{{ specialty }}"> {{ specialty }}
                             </label>
-                            <label style="display: block; margin: 8px 0; font-weight: 400;">
-                                <input type="checkbox" name="specialties" value="Spine &amp; MSK"> Spine &amp; MSK (back, spine, posture)
-                            </label>
-                            <label style="display: block; margin: 8px 0; font-weight: 400;">
-                                <input type="checkbox" name="specialties" value="Post-Surgical Recovery"> Post-Surgical Recovery
-                            </label>
-                            <label style="display: block; margin: 8px 0; font-weight: 400;">
-                                <input type="checkbox" name="specialties" value="Neurological Rehab"> Neurological Rehab
-                            </label>
-                            <label style="display: block; margin: 8px 0; font-weight: 400;">
-                                <input type="checkbox" name="specialties" value="Sports Injury"> Sports Injury
-                            </label>
-                            <label style="display: block; margin: 8px 0; font-weight: 400;">
-                                <input type="checkbox" name="specialties" value="Orthopaedic Rehab"> Orthopaedic Rehab (joint, bone)
-                            </label>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>

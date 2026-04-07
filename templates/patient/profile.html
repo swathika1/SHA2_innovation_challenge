@@ -517,8 +517,8 @@
                     <span class="info-value">{{ patient.address if patient.address else '—  Not set' }}</span>
                 </div>
                 <div class="info-item">
-                    <span class="info-label">Specialty Needed</span>
-                    <span class="info-value">{{ patient.specialty_needed if patient.specialty_needed else 'General' }}</span>
+                    <span class="info-label">Specialties Needed</span>
+                    <span class="info-value">{{ patient_specialties|join(', ') if patient_specialties else (patient.specialty_needed if patient.specialty_needed else 'Physiotherapy (MSK)') }}</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">Preferred Doctor</span>

@@ -388,7 +388,7 @@
                 {% for patient in monitored_patients %}
                 <div class="patient-card">
                     <h4>{{ patient.name }}</h4>
-                    <div class="patient-meta">{{ patient.condition or 'General Rehab' }}{% if patient.relationship %} · {{ patient.relationship }}{% endif %}</div>
+                    <div class="patient-meta">{{ patient.condition or 'Deconditioning Syndrome' }}{% if patient.relationship %} · {{ patient.relationship }}{% endif %}</div>
                     <div class="patient-stats">
                         <div class="patient-stat">
                             <strong>{{ (patient.adherence_rate or 0)|round|int }}%</strong>
