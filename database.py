@@ -168,7 +168,7 @@ def load_optimization_data():
             doctors.append({
                 'id': doc_id,
                 'label': doc_row['name'],
-                'specialties': specialties if specialties else ['General'],
+                'specialties': specialties if specialties else ['Physiotherapy (MSK)'],
                 'clinic_name': clinic_name,
                 'clinic_address': clinic_address,
                 'availability': availability
@@ -252,7 +252,7 @@ def load_optimization_data():
                 distances[doc['id']] = calculate_pincode_distance(patient_pincode, doctor_pincode)
             
             max_distance = float(pat_row['max_distance']) if pat_row['max_distance'] else 20.0
-            specialty_needed = pat_row['specialty_needed'] if pat_row['specialty_needed'] else 'General'
+            specialty_needed = pat_row['specialty_needed'] if pat_row['specialty_needed'] else 'Physiotherapy (MSK)'
             
             patients.append({
                 'id': patient_id,

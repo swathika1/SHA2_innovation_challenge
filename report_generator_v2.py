@@ -367,7 +367,7 @@ def generate_session_report(
         for ename, agg in ex_agg.items():
             avg_s = agg["total_score"] / agg["count"] if agg["count"] else 0
             cpct  = agg["correct"] / agg["count"] * 100 if agg["count"] else 0
-            prog_label = "Low Back Pain" if agg["program"] == "low_back_pain" else "General"
+            prog_label = "Low Back Pain" if agg["program"] == "low_back_pain" else "Deconditioning"
 
             fb = _generate_exercise_feedback(
                 groq_client,
@@ -389,7 +389,7 @@ def generate_session_report(
         session_summary_text = _generate_session_summary(
             groq_client,
             patient_name=patient_name or "Patient",
-            condition=patient_condition or "General",
+            condition=patient_condition or "Deconditioning Syndrome",
             quality_score=quality, completed_perc=comp_perc,
             pain_before=pain_b, pain_after=pain_a,
             effort=effort_val,
@@ -408,7 +408,7 @@ def generate_session_report(
     # --- patient info banner ---
     info_data = [
         ["Patient",      patient_name or "N/A"],
-        ["Condition",    patient_condition or "General Rehabilitation"],
+        ["Condition",    patient_condition or "Deconditioning Syndrome"],
         ["Session Date", started_at[:16].replace("T", "  ") if started_at else "N/A"],
         ["Duration",     _fmt_duration(overall_duration)],
     ]
@@ -631,7 +631,7 @@ def generate_session_report(
         for ename, agg in ex_agg.items():
             avg_s = agg["total_score"] / agg["count"] if agg["count"] else 0
             cpct  = agg["correct"] / agg["count"] * 100 if agg["count"] else 0
-            plbl  = "Low Back Pain" if agg["program"] == "low_back_pain" else "General"
+            plbl  = "Low Back Pain" if agg["program"] == "low_back_pain" else "Deconditioning"
             pc = _perc_colour(cpct)
             rows.append([
                 ename.replace("_", " ").title(),

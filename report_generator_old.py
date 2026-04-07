@@ -192,7 +192,7 @@ def generate_session_report(
 
     info_data = [
         ["Patient", patient_name or "N/A"],
-        ["Condition", patient_condition or "General Rehabilitation"],
+        ["Condition", patient_condition or "Deconditioning Syndrome"],
         ["Session Date", started_at[:16].replace("T", "  ") if started_at else "N/A"],
         ["Duration", _fmt_duration(overall_duration)],
     ]
@@ -419,7 +419,7 @@ def generate_session_report(
             for ex_name, agg in ex_agg.items():
                 avg_s = agg["total_score"] / agg["count"] if agg["count"] else 0
                 correct_pct = agg["correct"] / agg["count"] * 100 if agg["count"] else 0
-                prog_label = "Low Back Pain" if agg["program"] == "low_back_pain" else "General"
+                prog_label = "Low Back Pain" if agg["program"] == "low_back_pain" else "Deconditioning"
                 pct_color = _perc_colour(correct_pct)
                 rows.append([
                     ex_name.replace("_", " ").title(),

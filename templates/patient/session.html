@@ -953,13 +953,13 @@
 
         <div class="program-grid">
 
-            <!-- General Rehab Card -->
+            <!-- Deconditioning Program Card -->
             <div class="program-card kimore-card" id="progCardKimore" onclick="selectProgram('kimore')">
                 <div class="prog-tick-badge">✓</div>
                 <div class="prog-icon-wrap">🏋️</div>
-                <div class="prog-card-name">General Rehabilitation</div>
+                <div class="prog-card-name">Deconditioning Syndrome</div>
                 <div class="prog-card-sub">Kimore AI Pipeline</div>
-                <div class="prog-card-desc">Full-body rehabilitation for general physical recovery, strength rebuilding and mobility improvement.</div>
+                <div class="prog-card-desc">Full-body rehabilitation for reduced strength, low endurance, and mobility rebuilding.</div>
                 <ul class="prog-ex-list">
                     <li class="prog-ex-item"><span class="prog-ex-tick">✓</span> Lifting of Arms</li>
                     <li class="prog-ex-item"><span class="prog-ex-tick">✓</span> Lateral Trunk Tilt</li>
@@ -973,9 +973,9 @@
             <div class="program-card keraal-card" id="progCardKeraal" onclick="selectProgram('keraal')">
                 <div class="prog-tick-badge">✓</div>
                 <div class="prog-icon-wrap">🦴</div>
-                <div class="prog-card-name">Lower Back Pain Rehab</div>
+                <div class="prog-card-name">Non-specific Low Back Pain</div>
                 <div class="prog-card-sub">Keraal AI Pipeline</div>
-                <div class="prog-card-desc">Specialized exercises for lower back pain relief, spinal stability and lumbar rehab — powered by the Keraal deep-learning model.</div>
+                <div class="prog-card-desc">Specialized exercises for low back pain relief, spinal stability, and lumbar rehab powered by the Keraal pipeline.</div>
                 <ul class="prog-ex-list">
                     <li class="prog-ex-item"><span class="prog-ex-tick">✓</span> Forward Flexion (CTK)</li>
                     <li class="prog-ex-item"><span class="prog-ex-tick">✓</span> Flank Stretch (ELK)</li>
@@ -1100,7 +1100,7 @@
             <div class="timer-value" id="exerciseTimer">00:00</div>
         </div>
         <div class="timer-card" id="kimoreScoreCard" style="border-top:3px solid #007bff;">
-            <div class="timer-label">🏋️ Kimore (General)</div>
+            <div class="timer-label">🏋️ Kimore (Deconditioning)</div>
             <div class="pipeline-score" id="kimoreScoreDisplay" style="color:#007bff;">-- / 50</div>
             <div id="kimoreStatusBadge" class="pipeline-badge analyzing">⌛ Analyzing</div>
         </div>
@@ -1328,7 +1328,7 @@
                     <label><input type="radio" name="exerciseMode" value="manual"> Manual Select</label>
                 </div>
                 <select id="manualExerciseSelect" disabled>
-                    <optgroup label="Kimore (General Rehab)">
+                    <optgroup label="Kimore (Deconditioning)">
                         <option value="squat">Squat</option>
                         <option value="lifting_of_arms">Lifting of Arms</option>
                         <option value="lateral_trunk_tilt">Lateral Trunk Tilt</option>
@@ -1378,7 +1378,7 @@
 <script>
 /* ===================== EXERCISE SELECTION ===================== */
 const AVAILABLE_EXERCISES = {
-    // --- Kimore exercises (General Rehab) ---
+    // --- Kimore exercises (Deconditioning) ---
     "lifting_of_arms":      { name: "Lifting of Arms",               sets: 3, reps: 10, videoId: "IzTFCZv0--E", pipeline: 'kimore',  gifUrl: "/static/gifs/lifting_of_arms.svg",        instructions: "Stand upright, raise both arms from your sides to above your head, then slowly lower. Keep elbows slightly bent.", searchQuery: "lifting arms overhead lateral raise rehabilitation exercise" },
     "lateral_trunk_tilt":    { name: "Lateral Trunk Tilt",            sets: 3, reps: 10, videoId: "4aR-v_5f-T4", pipeline: 'kimore',  gifUrl: "/static/gifs/lateral_trunk_tilt.svg",     instructions: "Stand with feet shoulder-width apart. Slowly tilt your trunk to one side (20-30°), return to center, then tilt to the other side.", searchQuery: "lateral trunk tilt side bend exercise rehabilitation" },
     "trunk_rotation":        { name: "Trunk Rotation",               sets: 3, reps: 10, videoId: "IhP0LP-wyxQ", pipeline: 'kimore',  gifUrl: "/static/gifs/trunk_rotation.svg",         instructions: "Stand with arms relaxed. Rotate your upper body to the left, return to center, then rotate right. Keep hips facing forward.", searchQuery: "standing trunk rotation exercise rehabilitation" },
@@ -1453,7 +1453,7 @@ function selectAllCurrentExercises() {
 /* ===================== PROGRAM DEFINITIONS ===================== */
 const PROGRAM_DEFINITIONS = {
     kimore: {
-        name: 'General Rehabilitation',
+        name: 'Deconditioning Syndrome',
         badgeClass: 'kimore-bg', badgeIcon: '🏋️', badgeLabel: 'Kimore', exCardClass: 'kimore-ex',
         exercises: [
             { id: 'lifting_of_arms',      label: 'Lifting of Arms',               videoId: 'IzTFCZv0--E', gifUrl: '/static/gifs/lifting_of_arms.svg' },
@@ -1465,7 +1465,7 @@ const PROGRAM_DEFINITIONS = {
         ]
     },
     keraal: {
-        name: 'Lower Back Pain Rehab',
+        name: 'Non-specific Low Back Pain',
         badgeClass: 'keraal-bg', badgeIcon: '🦴', badgeLabel: 'Keraal', exCardClass: 'keraal-ex',
         exercises: [
             { id: 'forward_flexion',  label: 'Forward Flexion (CTK)',  videoId: 'Mg8NadAOEQI', gifUrl: '/static/gifs/forward_flexion.svg' },
@@ -1533,7 +1533,7 @@ function selectProgram(prog) {
     btn.classList.toggle('keraal-ready', prog === 'keraal');
     btn.classList.toggle('personalized-ready', prog === 'personalized');
     if (prog === 'kimore') {
-        btn.innerHTML = '🏋️&nbsp; Continue to General Rehab &nbsp;→';
+        btn.innerHTML = '🏋️&nbsp; Continue to Deconditioning &nbsp;→';
     } else if (prog === 'keraal') {
         btn.innerHTML = '🦴&nbsp; Continue to Back Pain Rehab &nbsp;→';
     } else {

@@ -214,54 +214,175 @@ app.secret_key = 'your-secret-key-change-this-in-production'  # Required for ses
 # ==================== CONDITIONS & EXERCISE MAPPING ====================
 
 MSK_CONDITIONS = [
-    'General Rehabilitation',
-    'Spine & MSK',
-    'Post-Surgical Recovery',
-    'Sports Injury',
-    'Neurological Rehab',
-    'Orthopaedic Rehab',
+    'Non-specific Low Back Pain',
+    'Lumbar Spondylosis',
+    'Cervical Spondylosis',
+    'Mechanical Neck Pain',
+    'Rotator Cuff Tendinopathy',
+    'Shoulder Impingement Syndrome',
+    'Knee Osteoarthritis',
+    'Patellofemoral Pain Syndrome',
+    'Hip Osteoarthritis',
+    'Post-Total Knee Replacement (TKR)',
+    'Post-Total Hip Replacement (THR)',
+    'Post-Shoulder Surgery',
+    'Post-Stroke Rehabilitation',
+    'Parkinsonian Gait Disorder',
+    'Deconditioning Syndrome',
 ]
 
-# Doctor specialties use the same vocabulary as patient conditions
-DOCTOR_SPECIALTIES = MSK_CONDITIONS
+DOCTOR_SPECIALTIES = [
+    'Physiotherapy (MSK)',
+    'Orthopaedic Surgery',
+    'Sports Medicine',
+    'Neurological Rehabilitation',
+    'Geriatric Rehabilitation',
+]
+
+DEFAULT_CONDITION = 'Deconditioning Syndrome'
+DEFAULT_DOCTOR_SPECIALTY = 'Physiotherapy (MSK)'
 
 CONDITION_EXERCISE_MAP = {
-    'Spine & MSK': [
+    'Non-specific Low Back Pain': [
         'Lateral Trunk Tilt',
         'Trunk Rotation',
         'Forward Flexion',
         'Flank Stretch',
-        'Torso Rotation',
-        'Trunk Rotation & Target Touch',
     ],
-    'Orthopaedic Rehab': [
-        'Squat',
-        'Pelvis Rotation',
-        'Lifting of Arms',
-    ],
-    'Post-Surgical Recovery': [
-        'Lifting of Arms',
-        'Squat',
-        'Pelvis Rotation',
-        'Trunk Rotation',
-    ],
-    'Sports Injury': [
-        'Squat',
-        'Pelvis Rotation',
-        'Lifting of Arms',
-    ],
-    'General Rehabilitation': [
+    'Lumbar Spondylosis': [
         'Lateral Trunk Tilt',
         'Trunk Rotation',
-        'Torso Rotation',
         'Flank Stretch',
     ],
-    'Neurological Rehab': [
+    'Cervical Spondylosis': [
+        'Lifting of Arms',
+        'Trunk Rotation',
+    ],
+    'Mechanical Neck Pain': [
+        'Lifting of Arms',
+        'Trunk Rotation',
+    ],
+    'Rotator Cuff Tendinopathy': [
+        'Lifting of Arms',
+        'Trunk Rotation',
+    ],
+    'Shoulder Impingement Syndrome': [
+        'Lifting of Arms',
+    ],
+    'Knee Osteoarthritis': [
+        'Squat',
+        'Pelvis Rotation',
+    ],
+    'Patellofemoral Pain Syndrome': [
+        'Squat',
+    ],
+    'Hip Osteoarthritis': [
+        'Squat',
+        'Pelvis Rotation',
+    ],
+    'Post-Total Knee Replacement (TKR)': [
+        'Squat',
+        'Pelvis Rotation',
+    ],
+    'Post-Total Hip Replacement (THR)': [
+        'Pelvis Rotation',
+        'Lifting of Arms',
+    ],
+    'Post-Shoulder Surgery': [
+        'Lifting of Arms',
+    ],
+    'Post-Stroke Rehabilitation': [
         'Trunk Rotation & Target Touch',
+        'Forward Flexion',
+    ],
+    'Parkinsonian Gait Disorder': [
         'Trunk Rotation',
         'Forward Flexion',
+    ],
+    'Deconditioning Syndrome': [
+        'Lateral Trunk Tilt',
+        'Trunk Rotation',
+        'Squat',
+        'Lifting of Arms',
     ],
 }
+
+CONDITION_TO_SPECIALTY_MAP = {
+    'Non-specific Low Back Pain': ['Physiotherapy (MSK)'],
+    'Lumbar Spondylosis': ['Physiotherapy (MSK)', 'Orthopaedic Surgery'],
+    'Cervical Spondylosis': ['Physiotherapy (MSK)', 'Orthopaedic Surgery'],
+    'Mechanical Neck Pain': ['Physiotherapy (MSK)'],
+    'Rotator Cuff Tendinopathy': ['Physiotherapy (MSK)', 'Sports Medicine'],
+    'Shoulder Impingement Syndrome': ['Physiotherapy (MSK)', 'Sports Medicine'],
+    'Knee Osteoarthritis': ['Physiotherapy (MSK)', 'Orthopaedic Surgery'],
+    'Patellofemoral Pain Syndrome': ['Physiotherapy (MSK)', 'Sports Medicine'],
+    'Hip Osteoarthritis': ['Physiotherapy (MSK)', 'Orthopaedic Surgery'],
+    'Post-Total Knee Replacement (TKR)': ['Physiotherapy (MSK)', 'Orthopaedic Surgery'],
+    'Post-Total Hip Replacement (THR)': ['Physiotherapy (MSK)', 'Orthopaedic Surgery'],
+    'Post-Shoulder Surgery': ['Physiotherapy (MSK)', 'Orthopaedic Surgery'],
+    'Post-Stroke Rehabilitation': ['Neurological Rehabilitation'],
+    'Parkinsonian Gait Disorder': ['Neurological Rehabilitation'],
+    'Deconditioning Syndrome': ['Geriatric Rehabilitation', 'Physiotherapy (MSK)'],
+}
+
+LEGACY_CONDITION_MAP = {
+    'General Rehabilitation': 'Deconditioning Syndrome',
+    'Spine & MSK': 'Non-specific Low Back Pain',
+    'Post-Surgical Recovery': 'Post-Total Knee Replacement (TKR)',
+    'Sports Injury': 'Patellofemoral Pain Syndrome',
+    'Neurological Rehab': 'Post-Stroke Rehabilitation',
+    'Orthopaedic Rehab': 'Knee Osteoarthritis',
+}
+
+
+def normalize_condition_name(condition):
+    """Map legacy condition labels onto the current condition taxonomy."""
+    normalized = (condition or '').strip()
+    if normalized in MSK_CONDITIONS:
+        return normalized
+    return LEGACY_CONDITION_MAP.get(normalized, DEFAULT_CONDITION)
+
+
+def get_condition_exercises(condition):
+    """Return the canonical exercise list for a condition."""
+    normalized = normalize_condition_name(condition)
+    return CONDITION_EXERCISE_MAP.get(normalized, CONDITION_EXERCISE_MAP[DEFAULT_CONDITION])
+
+
+def get_condition_specialties(condition):
+    """Return all specialties that can manage the given condition."""
+    normalized = normalize_condition_name(condition)
+    return CONDITION_TO_SPECIALTY_MAP.get(normalized, [DEFAULT_DOCTOR_SPECIALTY])
+
+
+def get_primary_specialty_for_condition(condition):
+    """Return the primary specialty used for single-value compatibility fields."""
+    return get_condition_specialties(condition)[0]
+
+
+def sync_patient_specialties(patient_user_id, condition):
+    """
+    Persist all specialties mapped to a patient's condition.
+
+    We keep patients.specialty_needed as the primary specialty for
+    compatibility with existing optimization code, and store the full set in
+    patient_specialties for multi-specialty clinician matching.
+    """
+    normalized = normalize_condition_name(condition)
+    specialties = get_condition_specialties(normalized)
+
+    execute_db(
+        'UPDATE patients SET condition = ?, specialty_needed = ? WHERE user_id = ?',
+        (normalized, specialties[0], patient_user_id)
+    )
+    execute_db('DELETE FROM patient_specialties WHERE patient_id = ?', (patient_user_id,))
+    for specialty in specialties:
+        execute_db(
+            'INSERT OR IGNORE INTO patient_specialties (patient_id, specialty) VALUES (?, ?)',
+            (patient_user_id, specialty)
+        )
+
+    return normalized, specialties
 
 # Global dict to store latest landmarks for frontend polling
 LATEST_LANDMARKS = {}
@@ -830,30 +951,20 @@ def signup():
         
         # If patient, create patients record with optimization data
         if role == 'patient':
-            condition = request.form.get('condition', '').strip()
+            condition = normalize_condition_name(request.form.get('condition', '').strip())
             # If no condition selected, assign a random one
             if not condition or condition not in MSK_CONDITIONS:
                 condition = random.choice(MSK_CONDITIONS)
             urgency = request.form.get('urgency', 'Medium')
             max_distance = float(request.form.get('max_distance', 20))
-            
-            # Map condition to specialty needed
-            condition_to_specialty = {
-                'Joint disorders': 'Orthopedic',
-                'Spine conditions': 'MSK',
-                'Post-surgical rehab': 'Post-op',
-                'Sports injuries': 'Sports',
-                'Postural disorders': 'MSK',
-                'Muscle tightness': 'General',
-                'Neuromuscular rehab': 'Neuro',
-            }
-            specialty_needed = condition_to_specialty.get(condition, 'General')
+            specialty_needed = get_primary_specialty_for_condition(condition)
             
             execute_db('''
                 INSERT INTO patients (user_id, condition, urgency, max_distance, 
                                     specialty_needed, address) 
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', (user_id, condition, urgency, max_distance, specialty_needed, pincode))
+            sync_patient_specialties(user_id, condition)
             
             # Set default availability (all timeslots available)
             timeslots = query_db('SELECT id FROM timeslots')
@@ -901,15 +1012,16 @@ def signup():
             # Save doctor specialties
             if specialties:
                 for specialty in specialties:
-                    execute_db(
-                        'INSERT INTO doctor_specialties (doctor_id, specialty) VALUES (?, ?)',
-                        (user_id, specialty)
-                    )
+                    if specialty in DOCTOR_SPECIALTIES:
+                        execute_db(
+                            'INSERT INTO doctor_specialties (doctor_id, specialty) VALUES (?, ?)',
+                            (user_id, specialty)
+                        )
             else:
-                # Default to General if no specialties selected
+                # Default to the broad MSK pathway if nothing was selected.
                 execute_db(
                     'INSERT INTO doctor_specialties (doctor_id, specialty) VALUES (?, ?)',
-                    (user_id, 'General')
+                    (user_id, DEFAULT_DOCTOR_SPECIALTY)
                 )
             
             # Save clinic location
@@ -947,7 +1059,12 @@ def signup():
     
     # GET request - fetch available doctors for the dropdown
     doctors = query_db('SELECT id, name FROM users WHERE role = ?', ('doctor',))
-    return render_template('signup.html', doctors=doctors)
+    return render_template(
+        'signup.html',
+        doctors=doctors,
+        all_conditions=MSK_CONDITIONS,
+        all_specialties=DOCTOR_SPECIALTIES,
+    )
 
 
 @app.route('/logout')
@@ -976,11 +1093,22 @@ def patient_dashboard():
     
     # If patient record doesn't exist yet, create one with default values
     if not patient_info:
+        default_condition = DEFAULT_CONDITION
         execute_db('''
             INSERT INTO patients (user_id, condition, current_week, adherence_rate, 
-                                  streak_days, avg_quality_score, avg_pain_level)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (session['user_id'], 'General Rehabilitation', 1, 0, 0, 0, 0))
+                                  streak_days, avg_quality_score, avg_pain_level, specialty_needed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            session['user_id'],
+            default_condition,
+            1,
+            0,
+            0,
+            0,
+            0,
+            get_primary_specialty_for_condition(default_condition),
+        ))
+        sync_patient_specialties(session['user_id'], default_condition)
         
         patient_info = query_db(
             'SELECT * FROM patients WHERE user_id = ?',
@@ -1397,7 +1525,7 @@ def api_session_report(session_id):
     user_row = query_db('SELECT name FROM users WHERE id = ?', (patient_id,), one=True)
     patient_name = user_row['name'] if user_row else 'Patient'
     pat_row = query_db('SELECT condition FROM patients WHERE user_id = ?', (patient_id,), one=True)
-    patient_condition = pat_row['condition'] if pat_row else 'General'
+    patient_condition = normalize_condition_name(pat_row['condition']) if pat_row else DEFAULT_CONDITION
 
     # ── exercises ───────────────────────────────────────────────────────
     exercises_raw = query_db('''
@@ -1509,7 +1637,7 @@ def api_session_report_doctor(session_id):
         (patient_id,), one=True
     )
     patient_name      = user_row['name'] if user_row else 'Patient'
-    patient_condition = pat_row['condition'] if pat_row else 'General'
+    patient_condition = normalize_condition_name(pat_row['condition']) if pat_row else DEFAULT_CONDITION
     current_week      = pat_row['current_week'] if pat_row else 1
     adherence         = float(pat_row['adherence_rate'] or 0) if pat_row else 0
     streak_days       = int(pat_row['streak_days'] or 0) if pat_row else 0
@@ -1923,6 +2051,11 @@ def patient_profile():
         JOIN users u ON cp.caregiver_id = u.id
         WHERE cp.patient_id = ?
     ''', (session['user_id'],), one=True)
+    patient_specialties_rows = query_db(
+        'SELECT specialty FROM patient_specialties WHERE patient_id = ? ORDER BY specialty',
+        (session['user_id'],)
+    )
+    patient_specialties = [row['specialty'] for row in (patient_specialties_rows or [])]
 
     # Compute age from dob
     age = None
@@ -1944,6 +2077,7 @@ def patient_profile():
                          patient=patient_info,
                          doctor=doctor,
                          caregiver=caregiver,
+                         patient_specialties=patient_specialties,
                          age=age,
                          risk_data=risk_data,
                          active_tab='personal')
@@ -2412,10 +2546,11 @@ def clinician_dashboard():
     if doctor_specialties_list:
         _ph = ','.join('?' * len(doctor_specialties_list))
         new_matched_patients = query_db(f'''
-            SELECT u.id, u.name, u.email, p.condition, p.specialty_needed
+            SELECT DISTINCT u.id, u.name, u.email, p.condition, p.specialty_needed
             FROM users u
             JOIN patients p ON u.id = p.user_id
-            WHERE p.specialty_needed IN ({_ph})
+            JOIN patient_specialties ps ON ps.patient_id = p.user_id
+            WHERE ps.specialty IN ({_ph})
               AND u.id NOT IN (SELECT patient_id FROM doctor_patient WHERE doctor_id = ?)
             ORDER BY u.name
         ''', doctor_specialties_list + [session['user_id']])
@@ -3868,10 +4003,11 @@ def plan_editor():
     if doctor_specialties_list:
         _ph = ','.join('?' * len(doctor_specialties_list))
         unassigned_matches = query_db(f'''
-            SELECT u.id, u.name, p.condition
+            SELECT DISTINCT u.id, u.name, p.condition
             FROM users u
             JOIN patients p ON u.id = p.user_id
-            WHERE p.specialty_needed IN ({_ph})
+            JOIN patient_specialties ps ON ps.patient_id = p.user_id
+            WHERE ps.specialty IN ({_ph})
               AND u.id NOT IN (SELECT patient_id FROM doctor_patient WHERE doctor_id = ?)
         ''', doctor_specialties_list + [doctor_id])
     else:
@@ -6055,6 +6191,14 @@ def ensure_tables_exist():
             UNIQUE(patient_id, exercise_id)
         );
 
+        CREATE TABLE IF NOT EXISTS patient_specialties (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            specialty TEXT NOT NULL,
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            UNIQUE(patient_id, specialty)
+        );
+
         CREATE TABLE IF NOT EXISTS adaptive_plan_suggestions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             patient_id INTEGER NOT NULL,
@@ -6184,6 +6328,16 @@ def ensure_tables_exist():
             FOREIGN KEY (patient_id) REFERENCES users(id),
             FOREIGN KEY (timeslot_id) REFERENCES timeslots(id),
             UNIQUE(patient_id, timeslot_id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS patient_specialties (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            specialty TEXT NOT NULL,
+            FOREIGN KEY (patient_id) REFERENCES users(id),
+            UNIQUE(patient_id, specialty)
         )
     ''')
 
@@ -6617,22 +6771,20 @@ def recalculate_adherence(patient_id: int):
 def assign_patient_exercises(patient_user_id, condition):
     """
     Assign exercises to a patient based on their MSK condition.
-    Inserts rows into patient_exercises for each mapped exercise.
+    Syncs patient_exercises so the enabled rows mirror the mapped condition.
     """
-    exercise_names = CONDITION_EXERCISE_MAP.get(condition, [])
-    if not exercise_names:
-        # Fallback: assign all exercises
-        exercise_names = [
-            'Lifting of Arms', 'Lateral Trunk Tilt', 'Trunk Rotation',
-            'Squat', 'Trunk Rotation & Target Touch', 'Pelvis Rotation',
-            'Forward Flexion', 'Flank Stretch', 'Torso Rotation',
-        ]
+    exercise_names = get_condition_exercises(condition)
+    execute_db('UPDATE patient_exercises SET enabled = 0 WHERE patient_id = ?', (patient_user_id,))
 
     for ex_name in exercise_names:
         ex_row = query_db('SELECT id FROM exercises WHERE name = ?', (ex_name,), one=True)
         if ex_row:
             execute_db(
                 'INSERT OR IGNORE INTO patient_exercises (patient_id, exercise_id, enabled) VALUES (?, ?, 1)',
+                (patient_user_id, ex_row['id'])
+            )
+            execute_db(
+                'UPDATE patient_exercises SET enabled = 1 WHERE patient_id = ? AND exercise_id = ?',
                 (patient_user_id, ex_row['id'])
             )
 

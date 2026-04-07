@@ -171,7 +171,7 @@
         <div>
             <h2>{{ patient.name }}</h2>
             <div class="pp-hero-meta">
-                <span class="pp-pill pp-pill-condition"><i class="fa-solid fa-heart-pulse"></i> {{ patient.condition or 'General Rehab' }}</span>
+                <span class="pp-pill pp-pill-condition"><i class="fa-solid fa-heart-pulse"></i> {{ patient.condition or 'Deconditioning Syndrome' }}</span>
                 <span class="pp-pill pp-pill-week"><i class="fa-solid fa-calendar-week"></i> Week {{ patient.current_week or 1 }}</span>
                 {% if patient.streak_days and patient.streak_days > 0 %}
                 <span class="pp-pill pp-pill-streak"><i class="fa-solid fa-fire"></i> {{ patient.streak_days }}-day streak</span>
@@ -250,7 +250,7 @@
                         {% else %}—{% endif %}
                     </td>
                 </tr>
-                <tr><td>Condition</td><td><strong style="color:#6366f1;">{{ patient.condition or 'General Rehab' }}</strong></td></tr>
+                <tr><td>Condition</td><td><strong style="color:#6366f1;">{{ patient.condition or 'Deconditioning Syndrome' }}</strong></td></tr>
                 <tr><td>Surgery Date</td><td>{{ patient.surgery_date or '—' }}</td></tr>
                 <tr>
                     <td>Postal Code</td>
