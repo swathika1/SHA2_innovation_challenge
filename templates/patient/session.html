@@ -3426,9 +3426,49 @@ function stopCameraCalibration() {
  */
 function setupAudioRecorder(stream) {
     try {
+        console.log('[AUDIO] setupAudioRecorder called');
+        
+        // Validate stream has audio tracks
+        const audioTracks = stream.getAudioTracks();
+        console.log(`[AUDIO] Stream has ${audioTracks.length} audio track(s)`);
+        
+        if (audioTracks.length === 0) {
+            console.warn('[AUDIO] ❌ No audio tracks in stream - cannot record audio!');
+            mediaRecorder = null;
+            return;
+        }
+        
+        // Log audio track details
+        audioTracks.forEach((track, idx) => {
+            console.log(`[AUDIO] Track ${idx}: ${track.label}, enabled=${track.enabled}, readyState=${track.readyState}`);
+        });
+        
         // Create MediaRecorder with audio stream
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            console.log('[AUDIO] AudioContext created');
+        } catch (acErr) {
+            console.warn('[AUDIO] AudioContext creation failed:', acErr.message);
+        }
+        
+        // Check supported MIME type
+        let mimeType = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+            console.warn(`[AUDIO] MIME type ${mimeType} not supported, trying alternatives...`);
+            const alternatives = ['audio/webm:codecs=opus', 'audio/mp4', 'audio/wav'];
+            for (let alt of alternatives) {
+                if (MediaRecorder.isTypeSupported(alt)) {
+                    mimeType = alt;
+                    console.log(`[AUDIO] Using MIME type: ${mimeType}`);
+                    break;
+                }
+            }
+        } else {
+            console.log(`[AUDIO] MIME type ${mimeType} is supported`);
+        }
+        
+        mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+        console.log(`[AUDIO] MediaRecorder created with MIME: ${mimeType}`);
         
         audioChunks = [];
         
@@ -3436,19 +3476,28 @@ function setupAudioRecorder(stream) {
         mediaRecorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
                 audioChunks.push(event.data);
+                console.log(`[AUDIO] Chunk received: ${event.data.size} bytes (total: ${audioChunks.length} chunks)`);
             }
         };
         
         mediaRecorder.onerror = (event) => {
-            console.warn('[AUDIO] MediaRecorder error:', event.error);
+            console.error('[AUDIO] MediaRecorder error:', event.error);
+        };
+        
+        mediaRecorder.onstart = () => {
+            console.log('[AUDIO] Recording started');
+        };
+        
+        mediaRecorder.onstop = () => {
+            console.log('[AUDIO] Recording stopped');
         };
         
         // Start recording
         mediaRecorder.start(250);  // Request data every 250ms
-        console.log('[AUDIO] MediaRecorder started');
+        console.log('[AUDIO] ✅ MediaRecorder started with 250ms interval');
         
     } catch (err) {
-        console.warn('[AUDIO] Failed to setup audio recorder:', err);
+        console.error('[AUDIO] ❌ Failed to setup audio recorder:', err);
         mediaRecorder = null;
     }
 }
@@ -3465,33 +3514,46 @@ async function getAudioChunk() {
     }
     
     if (audioChunks.length === 0) {
-        console.warn('[AUDIO] No audio chunks available yet');
+        // Don't warn on this - it's normal if no one is speaking
         return null;
     }
     
     try {
-        console.log(`[AUDIO] Processing ${audioChunks.length} chunks...`);
+        const chunkCount = audioChunks.length;
+        console.log(`[AUDIO-SEND] Processing ${chunkCount} audio chunks...`);
+        
         // Create blob from accumulated chunks
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        const originalSize = audioChunks.length;
+        const blobSize = audioBlob.size;
+        
         audioChunks = [];  // Reset buffer immediately
         
         // Convert to base64
         return new Promise((resolve) => {
             const reader = new FileReader();
             reader.onload = () => {
-                const base64 = reader.result.split(',')[1];  // Remove data:audio/webm;base64, prefix
-                console.log(`[AUDIO] Successfully encoded ${originalSize} chunks (${base64 ? base64.length : 0} chars base64)`);
-                resolve(base64 || null);
+                try {
+                    const b64String = reader.result.split(',')[1];
+                    if (b64String) {
+                        console.log(`[AUDIO-SEND] ✅ Encoded: ${chunkCount} chunks (${blobSize} bytes) → ${b64String.length} base64 chars`);
+                        resolve(b64String);
+                    } else {
+                        console.warn('[AUDIO-SEND] Base64 conversion resulted in empty string');
+                        resolve(null);
+                    }
+                } catch (e) {
+                    console.error('[AUDIO-SEND] Error parsing base64:', e);
+                    resolve(null);
+                }
             };
             reader.onerror = () => {
-                console.warn('[AUDIO] FileReader error');
+                console.error('[AUDIO-SEND] FileReader error:', reader.error);
                 resolve(null);
             };
             reader.readAsDataURL(audioBlob);
         });
     } catch (err) {
-        console.warn('[AUDIO] Error getting audio chunk:', err);
+        console.error('[AUDIO-SEND] Error processing audio chunk:', err);
         return null;
     }
 }
@@ -3719,20 +3781,27 @@ async function pollFeedback() {
         // ========== STOP WORD DETECTION: Get audio chunk ==========
         const audioChunk = await getAudioChunk();
         if (audioChunk) {
-            console.log(`[STOP-WORD] Audio chunk captured: ${audioChunk.length} chars`);
+            console.log(`[POLL-FEEDBACK] Including audio in request: ${audioChunk.length} chars`);
         } else {
-            console.log('[STOP-WORD] No audio chunk available (normal if no speech)');
+            console.log('[POLL-FEEDBACK] No audio chunk this polling interval (normal if no speech detected)');
         }
         // ===========================================================
         
-        const fetchKimore = () => fetchWithTimeout(API_BASE + '/api/live_feedback',
-            { frame_b64, language: lang, mode: exerciseMode, manual_exercise: manualExercise, exercise_hint, audio_chunk: audioChunk });
-        const fetchKeraal = () => fetchWithTimeout(API_BASE + '/api/live_feedback_keraal',
-            { frame_b64, language: lang, exercise_hint, audio_chunk: audioChunk });
+        const fetchKimore = () => {
+            const body = { frame_b64, language: lang, mode: exerciseMode, manual_exercise: manualExercise, exercise_hint, audio_chunk: audioChunk };
+            console.log(`[POLL-FEEDBACK] Sending to /api/live_feedback: audio_chunk present = ${!!audioChunk}`);
+            return fetchWithTimeout(API_BASE + '/api/live_feedback', body);
+        };
+        const fetchKeraal = () => {
+            const body = { frame_b64, language: lang, exercise_hint, audio_chunk: audioChunk };
+            console.log(`[POLL-FEEDBACK] Sending to /api/live_feedback_keraal: audio_chunk present = ${!!audioChunk}`);
+            return fetchWithTimeout(API_BASE + '/api/live_feedback_keraal', body);
+        };
+        
         if (selectedPipeline === 'both') {
             const [kr, kk] = await Promise.allSettled([fetchKimore(), fetchKeraal()]);
             if ((kr.value && kr.value.stopped) || (kk.value && kk.value.stopped)) {
-                console.log('[STOP-WORD] Stop detected!');
+                console.log('[STOP-WORD] ✅ Stop signal received from backend!');
                 showNotification('Session stopped by voice command', 'info', 3000);
                 await handleSessionStop();
                 return;
@@ -3742,7 +3811,7 @@ async function pollFeedback() {
         } else if (selectedPipeline === 'kimore') {
             const out = await fetchKimore();
             if (out && out.stopped) {
-                console.log('[STOP-WORD] Stop detected!');
+                console.log('[STOP-WORD] ✅ Stop signal received from backend!');
                 showNotification('Session stopped by voice command', 'info', 3000);
                 await handleSessionStop();
                 return;
@@ -3751,7 +3820,7 @@ async function pollFeedback() {
         } else {
             const out = await fetchKeraal();
             if (out && out.stopped) {
-                console.log('[STOP-WORD] Stop detected!');
+                console.log('[STOP-WORD] ✅ Stop signal received from backend!');
                 showNotification('Session stopped by voice command', 'info', 3000);
                 await handleSessionStop();
                 return;
