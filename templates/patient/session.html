@@ -1240,7 +1240,7 @@
                         <div class="camera-message-list" id="cameraSetupMessages">
                             <div class="camera-message">Open your camera and make sure your full body is visible.</div>
                         </div>
-                        <button id="manualStartBtn" class="btn-start-session" style="margin-top: 12px; display: none; width: 100%;" onclick="beginSessionAfterCalibration()">
+                        <button id="manualStartBtn" class="btn-start-session" style="margin-top: 12px; display: none; width: 100%;" onclick="beginSessionAfterCalibration(true)">
                             ▶ Start Exercise Now
                         </button>
                     </div>
@@ -4038,17 +4038,25 @@ async function startSession() {
     }
 }
 
-async function beginSessionAfterCalibration() {
+async function beginSessionAfterCalibration(forceStart = false) {
     if (sessionStarted) return;
-    if (!latestCameraSetup || !latestCameraSetup.ready || calibrationStablePasses < CAMERA_READY_STABLE_PASSES) {
-        autoStartingSession = false;
-        addFeedback('warning', 'Finish the camera setup before starting the session.');
-        return;
+    
+    // If not force-starting, require good camera setup
+    if (!forceStart) {
+        if (!latestCameraSetup || !latestCameraSetup.ready || calibrationStablePasses < CAMERA_READY_STABLE_PASSES) {
+            autoStartingSession = false;
+            addFeedback('warning', 'Finish the camera setup before starting the session.');
+            return;
+        }
+    } else {
+        // Force start - bypass camera checks
+        console.log('[SESSION] Force-starting session (manual button click)');
     }
 
     const created = await createTrackedSession();
     if (!created) {
         autoStartingSession = false;
+        addFeedback('error', 'Failed to create session. Please try again.');
         return;
     }
 
