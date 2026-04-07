@@ -1240,6 +1240,9 @@
                         <div class="camera-message-list" id="cameraSetupMessages">
                             <div class="camera-message">Open your camera and make sure your full body is visible.</div>
                         </div>
+                        <button id="manualStartBtn" class="btn-start-session" style="margin-top: 12px; display: none; width: 100%;" onclick="beginSessionAfterCalibration()">
+                            ▶ Start Exercise Now
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2367,6 +2370,7 @@ function renderCameraSetup(analysis) {
     const checklist = document.getElementById('cameraSetupChecklist');
     const messages = document.getElementById('cameraSetupMessages');
     const panel = document.getElementById('cameraSetupPanel');
+    const manualStartBtn = document.getElementById('manualStartBtn');
 
     if (!analysis || !pill || !score || !summary || !checklist || !messages || !panel) return;
 
@@ -2381,6 +2385,7 @@ function renderCameraSetup(analysis) {
         pill.className = 'camera-ready-pill ready';
         pill.textContent = 'Setup complete';
         summary.textContent = 'Camera setup passed. Starting exercise automatically.';
+        if (manualStartBtn) manualStartBtn.style.display = 'none';
     } else {
         pill.className = 'camera-ready-pill ' + (analysis.ready ? 'ready' : 'warning');
         if (!analysis.poseDetected) {
@@ -2392,6 +2397,15 @@ function renderCameraSetup(analysis) {
         } else {
             pill.textContent = 'Adjust camera';
             summary.textContent = analysis.score + ' / 5 body checkpoints are visible.';
+        }
+        
+        // Show manual start button if at least 3 joints are visible
+        if (manualStartBtn) {
+            if (analysis.score >= 3) {
+                manualStartBtn.style.display = 'block';
+            } else {
+                manualStartBtn.style.display = 'none';
+            }
         }
     }
 
