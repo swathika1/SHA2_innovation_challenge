@@ -2399,13 +2399,9 @@ function renderCameraSetup(analysis) {
             summary.textContent = analysis.score + ' / 5 body checkpoints are visible.';
         }
         
-        // Show manual start button if at least 3 joints are visible
+        // Always show manual start button during calibration phase as an escape hatch
         if (manualStartBtn) {
-            if (analysis.score >= 3) {
-                manualStartBtn.style.display = 'block';
-            } else {
-                manualStartBtn.style.display = 'none';
-            }
+            manualStartBtn.style.display = 'block';
         }
     }
 
