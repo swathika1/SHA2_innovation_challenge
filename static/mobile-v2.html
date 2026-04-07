@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>SHA2 Rehab Coach</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --primary: #1e40af;
+            --primary-dark: #1e3a8a;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-content {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 100px;
+        }
+
+        .screen {
+            display: none;
+            min-height: 100%;
+        }
+
+        .screen.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* HEADER */
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* CONTAINER */
+        .container {
+            padding: 16px;
+            max-width: 100%;
+            margin: 0 auto;
+        }
+
+        /* CARD */
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .card-title {
+            font-weight: 700;
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        .card-subtitle {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* BUTTONS */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 44px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: var(--bg);
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 8px 12px;
+            font-size: 14px;
+            min-height: auto;
+            margin-bottom: 0;
+        }
+
+        /* GRID */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .stat-box {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--primary);
+            margin: 8px 0;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* VIDEO CONTAINER */
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 16px;
+            aspect-ratio: 3 / 4;
+        }
+
+        #cameraFeed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 10;
+            color: white;
+            font-weight: 700;
+        }
+
+        .rep-counter {
+            background: rgba(0,0,0,0.7);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 16px;
+        }
+
+        .form-status {
+            background: var(--success);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .form-status.warning {
+            background: var(--warning);
+        }
+
+        .form-status.error {
+            background: var(--danger);
+        }
+
+        /* GREETING */
+        .greeting-card {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+
+        .greeting-card h2 {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+
+        .streak-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255,255,255,0.2);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-top: 12px;
+        }
+
+        /* LIST ITEMS */
+        .list-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .list-item-icon {
+            font-size: 24px;
+            min-width: 32px;
+            text-align: center;
+            color: var(--primary);
+        }
+
+        .list-item-content {
+            flex: 1;
+        }
+
+        .list-item-title {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .list-item-subtitle {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* FORMS */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+        }
+
+        /* BOTTOM NAV */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-around;
+            z-index: 999;
+            padding-top: 8px;
+            padding-bottom: max(8px, env(safe-area-inset-bottom));
+        }
+
+        .nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 11px;
+            padding: 8px;
+            transition: all 0.2s;
+        }
+
+        .nav-item.active {
+            color: var(--primary);
+        }
+
+        .nav-item i {
+            font-size: 24px;
+        }
+
+        /* MODAL */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            align-items: flex-end;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--card);
+            width: 100%;
+            border-radius: 16px 16px 0 0;
+            padding: 20px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        /* LOADING */
+        .spinner {
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ALERT */
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- HEADER -->
+        <div class="header">
+            <h1>
+                <i class="fas fa-heartbeat"></i>
+                SHA2 Coach
+            </h1>
+        </div>
+
+        <!-- CONTENT -->
+        <div class="app-content">
+            <!-- HOME SCREEN -->
+            <div id="homeScreen" class="screen active">
+                <div class="container">
+                    <div class="greeting-card">
+                        <h2>Welcome back!</h2>
+                        <p id="userGreeting">Patient</p>
+                        <div class="streak-badge">
+                            <span>🔥</span>
+                            <span id="streakCount">0</span> day streak
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="stat-box">
+                            <div class="stat-label">Adherence</div>
+                            <div class="stat-value" id="adherenceRate">0%</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">This Week</div>
+                            <div class="stat-value" id="weekSessions">0</div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="app.goToScreen('exerciseScreen')">
+                        <i class="fas fa-play"></i> Start Exercise
+                    </button>
+
+                    <div class="card">
+                        <div class="card-title">Quick Actions</div>
+                        <div class="list-item" style="border: none; padding: 0;" onclick="app.goToScreen('appointmentsScreen')">
+                            <div class="list-item-icon"><i class="fas fa-calendar"></i></div>
+                            <div class="list-item-content">
+                                <div class="list-item-title">Appointments</div>
+                            </div>
+                        </div>
+                        <div class="list-item" style="border: none; padding: 0; border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+                            <div class="list-item-icon"><i class="fas fa-chat"></i></div>
+                            <div class="list-item-content">
+                                <div class="list-item-title">Chat Support</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EXERCISE SCREEN -->
+            <div id="exerciseScreen" class="screen">
+                <div class="container">
+                    <div class="video-container">
+                        <video id="cameraFeed" playsinline autoplay muted></video>
+                        <div class="video-overlay">
+                            <div class="rep-counter">
+                                Reps: <span id="repCount">0</span>
+                            </div>
+                            <div class="form-status" id="formStatus">Good Form</div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-primary" id="startExerciseBtn" style="margin-bottom: 0;">
+                            <i class="fas fa-play"></i> Start
+                        </button>
+                        <button class="btn btn-secondary" style="margin-bottom: 0;" onclick="app.goToScreen('homeScreen')">
+                            <i class="fas fa-times"></i> Done
+                        </button>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Exercise Information</div>
+                        <div class="card-subtitle" id="exerciseInstructions">
+                            
+Position yourself in front of the camera. Maintain proper form throughout.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REPORTS SCREEN -->
+            <div id="reportsScreen" class="screen">
+                <div class="container">
+                    <div class="card">
+                        <div class="card-title">Your Progress</div>
+                        <div style="margin: 12px 0;">
+                            <small style="color: var(--text-muted);">This Week</small>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);" id="weekProgress">0%</div>
+                        </div>
+                        <div style="margin: 12px 0;">
+                            <small style="color: var(--text-muted);">Quality Score</small>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);" id="qualityScore">0.0/10</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="list-item" style="border: none; padding: 0;">
+                            <span>Avg Pain Level:</span>
+                            <strong style="margin-left: auto;" id="avgPain">0/10</strong>
+                        </div>
+                        <div class="list-item" style="border: none; padding: 0; margin-top: 8px;">
+                            <span>Adherence:</span>
+                            <strong style="margin-left: auto;" id="adherenceReport">0%</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- APPOINTMENTS SCREEN -->
+            <div id="appointmentsScreen" class="screen">
+                <div class="container">
+                    <h3 style="margin-bottom: 16px;">📅 Appointments</h3>
+                    <div id="appointmentsList"></div>
+                    <button class="btn btn-primary" onclick="alert('Schedule appointment feature')">
+                        <i class="fas fa-plus"></i> Schedule New
+                    </button>
+                </div>
+            </div>
+
+            <!-- PROFILE SCREEN -->
+            <div id="profileScreen" class="screen">
+                <div class="container">
+                    <div class="card">
+                        <div class="list-item" style="border: none; padding: 16px 0;" >
+                            <div class="list-item-icon" style="font-size: 32px;"><i class="fas fa-user-circle"></i></div>
+                            <div class="list-item-content">
+                                <div class="list-item-title" id="profileName">User</div>
+                                <div class="list-item-subtitle" id="profileRole">Patient</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="profileEmail" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Role</label>
+                            <input type="text" id="profileRoleInput" readonly>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-secondary" onclick="app.logout()">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM NAVIGATION -->
+        <div class="bottom-nav">
+            <div class="nav-item active" onclick="app.goToScreen('homeScreen')">
+                <i class="fas fa-home"></i>
+                <span>Home</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('exerciseScreen')">
+                <i class="fas fa-video"></i>
+                <span>Exercise</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('reportsScreen')">
+                <i class="fas fa-chart-bar"></i>
+                <span>Reports</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('appointmentsScreen')">
+                <i class="fas fa-calendar"></i>
+                <span>Appointments</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('profileScreen')">
+                <i class="fas fa-user"></i>
+                <span>Profile</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/api-client.js"></script>
+    <script>
+        class MobileApp {
+            constructor() {
+                this.currentScreen = 'homeScreen';
+                this.user = null;
+                this.videoStream = null;
+                this.isExercising = false;
+            }
+
+            async init() {
+                console.log('[Mobile App] Initializing...');
+                await this.loadUser();
+                this.setupVideoCapture();
+                this.attachEventListeners();
+                this.loadDashboard();
+            }
+
+            async loadUser() {
+                try {
+                    this.user = await api.getCurrentUser();
+                    console.log('[Mobile App] User loaded:', this.user);
+                    document.getElementById('userGreeting').textContent = this.user.first_name || 'Patient';
+                    document.getElementById('profileName').textContent = `${this.user.first_name} ${this.user.last_name}`;
+                    document.getElementById('profileEmail').value = this.user.email;
+                    document.getElementById('profileRole').textContent = (this.user.role || 'patient').toUpperCase();
+                    document.getElementById('profileRoleInput').value = this.user.role || 'patient';
+                } catch (err) {
+                    console.error('[Mobile App] Failed to load user:', err);
+                    window.location.href = '/login';
+                }
+            }
+
+            async loadDashboard() {
+                try {
+                    // Load reports data
+                    const reports = await api.getPatientReports();
+                    console.log('[Mobile App] Reports loaded:', reports);
+                    // Update UI with reports data
+                } catch (err) {
+                    console.warn('[Mobile App] Could not load reports:', err);
+                }
+            }
+
+            async setupVideoCapture() {
+                const video = document.getElementById('cameraFeed');
+                try {
+                    this.videoStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment', width: 480, height: 640 },
+                        audio: false
+                    });
+                    video.srcObject = this.videoStream;
+                    console.log('[Mobile App] Camera initialized');
+                } catch (err) {
+                    console.error('[Mobile App] Camera error:', err);
+                    alert('Camera access required for exercise tracking');
+                }
+            }
+
+            attachEventListeners() {
+                document.getElementById('startExerciseBtn')?.addEventListener('click', () => {
+                    this.toggleExercise();
+                });
+            }
+
+            async toggleExercise() {
+                this.isExercising = !this.isExercising;
+                const btn = document.getElementById('startExerciseBtn');
+                
+                if (this.isExercising) {
+                    btn.innerHTML = '<i class="fas fa-stop"></i> Stop';
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-danger');
+                    await this.startExerciseTracking();
+                } else {
+                    btn.innerHTML = '<i class="fas fa-play"></i> Start';
+                    btn.classList.add('btn-primary');
+                    btn.classList.remove('btn-danger');
+                    await this.stopExerciseTracking();
+                }
+            }
+
+            async startExerciseTracking() {
+                console.log('[Exercise] Starting exercise tracking...');
+                
+                const video = document.getElementById('cameraFeed');
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+
+                const trackFrame = async () => {
+                    if (!this.isExercising) return;
+
+                    ctx.drawImage(video, 0, 0);
+                    const frameData = canvas.toDataURL('image/jpeg');
+
+                    try {
+                        const feedback = await api.sendFrameForPoseFeedback(frameData);
+                        console.log('[Exercise] Feedback:', feedback);
+                        // Update UI
+                        if (feedback.rep_count) {
+                            document.getElementById('repCount').textContent = feedback.rep_count;
+                        }
+                        if (feedback.form_status) {
+                            const status = document.getElementById('formStatus');
+                            status.textContent = feedback.form_status;
+                            status.className = 'form-status';
+                            if (feedback.form_status.toLowerCase().includes('bad')) {
+                                status.classList.add('error');
+                            }
+                        }
+                    } catch (err) {
+                        console.error('[Exercise] Feedback error:', err);
+                    }
+
+                    if (this.isExercising) {
+                        requestAnimationFrame(trackFrame);
+                    }
+                };
+
+                trackFrame();
+            }
+
+            async stopExerciseTracking() {
+                console.log('[Exercise] Stopping exercise...');
+                this.isExercising = false;
+
+                // TODO: Save session to database
+                // await api.saveSession({ ... });
+            }
+
+            goToScreen(screenId) {
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                document.getElementById(screenId).classList.add('active');
+
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                const screens = ['homeScreen', 'exerciseScreen', 'reportsScreen', 'appointmentsScreen', 'profileScreen'];
+                const index = screens.indexOf(screenId);
+                if (index >= 0) {
+                    document.querySelectorAll('.nav-item')[index].classList.add('active');
+                }
+
+                this.currentScreen = screenId;
+                window.scrollTo(0, 0);
+            }
+
+            async logout() {
+                try {
+                    await api.logout();
+                    window.location.href = '/login';
+                } catch (err) {
+                    console.error('[Mobile App] Logout failed:', err);
+                }
+            }
+        }
+
+        const app = new MobileApp();
+        document.addEventListener('DOMContentLoaded', () => app.init());
+    </script>
+</body>
+</html>

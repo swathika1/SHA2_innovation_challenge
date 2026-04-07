@@ -16,8 +16,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='mobile.css') }}">
 </head>
 <body>
-    <!-- Animated particle background canvas -->
-    <canvas id="bgParticles" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;"></canvas>
+    <!-- Animated particle background canvas - DISABLED FOR MOBILE PERFORMANCE -->
+    <canvas id="bgParticles" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;background:#f0f4f8;"></canvas>
     <div class="page-wrapper">
         {% block header %}{% endblock %}
         
@@ -27,6 +27,9 @@
         
         {% block footer %}{% endblock %}
     </div>
+    
+    <!-- Mobile Debug Console -->
+    <script src="{{ url_for('static', filename='mobile-debug.js') }}"></script>
     
     {% block scripts %}{% endblock %}
 
@@ -213,8 +216,8 @@
         }
 
         window.addEventListener('resize', init);
-        init();
-        loop();
+        // DISABLED: init();  // Particle animation causes mobile freezing
+        // DISABLED: loop();  // Particle animation causes mobile freezing
     })();
 
     // Add the 3rd aura div dynamically

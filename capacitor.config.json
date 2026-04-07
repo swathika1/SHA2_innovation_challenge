@@ -1,18 +1,9 @@
 {
   "appId": "com.sha2.rehabcoach",
   "appName": "SHA2 Rehab Coach",
-  "webDir": "static",
-  "server": {
-    "androidScheme": "https",
-    "allowNavigation": ["*"],
-    "cleartext": true
-  },
+  "webDir": "mobile_frontend",
   "android": {
     "buildOptions": {
-      "keystorePath": null,
-      "keystorePassword": null,
-      "keystoreAlias": null,
-      "keystoreAliasPassword": null,
       "releaseType": "debug"
     }
   },

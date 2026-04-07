@@ -1,0 +1,12 @@
+{
+	"appId": "com.sha2.rehabcoach",
+	"appName": "SHA2 Rehab Coach",
+	"webDir": "mobile_frontend",
+	"android": {},
+	"plugins": {
+		"Camera": {
+			"photos": true,
+			"cameraDirection": "front"
+		}
+	}
+}

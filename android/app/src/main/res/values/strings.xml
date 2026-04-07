@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SHA2 Rehab Coach</string>
+    <string name="title_activity_main">SHA2 Rehab Coach</string>
+    <string name="package_name">com.sha2.rehabcoach</string>
+    <string name="custom_url_scheme">com.sha2.rehabcoach</string>
+</resources>

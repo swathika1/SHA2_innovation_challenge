@@ -615,8 +615,16 @@ def health():
 
 @app.route('/')
 def landing():
-    """Landing Page"""
+    """Landing Page or Mobile App if logged in"""
+    if 'user_id' in session:
+        return send_file('static/mobile-v2.html')
     return render_template('landing.html')
+
+
+@app.route('/mobile')
+def mobile():
+    """Mobile App Shell"""
+    return send_file('static/mobile-v2.html')
 
 
 @app.route('/login', methods=['GET', 'POST'])

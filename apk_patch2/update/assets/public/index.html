@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rehab Coach</title>
+    <!-- Use FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .onboarding-slider { display: flex; overflow-x: hidden; scroll-behavior: smooth; width: 100vw; height: 60vh; }
+        .slide { min-width: 100vw; padding: 20px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+        .bg-grad-1 { background: linear-gradient(135deg, #e0e7ff 0%, #e879f9 100%); }
+        .bg-grad-2 { background: linear-gradient(135deg, #ffedd5 0%, #fbcfe8 100%); }
+        .bg-grad-3 { background: linear-gradient(135deg, #dcfce7 0%, #bfdbfe 100%); }
+        .dots { display: flex; gap: 8px; justify-content: center; margin-top: 20px; }
+        .dot { width: 10px; height: 10px; border-radius: 5px; background: #e2e8f0; transition: 0.3s; }
+        .dot.active { background: var(--primary); width: 20px; }
+        .onboarding-controls { padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .premium-input { display: block; font-family: 'Inter', sans-serif; font-size: 16px; }
+    </style>
+</head>
+<body>
+
+    <!-- Onboarding Screen -->
+    <div id="onboardingScreen" class="screen active" style="background: linear-gradient(to bottom, #EEF2FF, #E0E7FF, #FFFFFF) !important; height: 100vh; overflow: hidden;">
+        <div class="onboarding-slider" id="onboardingSlider" style="height: 100vh; display: flex; overflow: hidden;">
+            <div class="slide bg-grad-1" style="height: 100vh; flex-shrink: 0; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 40px 20px;">
+                <div style="text-align: center; width: 100%; display: flex; flex-direction: column; align-items: center;">
+                    <i class="fas fa-person-walking" style="font-size: 100px; color: var(--primary); margin-bottom: 24px; display: block;"></i>
+                    <h2 style="font-size: 28px; margin-bottom: 12px; font-weight: 800; color: var(--text-main);">Welcome to your Rehab Companion</h2>
+                    <p style="font-size: 16px; color: #475569; line-height: 1.6;">Helping you recover safely at home</p>
+                    <div class="dots" style="margin-top: 40px; display: flex; gap: 8px; justify-content: center;">
+                        <span class="dot active" style="width: 10px; height: 10px; border-radius: 5px; background: var(--primary); transition: 0.3s; width: 20px;"></span>
+                        <span class="dot" style="width: 10px; height: 10px; border-radius: 5px; background: #e2e8f0; transition: 0.3s;"></span>
+                        <span class="dot" style="width: 10px; height: 10px; border-radius: 5px; background: #e2e8f0; transition: 0.3s;"></span>
+                    </div>
+                    <button class="action-btn" onclick="app.nextOnboarding()" style="width: 200px; margin-top: 60px; padding: 16px 30px; font-size: 18px; justify-content: center; border-radius: 12px; height: 48px; background: linear-gradient(135deg, #5B8CFF 0%, #7B61FF 100%); color: white; border: none; box-shadow: 0 8px 24px rgba(91, 140, 255, 0.35); cursor: pointer; transition: all 0.3s ease; font-weight: 700;">Get Started</button>
+                </div>
+            </div>
+            <div class="slide bg-grad-2" style="height: 100vh; flex-shrink: 0; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 40px 20px;">
+                <div style="text-align: center;">
+                    <i class="fas fa-robot" style="font-size: 100px; color: #d946ef; margin-bottom: 24px; display: block;"></i>
+                    <h2 style="font-size: 28px; margin-bottom: 12px; font-weight: 800; color: var(--text-main);">Smart posture correction with AI</h2>
+                    <p style="font-size: 16px; color: #475569; line-height: 1.6;">Real-time guidance to ensure you move correctly.</p>
+                    <div class="dots" style="margin-top: 40px; display: flex; gap: 8px; justify-content: center;">
+                        <span class="dot" style="width: 10px; height: 10px; border-radius: 5px; background: #e2e8f0; transition: 0.3s;"></span>
+                        <span class="dot active" style="width: 10px; height: 10px; border-radius: 5px; background: var(--primary); transition: 0.3s; width: 20px;"></span>
+                        <span class="dot" style="width: 10px; height: 10px; border-radius: 5px; background: #e2e8f0; transition: 0.3s;"></span>
+                    </div>
+                    <button class="action-btn" onclick="app.nextOnboarding()" style="width: 200px; margin-top: 40px; padding: 16px 30px; font-size: 18px; justify-content: center; border-radius: 12px; height: 48px; background: linear-gradient(135deg, #5B8CFF 0%, #7B61FF 100%); color: white; border: none; box-shadow: 0 8px 24px rgba(91, 140, 255, 0.35); cursor: pointer; transition: all 0.3s ease; font-weight: 700;">Next</button>
+                </div>
+            </div>
+            <div class="slide bg-grad-3" style="height: 100vh; flex-shrink: 0; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 40px 20px;">
+                <div style="text-align: center;">
+                    <i class="fas fa-chart-line" style="font-size: 100px; color: #059669; margin-bottom: 24px; display: block;"></i>
+                    <h2 style="font-size: 28px; margin-bottom: 12px; font-weight: 800; color: var(--text-main);">Track your progress, stay strong</h2>
+                    <p style="font-size: 16px; color: #475569; line-height: 1.6;">Monitor your daily streaks and stick to the plan.</p>
+                    <div class="dots" style="margin-top: 40px; display: flex; gap: 8px; justify-content: center;">
+                        <span class="dot" style="width: 10px; height: 10px; border-radius: 5px; background: #e2e8f0; transition: 0.3s;"></span>
+                        <span class="dot" style="width: 10px; height: 10px; border-radius: 5px; background: #e2e8f0; transition: 0.3s;"></span>
+                        <span class="dot active" style="width: 10px; height: 10px; border-radius: 5px; background: var(--primary); transition: 0.3s; width: 20px;"></span>
+                    </div>
+                    <button class="action-btn" onclick="app.nextOnboarding()" style="width: 200px; margin-top: 40px; padding: 16px 30px; font-size: 18px; justify-content: center; border-radius: 12px; height: 48px; background: linear-gradient(135deg, #5B8CFF 0%, #7B61FF 100%); color: white; border: none; box-shadow: 0 8px 24px rgba(91, 140, 255, 0.35); cursor: pointer; transition: all 0.3s ease; font-weight: 700;">Let's Go</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div style="display: none;" class="onboarding-controls">
+        <div class="dots">
+            <span class="dot active"></span><span class="dot"></span><span class="dot"></span>
+        </div>
+        <button class="action-btn" onclick="app.nextOnboarding()" style="width:100%; margin-top:30px; padding:20px; font-size:18px; justify-content:center;"></button>
+        </div>
+    </div>
+
+    <!-- Role Selection Screen -->
+    <div id="roleScreen" class="screen">
+        <div class="auth-container" style="padding:40px 20px; display:flex; flex-direction:column; justify-content:center; height:100%; background: linear-gradient(180deg, #EEF2FF 0%, #FFFFFF 100%);">
+            <div style="text-align:center; margin-bottom:60px;">
+                <i class="fas fa-users" style="font-size:70px; color:var(--primary); margin-bottom:20px; opacity:0.9;"></i>
+                <h1 style="font-size:32px; font-weight:800; color:var(--text-main); margin:0 0 10px 0;">Who are you?</h1>
+                <p style="font-size:16px; color:var(--text-secondary); margin:0;">Select your role to continue</p>
+            </div>
+            
+            <div style="background:white; border-radius:24px; padding:28px; box-shadow: 0 8px 32px rgba(0,0,0,0.08); margin-bottom:30px;">
+                <button onclick="app.selectRole('patient')" style="width: 100%; padding: 16px; font-size: 18px; font-weight: 700; justify-content: center; border-radius: 14px; height: 56px; background: linear-gradient(135deg, #5B8CFF 0%, #7B61FF 100%); color: white; border: none; box-shadow: 0 4px 12px rgba(91, 140, 255, 0.2); cursor: pointer; transition: all 0.3s ease; margin-bottom: 14px;"><i class="fas fa-heart" style="margin-right:10px;"></i>Patient</button>
+                <button onclick="app.selectRole('doctor')" style="width: 100%; padding: 16px; font-size: 18px; font-weight: 700; justify-content: center; border-radius: 14px; height: 56px; background: #e5e7eb; color: #4b5563; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.3s ease; margin-bottom: 14px;"><i class="fas fa-stethoscope" style="margin-right:10px;"></i>Doctor</button>
+                <button onclick="app.selectRole('caregiver')" style="width: 100%; padding: 16px; font-size: 18px; font-weight: 700; justify-content: center; border-radius: 14px; height: 56px; background: #e5e7eb; color: #4b5563; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.3s ease;"><i class="fas fa-hand-holding-heart" style="margin-right:10px;"></i>Caregiver</button>
+            </div>
+            
+            <p style="text-align:center; font-size:13px; color:var(--text-secondary); margin-top:30px;">Your AI Rehab Companion</p>
+        </div>
+    </div>
+
+    <!-- Auth Screen -->
+    <div id="authScreen" class="screen">
+        <div class="auth-container" style="padding:40px 20px; display:flex; flex-direction:column; justify-content:center; height:100%; background: linear-gradient(180deg, #EEF2FF 0%, #FFFFFF 100%);">
+            <div style="text-align:center; margin-bottom:60px;">
+                <i class="fas fa-shield-alt" style="font-size:70px; color:var(--primary); margin-bottom:20px; opacity:0.9;"></i>
+                <h1 style="font-size:32px; font-weight:800; color:var(--text-main); margin:0 0 10px 0;">Welcome Back</h1>
+                <p style="font-size:16px; color:var(--text-secondary); margin:0;">Continue your recovery journey</p>
+            </div>
+            
+            <div style="background:white; border-radius:24px; padding:28px; box-shadow: 0 8px 32px rgba(0,0,0,0.08); margin-bottom:30px;">
+                <input type="text" id="loginNric" placeholder="NRIC / FIN" class="premium-input" style="width:100%; padding:16px 18px; margin-bottom:18px; border-radius:14px; border:2px solid #E5E7EB; font-size:16px; background:#F9FAFB; font-family:Inter; transition:all 0.3s ease;">
+                <input type="password" placeholder="Password" class="premium-input" style="width:100%; padding:16px 18px; border-radius:14px; border:2px solid #E5E7EB; font-size:16px; background:#F9FAFB; font-family:Inter; transition:all 0.3s ease;">
+            </div>
+
+            <select id="roleSelect" class="premium-input" style="display:none; width:100%; padding:16px; margin-bottom:20px; border-radius:14px; border:1px solid #e2e8f0; background:white; font-size:16px;">
+                <option value="patient">Patient</option>
+                <option value="doctor">Doctor</option>
+                <option value="caregiver">Caregiver</option>
+            </select>
+
+            <button id="loginBtn" class="action-btn" onclick="app.login()" style="width: 100%; padding: 14px; font-size: 18px; font-weight: 700; justify-content: center; border-radius: 12px; height: 48px; background: linear-gradient(135deg, #5B8CFF 0%, #7B61FF 100%); color: white; border: none; box-shadow: 0 8px 24px rgba(91, 140, 255, 0.35); cursor: pointer; transition: all 0.3s ease;">Log In</button>
+            
+            <p style="text-align:center; font-size:13px; color:var(--text-secondary); margin-top:30px;">Your AI Rehab Companion</p>
+        </div>
+    </div>
+
+    <!-- Dashboard Screen -->
+    <div id="dashboardScreen" class="screen">
+        <header class="dashboard-header">
+            <div class="user-info">
+                <div class="user-text">
+                    <h1>Hi, Lim Ah Mei</h1>
+                    <span class="streak-badge"><i class="fas fa-fire"></i> 5 Day Streak</span>
+                </div>
+            </div>
+            <button class="icon-btn" onclick="app.goToScreen('profileScreen')"><i class="fas fa-cog"></i></button>
+        </header>
+
+        <main class="dashboard-content">
+            <div class="main-cards">
+                <div class="card premium-card" onclick="app.goToScreen('exerciseListScreen')" style="background:linear-gradient(135deg, #5B8CFF 0%, #6B9EFF 100%); color:white; padding:16px; border-radius:20px; min-height:120px; display:flex; flex-direction:row; align-items:center; gap:16px; box-shadow: 0 8px 24px rgba(91, 140, 255, 0.25); cursor:pointer; transition: all 0.3s ease;">
+                    <div style="width:60px; height:60px; border-radius:14px; background:rgba(255,255,255,0.22); display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);">
+                        <i class="fas fa-running" style="font-size:32px; color:white; text-shadow: 0 2px 4px rgba(0,0,0,0.2);"></i>
+                    </div>
+                    <div style="flex:1;">
+                        <div style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px; opacity:0.9; font-weight:600;">Start Session</div>
+                        <h3 style="font-size:22px; font-weight:800; margin:6px 0; color:white;">Start Exercise</h3>
+                        <p style="font-size:13px; opacity:0.95;">Begin your rehab session</p>
+                    </div>
+                </div>
+
+                <div class="card premium-card" onclick="app.goToScreen('voiceScreen')" style="background:linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%); color:white; padding:16px; border-radius:20px; min-height:120px; display:flex; flex-direction:row; align-items:center; gap:16px; box-shadow: 0 8px 24px rgba(139, 92, 246, 0.25); cursor:pointer; transition: all 0.3s ease;">
+                    <div style="width:60px; height:60px; border-radius:14px; background:rgba(255,255,255,0.22); display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);">
+                        <i class="fas fa-microphone-alt" style="font-size:32px; color:white; text-shadow: 0 2px 4px rgba(0,0,0,0.2);"></i>
+                    </div>
+                    <div style="flex:1;">
+                        <div style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px; opacity:0.9; font-weight:600;">AI Assistant</div>
+                        <h3 style="font-size:22px; font-weight:800; margin:6px 0; color:white;">Talk to Jimmy</h3>
+                        <p style="font-size:13px; opacity:0.95;">Voice guidance & support</p>
+                    </div>
+                </div>
+            </div>
+            
+            <section class="progress-section" style="margin-bottom: 20px;">
+                <h3>Upcoming Sessions</h3>
+                <div class="card premium-card" style="margin-bottom: 10px; padding: 15px;">
+                    <div class="card-icon-wrapper" style="background:#fef3c7; color:#d97706; width:40px; height:40px; font-size:18px;"><i class="fas fa-calendar"></i></div>
+                    <div class="card-info">
+                        <h2 style="font-size:16px;">Tele-Consultation</h2>
+                        <p>Dr. John · 5 April, 10:00 AM</p>
+                    </div>
+                </div>
+                <div class="card premium-card" style="margin-bottom: 10px; padding: 15px;">
+                    <div class="card-icon-wrapper" style="background:#fef3c7; color:#d97706; width:40px; height:40px; font-size:18px;"><i class="fas fa-calendar"></i></div>
+                    <div class="card-info">
+                        <h2 style="font-size:16px;">Tele-Consultation</h2>
+                        <p>Dr. Smith · 9 April, 02:00 PM</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="progress-section" style="margin-bottom: 20px;">
+                <h3>Notifications</h3>
+                <div class="card premium-card" style="margin-bottom: 10px; padding: 15px;">
+                    <div class="card-icon-wrapper" style="background:#fee2e2; color:#ef4444; width:40px; height:40px; font-size:18px;"><i class="fas fa-pills"></i></div>
+                    <div class="card-info">
+                        <h2 style="font-size:16px;">Medication Reminder</h2>
+                        <p>Take Amlodipine & Paracetamol</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="progress-section">
+                <h3>Weekly Progress</h3>
+                <div class="chart-container">
+                    <canvas id="progressChart"></canvas>
+                </div>
+            </section>
+        </main>
+        
+        <!-- Bottom Tab Navigation -->
+        <nav class="bottom-nav" style="display: flex; justify-content: space-around; align-items: center; height: 72px; background: white; border-top: 1px solid #e2e8f0; box-shadow: 0 -4px 12px rgba(0,0,0,0.08); position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;">
+            <div class="nav-item active" onclick="app.goToScreen('dashboardScreen')" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; cursor: pointer; transition: all 0.3s ease; color: #5B8CFF;">
+                <i class="fas fa-home" style="font-size: 24px;"></i>
+                <span style="font-size: 12px; font-weight: 600;">Home</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('exerciseListScreen')" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; cursor: pointer; transition: all 0.3s ease; color: #9ca3af;">
+                <i class="fas fa-dumbbell" style="font-size: 24px;"></i>
+                <span style="font-size: 12px; font-weight: 600;">Plan</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('voiceScreen')" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; cursor: pointer; transition: all 0.3s ease; color: #9ca3af;">
+                <i class="fas fa-microphone" style="font-size: 24px; color: #8B5CF6;"></i>
+                <span style="font-size: 12px; font-weight: 600;">Talk</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('chatbotScreen')" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; cursor: pointer; transition: all 0.3s ease; color: #9ca3af;">
+                <i class="fas fa-comments" style="font-size: 24px;"></i>
+                <span style="font-size: 12px; font-weight: 600;">Chat</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('profileScreen')" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; cursor: pointer; transition: all 0.3s ease; color: #9ca3af;">
+                <i class="fas fa-user" style="font-size: 24px;"></i>
+                <span style="font-size: 12px; font-weight: 600;">Profile</span>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Exercise List Screen -->
+    <div id="exerciseListScreen" class="screen">
+        <header class="sub-header">
+            <button class="back-btn" onclick="app.goToScreen('dashboardScreen')"><i class="fas fa-arrow-left"></i></button>
+            <h2>Treatment Plan</h2>
+            <div style="width: 24px;"></div>
+        </header>
+        
+        <main class="list-content">
+            <p class="section-title">TODAY'S EXERCISES</p>
+            
+            <div class="exercise-card" onclick="app.openExercise('Lateral Trunk Tilt')">
+                <div class="ex-icon" style="background:#eff6ff;"><i class="fas fa-child"></i></div>
+                <div class="ex-details">
+                    <h3>Lateral Trunk Tilt</h3>
+                    <span class="ex-meta">3 sets × 10 reps</span>
+                    <p>Improves side core mobility.</p>
+                </div>
+                <div class="play-btn"><i class="fas fa-play"></i></div>
+            </div>
+
+            <div class="exercise-card" onclick="app.openExercise('Trunk Rotation')">
+                <div class="ex-icon" style="background:#f5f3ff; color:#8b5cf6;"><i class="fas fa-sync"></i></div>
+                <div class="ex-details">
+                    <h3>Trunk Rotation</h3>
+                    <span class="ex-meta">2 sets × 15 reps</span>
+                    <p>Enhances spinal flexibility.</p>
+                </div>
+                <div class="play-btn"><i class="fas fa-play"></i></div>
+            </div>
+            
+             <div class="exercise-card" onclick="app.openExercise('Flank Stretch')">
+                <div class="ex-icon" style="background:#ecfdf5; color:#10b981;"><i class="fas fa-running"></i></div>
+                <div class="ex-details">
+                    <h3>Flank Stretch</h3>
+                    <span class="ex-meta">3 sets × 12 reps</span>
+                    <p>Stretches the abdominal sides.</p>
+                </div>
+                <div class="play-btn"><i class="fas fa-play"></i></div>
+            </div>
+
+            <div class="exercise-card" onclick="app.openExercise('Torso Rotation')">
+                <div class="ex-icon" style="background:#fffbeb; color:#f59e0b;"><i class="fas fa-undo"></i></div>
+                <div class="ex-details">
+                    <h3>Torso Rotation</h3>
+                    <span class="ex-meta">3 sets × 10 reps</span>
+                    <p>Core stabilization and control.</p>
+                </div>
+                <div class="play-btn"><i class="fas fa-play"></i></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Exercise Camera Screen -->
+    <div id="exerciseCameraScreen" class="screen camera-screen">
+        <div class="camera-container">
+            <video id="cameraFeed" autoplay playsinline muted></video>
+            <div id="skeletonOverlay" class="skeleton-overlay"></div>
+            
+            <div class="camera-ui">
+                <div class="cam-top-bar">
+                    <button class="cam-back-btn" onclick="app.goToScreen('exerciseListScreen')"><i class="fas fa-times"></i></button>
+                    <div class="cam-title-box">
+                        <h2 id="camExerciseName">Sit to Stand</h2>
+                        <div id="camStatus" class="status-badge"><i class="fas fa-circle-notch fa-spin"></i> Initializing...</div>
+                    </div>
+                    <div class="rep-counter-box">
+                        <span class="rep-label">REPS</span>
+                        <span id="camRepCount" class="rep-number">0</span>
+                    </div>
+                </div>
+                
+                <div class="cam-bottom-bar">
+                    <button id="recordBtn" class="action-btn" onclick="app.toggleRecording()">
+                        <i class="fas fa-play"></i> START
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Jimmy Voice Screen -->
+    <div id="voiceScreen" class="screen" style="background: linear-gradient(180deg, #EEF2FF 0%, #FFFFFF 100%); display:flex; flex-direction:column; justify-content:space-between;">
+        <header class="sub-header transparent" style="background:transparent; border:none;">
+            <button class="back-btn" onclick="app.goToScreen('dashboardScreen')"><i class="fas fa-arrow-left"></i></button>
+            <h2 style="flex:1; text-align:center;">Jimmy</h2>
+            <select id="languageSelect" onchange="app.setLanguage(this.value)" style="padding:8px 14px; border-radius:10px; border:2px solid #E5E7EB; outline:none; font-weight:600; background:white; font-family:'Inter'; font-size:14px; cursor:pointer;">
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+                <option value="ta">தமிழ்</option>
+                <option value="ms">Melayu</option>
+            </select>
+        </header>
+        
+        <main class="voice-content" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px;">
+            <div class="voice-avatar-container" style="text-align:center; margin-bottom:40px;">
+                <div class="voice-avatar" style="width:140px; height:140px; margin:0 auto 20px; border-radius:50%; background:linear-gradient(135deg, #5B8CFF 0%, #8B5CF6 100%); box-shadow: 0 8px 32px rgba(91, 140, 255, 0.3); display:flex; align-items:center; justify-content:center; position:relative;">
+                    <i class="fas fa-smile" style="font-size:70px; color:white;"></i>
+                </div>
+                <div class="waveform" style="display:flex; justify-content:center; gap:6px; margin-top:20px;">
+                    <div class="bar" style="width:4px; height:20px; background:var(--primary); border-radius:2px; animation:wave 0.6s infinite;"></div>
+                    <div class="bar" style="width:4px; height:20px; background:var(--primary); border-radius:2px; animation:wave 0.6s infinite 0.1s;"></div>
+                    <div class="bar" style="width:4px; height:20px; background:var(--primary); border-radius:2px; animation:wave 0.6s infinite 0.2s;"></div>
+                    <div class="bar" style="width:4px; height:20px; background:var(--primary); border-radius:2px; animation:wave 0.6s infinite 0.3s;"></div>
+                    <div class="bar" style="width:4px; height:20px; background:var(--primary); border-radius:2px; animation:wave 0.6s infinite 0.4s;"></div>
+                </div>
+            </div>
+            
+            <div class="voice-interaction" style="text-align:center; margin-bottom:50px; width:100%; max-width:300px;">
+                <h3 id="voiceGreeting" class="t_greeting" style="font-size:20px; color:var(--text-main); font-weight:700; margin-bottom:12px;">How can I help you?</h3>
+                <p id="voiceTranscript" class="transcript t_subtitle" style="font-size:14px; color:var(--text-secondary); min-height:40px;">Tap the microphone to speak</p>
+                <div class="voice-loader" id="voiceLoader" style="display:none; font-size:14px; color:var(--primary);"><i class="fas fa-circle-notch fa-spin"></i> Processing...</div>
+            </div>
+        </main>
+            
+        <div class="voice-controls" style="display:flex; flex-direction:column; align-items:center; padding:40px 20px; position:relative; width: 100%;">
+            <div style="position: relative; width: 100px; height: 120px; display: flex; align-items: center; justify-content: center;">
+                <button id="micBtn" class="mic-btn" onclick="app.toggleVoice()" style="position: absolute; width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 12px 36px rgba(139, 92, 246, 0.6); transition: all 0.3s ease; z-index: 10; top: 0;">
+                    <i class="fas fa-microphone" style="font-size: 44px; color: white;"></i>
+                </button>
+                <div style="position: absolute; width: 100px; height: 100px; border-radius: 50%; border: 3px solid rgba(139, 92, 246, 0.4); animation: pulse 1.5s infinite; pointer-events: none; top: 0;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Screen -->
+    <div id="profileScreen" class="screen">
+        <header class="sub-header">
+            <button class="back-btn" onclick="app.goToScreen('dashboardScreen')"><i class="fas fa-arrow-left"></i></button>
+            <h2>Profile</h2>
+            <div style="width: 24px;"></div>
+        </header>
+        <main class="profile-content" style="padding-bottom: 80px; overflow-y: auto;">
+            <div class="profile-header" style="background: linear-gradient(135deg, #5B8CFF 0%, #8B5CF6 100%); border-radius: 24px; padding: 30px 20px; margin: 0 16px 20px; box-shadow: 0 12px 32px rgba(91, 140, 255, 0.3); color: white;">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 24px; font-weight: 800; color: white;">Lim Ah Mei</h2>
+                        <p style="font-size:14px; font-weight:500; color:rgba(255,255,255,0.9); margin: 4px 0 0 0;">Female, 68 Years Old</p>
+                        <div id="profileNricDisplay" style="display:inline-block; font-size:12px; font-weight:bold; color:#5B8CFF; background:rgba(255,255,255,0.9); padding:6px 12px; border-radius:12px; margin-top:8px; box-shadow:0 4px 8px rgba(0,0,0,0.15);"></div>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
+                    <span style="background:rgba(255,255,255,0.2); color:white; padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600; backdrop-filter: blur(10px);"><i class="fas fa-dumbbell" style="margin-right:6px;"></i>Knee Rehab</span>
+                    <span style="background:rgba(255,255,255,0.2); color:white; padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600; backdrop-filter: blur(10px);"><i class="fas fa-heartbeat" style="margin-right:6px;"></i>Post-Op</span>
+                    <span style="background:rgba(255,255,255,0.2); color:white; padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600; backdrop-filter: blur(10px);"><i class="fas fa-star" style="margin-right:6px;"></i>Priority</span>
+                </div>
+                <p style="margin-top:12px; color:rgba(255,255,255,0.95); font-size:14px; font-weight:500;"><i class="fas fa-info-circle" style="margin-right:6px;"></i>Post-Op Knee Surgery Recovery</p>
+            </div>
+            
+            <div style="display:flex; gap:10px; margin-bottom: 25px;">
+                <button class="action-btn" onclick="alert('Calling Caregiver...')" style="flex:1; background: linear-gradient(135deg, #5B8CFF 0%, #7B61FF 100%); padding:14px; font-size:14px; justify-content:center; box-shadow: 0 4px 12px rgba(91, 140, 255, 0.2); border-radius:12px; height:48px; font-weight:600; border:none; cursor:pointer; transition:all 0.3s ease; color:white;"><i class="fas fa-phone-alt"></i> Call Caregiver</button>
+                <button class="action-btn" onclick="alert('Calling Doctor...')" style="flex:1; background: linear-gradient(135deg, #5B8CFF 0%, #7B61FF 100%); padding:14px; font-size:14px; justify-content:center; box-shadow: 0 4px 12px rgba(91, 140, 255, 0.2); border-radius:12px; height:48px; font-weight:600; border:none; cursor:pointer; transition:all 0.3s ease; color:white;"><i class="fas fa-ambulance"></i> Call Doctor</button>
+            </div>
+
+            <div class="settings-list">
+                <div class="setting-item" style="flex-direction:column; align-items:flex-start; padding: 20px; background: linear-gradient(135deg, rgba(91, 140, 255, 0.12), rgba(139, 92, 246, 0.08)); border-radius: 16px; border: 1px solid #eef2ff;">
+                    <span style="font-size:12px; color:#1F2937; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Progress Overview</span>
+                    <div style="width:100%; display:flex; justify-content:space-around; margin-top:15px;">
+                        <div style="text-align:center;"><span style="font-size:26px; font-weight:800; color:var(--success);">85%</span><br><span style="font-size:12px; color:#475569; font-weight:600;">Rehab Complete</span></div>
+                        <div style="text-align:center;"><span style="font-size:26px; font-weight:800; color:var(--primary);">92%</span><br><span style="font-size:12px; color:#475569; font-weight:600;">Adherence</span></div>
+                    </div>
+                    <div style="width:100%; margin-top:14px;">
+                        <div style="height:8px; background:#e2e8f0; border-radius:999px; overflow:hidden;">
+                            <div style="height:8px; width:85%; background:linear-gradient(90deg, #10b981, #34d399);"></div>
+                        </div>
+                        <div style="height:8px; background:#e2e8f0; border-radius:999px; overflow:hidden; margin-top:10px;">
+                            <div style="height:8px; width:92%; background:linear-gradient(90deg, #5B8CFF, #7B61FF);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-list" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px;">
+                 <div style="background: linear-gradient(135deg, rgba(91, 140, 255, 0.1), rgba(91, 140, 255, 0.05)); padding: 18px; border-radius: 16px; border-left: 4px solid #5B8CFF;">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <i class="fas fa-history" style="font-size: 24px; color: #5B8CFF; background: white; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;"></i>
+                        <span style="font-size:13px; color:#1F2937; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Medical History</span>
+                    </div>
+                    <ul style="margin-left: 52px; font-size:14px; color:#475569; font-weight:500; line-height:1.8; margin-top:-8px;">
+                        <li>Knee osteoarthritis</li>
+                        <li>Hypertension</li>
+                    </ul>
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05)); padding: 18px; border-radius: 16px; border-left: 4px solid #f59e0b;">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <i class="fas fa-hospital" style="font-size: 24px; color: #f59e0b; background: white; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;"></i>
+                        <span style="font-size:13px; color:#1F2937; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Past Surgeries</span>
+                    </div>
+                    <ul style="margin-left: 52px; font-size:14px; color:#475569; font-weight:500; line-height:1.8; margin-top:-8px;">
+                        <li>Total knee replacement (2023)</li>
+                    </ul>
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05)); padding: 18px; border-radius: 16px; border-left: 4px solid #ef4444;">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <i class="fas fa-heart" style="font-size: 24px; color: #ef4444; background: white; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;"></i>
+                        <span style="font-size:13px; color:#1F2937; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Rehab History</span>
+                    </div>
+                    <ul style="margin-left: 52px; font-size:14px; color:#475569; font-weight:500; line-height:1.8; margin-top:-8px;">
+                        <li>Phase 1 completed</li>
+                        <li>Currently in mobility rehab</li>
+                    </ul>
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.05)); padding: 18px; border-radius: 16px; border-left: 4px solid #8b5cf6;">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <i class="fas fa-pills" style="font-size: 24px; color: #8b5cf6; background: white; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;"></i>
+                        <span style="font-size:13px; color:#1F2937; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Medication</span>
+                    </div>
+                    <ul style="margin-left: 52px; font-size:14px; color:#475569; font-weight:500; line-height:1.8; margin-top:-8px;">
+                        <li>Amlodipine</li>
+                        <li>Paracetamol</li>
+                    </ul>
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(220, 38, 38, 0.1), rgba(220, 38, 38, 0.05)); padding: 18px; border-radius: 16px; border-left: 4px solid #dc2626;">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <i class="fas fa-exclamation-circle" style="font-size: 24px; color: #dc2626; background: white; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;"></i>
+                        <span style="font-size:13px; color:#1F2937; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Allergies</span>
+                    </div>
+                    <ul style="margin-left: 52px; font-size:14px; color:#475569; font-weight:500; line-height:1.8; margin-top:-8px;">
+                        <li>None</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="settings-list">
+                 <div class="setting-item">
+                    <i class="fas fa-bell bg-gray"></i>
+                    <span>Settings & Notifications</span>
+                    <i class="fas fa-chevron-right arrow-right"></i>
+                </div>
+            </div>
+            
+             <button class="logout-btn" onclick="app.goToScreen('authScreen')" style="margin-top: 10px;">Log Out</button>
+        </main>
+    </div>
+
+    <!-- Chatbot Screen -->
+    <div id="chatbotScreen" class="screen" style="background: linear-gradient(180deg, #EEF2FF 0%, #FFFFFF 100%); display:flex; flex-direction:column;">
+        <header class="sub-header transparent" style="background:transparent; border:none;">
+            <button class="back-btn" onclick="app.goToScreen('dashboardScreen')"><i class="fas fa-arrow-left"></i></button>
+            <h2 style="flex:1; text-align:center;">Chat</h2>
+            <div style="width:40px;"></div>
+        </header>
+        
+        <main style="flex:1; display:flex; flex-direction:column; padding:20px; overflow-y: auto; gap:12px;">
+            <div id="chatMessages" style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+                <div style="background: white; padding:14px; border-radius:12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); align-self: flex-start; max-width: 80%;">
+                    <p style="margin:0; color:#1F2937; font-size:14px;">👋 Hi! How can I help you today?</p>
+                </div>
+            </div>
+        </main>
+        
+        <div style="padding:20px; border-top:1px solid #e2e8f0; background:white;">
+            <div style="display:flex; gap:10px;">
+                <input id="chatInput" type="text" placeholder="Type your message..." style="flex:1; padding:12px 16px; border:2px solid #E5E7EB; border-radius:12px; font-size:14px; font-family:Inter; outline:none; background:#F9FAFB;"/>
+                <button onclick="app.sendChatMessage()" style="padding:12px 20px; background:linear-gradient(135deg, #5B8CFF 0%, #7B61FF 100%); color:white; border:none; border-radius:12px; cursor:pointer; font-weight:600; transition:all 0.3s ease; box-shadow: 0 4px 12px rgba(91, 140, 255, 0.2);"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

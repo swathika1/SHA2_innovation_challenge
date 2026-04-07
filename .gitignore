@@ -4,6 +4,7 @@
 
 venv/
 .venv/
+.venv*/
 
 # Python cache
 __pycache__/
@@ -18,12 +19,18 @@ __pycache__/
 # Flask session files
 flask_session/
 
+# Node modules
+node_modules/
+
 # Database files (rehab_coach.db is tracked so collaborators get latest data)
 *.sqlite3
 instance/
 
 # SSL certificates (if they contain sensitive data)
 *.pem
+
+# Local/private keys
+*.key
 
 # IDE
 .vscode/
@@ -39,6 +46,20 @@ Thumbs.db
 chroma_db/
 vector_store/
 .DS_Store
+
+# Large/generated artifacts
+*.apk
+*.idsig
+*.log
+*.Zone.Identifier
+rag_db/
+apk_patch_work/
+apk_patch2/
+apk_patch3/
+
+# SQLite runtime files
+*.db-wal
+*.db-shm
 
 pose_env/
 __pycache__/

@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>SHA2 Rehab Coach</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        :root {
+            --primary: #1e40af;
+            --primary-dark: #1e3a8a;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 4px 12px rgba(0,0,0,0.1);
+            --spacing: 16px;
+            --radius: 12px;
+            --safe-top: max(16px, env(safe-area-inset-top));
+            --safe-bottom: max(16px, env(safe-area-inset-bottom));
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            background: var(--bg);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: var(--text);
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            padding-top: env(safe-area-inset-top);
+        }
+
+        /* ===== MAIN LAYOUT ===== */
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-header {
+            padding: var(--spacing);
+            padding-top: 12px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .app-header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .app-content {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: calc(80px + var(--safe-bottom));
+        }
+
+        .content-section {
+            display: none;
+        }
+
+        .content-section.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* ===== BOTTOM NAVIGATION ===== */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-start;
+            padding-top: 8px;
+            padding-bottom: max(8px, env(safe-area-inset-bottom));
+            z-index: 1000;
+            box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
+        }
+
+        .nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 8px;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 12px;
+            transition: all 0.2s ease;
+            border-radius: 8px;
+        }
+
+        .nav-item.active {
+            color: var(--primary);
+        }
+
+        .nav-item i {
+            font-size: 24px;
+        }
+
+        /* ===== CARDS & CONTAINERS ===== */
+        .container {
+            padding: var(--spacing);
+            max-width: 600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: var(--spacing);
+            margin-bottom: 12px;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: all 0.2s ease;
+        }
+
+        .card:active {
+            transform: scale(0.98);
+        }
+
+        .card-title {
+            font-weight: 600;
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        .card-subtitle {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .card-stat {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--primary);
+            margin: 8px 0;
+        }
+
+        .card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .card-row:last-child {
+            margin-bottom: 0;
+        }
+
+        /* ===== BUTTONS ===== */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border-radius: var(--radius);
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-height: 44px;
+            touch-action: manipulation;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        .btn-primary:active {
+            background: var(--primary-dark);
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: var(--bg);
+            color: var(--primary);
+            border: 2px solid var(--primary);
+            width: 100%;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 8px 12px;
+            font-size: 14px;
+            min-height: auto;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-group .btn {
+            flex: 1;
+        }
+
+        /* ===== GREETING SECTION ===== */
+        .greeting-card {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 24px;
+            border-radius: var(--radius);
+            margin-bottom: 16px;
+        }
+
+        .greeting-card h2 {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+
+        .greeting-card p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .streak-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255,255,255,0.2);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-top: 12px;
+            width: fit-content;
+        }
+
+        /* ===== GRID STATS ===== */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .stat-box {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 20px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--primary);
+            margin: 8px 0;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* ===== VIDEO EXERCISE ===== */
+        .exercise-container {
+            position: relative;
+            background: #000;
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-bottom: 16px;
+            aspect-ratio: 9 / 16;
+        }
+
+        #exerciseVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .overlay-top {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            z-index: 10;
+            color: white;
+            font-weight: 700;
+        }
+
+        .rep-counter {
+            background: rgba(0,0,0,0.6);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 18px;
+        }
+
+        .form-status {
+            background: var(--success);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .form-status.warning {
+            background: var(--warning);
+        }
+
+        .form-status.error {
+            background: var(--danger);
+        }
+
+        .overlay-bottom {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            padding: 20px;
+            display: flex;
+            gap: 12px;
+            z-index: 10;
+        }
+
+        .overlay-bottom .btn {
+            flex: 1;
+        }
+
+        /* ===== BADGES & TAGS ===== */
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--success);
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+
+        /* ===== FORM ELEMENTS ===== */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 16px;
+            font-family: inherit;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        /* ===== LIST ITEMS ===== */
+        .list-item {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing);
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .list-item:active {
+            background: var(--bg);
+        }
+
+        .list-item-icon {
+            font-size: 24px;
+            color: var(--primary);
+            min-width: 32px;
+            text-align: center;
+        }
+
+        .list-item-content {
+            flex: 1;
+        }
+
+        .list-item-title {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .list-item-subtitle {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .list-item-arrow {
+            color: var(--text-muted);
+            font-size: 20px;
+        }
+
+        /* ===== MODAL / OVERLAYS ===== */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: flex-end;
+        }
+
+        .modal-content {
+            background: var(--card);
+            width: 100%;
+            border-radius: var(--radius) var(--radius) 0 0;
+            padding: 20px;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 600px) {
+            :root {
+                --spacing: 12px;
+            }
+        }
+
+        /* ===== LOADING STATE ===== */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+        }
+
+        .spinner {
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ===== EMPTY STATE ===== */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state i {
+            font-size: 64px;
+            margin-bottom: 16px;
+            color: var(--border);
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- HEADER -->
+        <div class="app-header">
+            <h1>
+                <span>🏥</span>
+                <span>SHA2 Coach</span>
+            </h1>
+        </div>
+
+        <!-- CONTENT -->
+        <div class="app-content">
+            <!-- HOME SCREEN -->
+            <div id="homeScreen" class="content-section active">
+                <div class="container">
+                    <!-- Greeting -->
+                    <div class="greeting-card">
+                        <h2>Welcome back!</h2>
+                        <p id="userGreeting">Patient</p>
+                        <div class="streak-badge">
+                            <span>🔥</span>
+                            <span id="streakCount">0</span> day streak
+                        </div>
+                    </div>
+
+                    <!-- Quick Stats -->
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Adherence</div>
+                            <div class="stat-value" id="adherenceRate">0%</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">This Week</div>
+                            <div class="stat-value" id="weekSessions">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Primary CTA -->
+                    <button class="btn btn-primary btn-lg" onclick="app.goToScreen('exerciseScreen')">
+                        <span>▶️</span>
+                        <span>Start Exercise</span>
+                    </button>
+
+                    <!-- Quick Cards -->
+                    <div class="card">
+                        <div class="card-title">Today's Plan</div>
+                        <div class="list-item" style="padding: 8px 0; border: none;">
+                            <div class="list-item-icon">📋</div>
+                            <div class="list-item-content">
+                                <div class="list-item-title">Spine & MSK</div>
+                                <div class="list-item-subtitle">3 exercises</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Next Appointment</div>
+                        <div class="list-item" style="padding: 8px 0; border: none;">
+                            <div class="list-item-icon">📅</div>
+                            <div class="list-item-content">
+                                <div class="list-item-title">Dr. Chen</div>
+                                <div class="list-item-subtitle">Tomorrow, 2:00 PM</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EXERCISE SCREEN -->
+            <div id="exerciseScreen" class="content-section">
+                <div class="container">
+                    <div class="exercise-container">
+                        <video id="exerciseVideo" autoplay playsinline muted></video>
+                        
+                        <div class="overlay-top">
+                            <div class="rep-counter">
+                                Reps: <span id="repCount">0</span>
+                            </div>
+                            <div class="form-status" id="formStatus">
+                                Good Form
+                            </div>
+                        </div>
+
+                        <div class="overlay-bottom">
+                            <button class="btn btn-primary" id="startExerciseBtn">
+                                <span>▶️</span> Start
+                            </button>
+                            <button class="btn btn-secondary" onclick="app.goToScreen('homeScreen')">
+                                Done
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Exercise Info -->
+                    <div class="card" style="margin-top: 16px;">
+                        <div class="card-title">Squat</div>
+                        <div class="card-subtitle">Proper form: Feet shoulder-width apart, chest up</div>
+                        <div style="margin-top: 12px;">
+                            <span class="badge badge-success">20 reps</span>
+                        </div>
+                    </div>
+
+                    <!-- Voice Feedback -->
+                    <div class="card">
+                        <div class="list-item" style="border: none; padding: 0;">
+                            <div class="list-item-icon">🎤</div>
+                            <div class="list-item-content">
+                                <div class="list-item-title">Voice Feedback</div>
+                                <div class="list-item-subtitle" id="voiceFeedback">Ready to start</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REPORTS SCREEN -->
+            <div id="reportsScreen" class="content-section">
+                <div class="container">
+                    <div class="card">
+                        <div class="card-title">Your Progress</div>
+                        <div class="card-row">
+                            <span>This Week:</span>
+                            <strong id="weekProgress">0%</strong>
+                        </div>
+                        <div class="card-row">
+                            <span>This Month:</span>
+                            <strong id="monthProgress">0%</strong>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Quality Score</div>
+                        <div class="stat-value" id="qualityScore">0.0</div>
+                        <div class="card-subtitle">Out of 10</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-row">
+                            <span>Avg Pain Level:</span>
+                            <strong id="avgPain">0/10</strong>
+                        </div>
+                        <div class="card-row">
+                            <span>Adherence Rate:</span>
+                            <strong id="adherenceReportRate">0%</strong>
+                        </div>
+                    </div>
+
+                   
+
+ <!-- Alerts -->
+                    <div class="card" style="border-left: 4px solid var(--warning);">
+                        <div class="card-row">
+                            <span>⚠️ Needs Attention</span>
+                        </div>
+                        <div class="card-subtitle">You've missed 2 sessions this week</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- APPOINTMENTS SCREEN -->
+            <div id="appointmentsScreen" class="content-section">
+                <div class="container">
+                    <div class="card">
+                        <div class="card-title">📅 Upcoming</div>
+                        <div class="list-item" style="border: none; padding: 0;">
+                            <div class="list-item-icon">👨‍⚕️</div>
+                            <div class="list-item-content">
+                                <div class="list-item-title">Dr. Chen</div>
+                                <div class="list-item-subtitle">Tomorrow, 2:00 PM</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="alert('Schedule appointment')">
+                        + Schedule New
+                    </button>
+                </div>
+            </div>
+
+            <!-- PROFILE SCREEN -->
+            <div id="profileScreen" class="content-section">
+                <div class="container">
+                    <div class="card">
+                        <div class="list-item" style="border: none; padding: 0;">
+                            <div class="list-item-icon" style="font-size: 32px;">👤</div>
+                            <div class="list-item-content">
+                                <div class="list-item-title" id="profileName">User</div>
+                                <div class="list-item-subtitle" id="profileRole">Patient</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="profileEmail" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="tel" id="profilePhone">
+                        </div>
+                    </div>
+
+                    <button class="btn btn-secondary" onclick="app.logout()">
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM NAVIGATION -->
+        <div class="bottom-nav">
+            <div class="nav-item active" onclick="app.goToScreen('homeScreen')">
+                <i>🏠</i>
+                <span>Home</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('exerciseScreen')">
+                <i>🎯</i>
+                <span>Exercise</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('reportsScreen')">
+                <i>📊</i>
+                <span>Reports</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('appointmentsScreen')">
+                <i>📅</i>
+                <span>Appointments</span>
+            </div>
+            <div class="nav-item" onclick="app.goToScreen('profileScreen')">
+                <i>👤</i>
+                <span>Profile</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const app = {
+            currentScreen: 'homeScreen',
+            apiBase: document.location.origin,
+            user: null,
+
+            init() {
+                this.setupVideoCapture();
+                this.loadUserData();
+                this.attachEventListeners();
+            },
+
+            goToScreen(screenId) {
+                // Hide all screens
+                document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+                // Hide all nav items
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                
+                // Show active screen
+                document.getElementById(screenId).classList.add('active');
+                
+                // Update nav
+                const navIndex = ['homeScreen', 'exerciseScreen', 'reportsScreen', 'appointmentsScreen', 'profileScreen'].indexOf(screenId);
+                if (navIndex >= 0) {
+                    document.querySelectorAll('.nav-item')[navIndex].classList.add('active');
+                }
+                
+                this.currentScreen = screenId;
+                window.scrollTo(0, 0);
+            },
+
+            async setupVideoCapture() {
+                const video = document.getElementById('exerciseVideo');
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: 'environment' },
+                        audio: false 
+                    });
+                    video.srcObject = stream;
+                } catch (err) {
+                    console.error('Camera access denied:', err);
+                }
+            },
+
+            async loadUserData() {
+                try {
+                    const res = await fetch(`${this.apiBase}/api/current-user`);
+                    if (res.ok) {
+                        this.user = await res.json();
+                        document.getElementById('userGreeting').textContent = this.user.first_name || 'Patient';
+                        document.getElementById('profileName').textContent = `${this.user.first_name} ${this.user.last_name}`;
+                        document.getElementById('profileEmail').value = this.user.email;
+                        document.getElementById('profileRole').textContent = this.user.role || 'Patient';
+                    }
+                } catch (err) {
+                    console.error('Failed to load user:', err);
+                }
+            },
+
+            attachEventListeners() {
+                document.getElementById('startExerciseBtn')?.addEventListener('click', () => {
+                    this.startExercise();
+                });
+            },
+
+            async startExercise() {
+                alert('Starting exercise tracking...');
+                // TODO: Connect to MediaPipe pose detection API
+            },
+
+            async logout() {
+                try {
+                    await fetch(`${this.apiBase}/api/logout`, { method: 'POST' });
+                    window.location.href = '/login';
+                } catch (err) {
+                    console.error('Logout failed:', err);
+                }
+            }
+        };
+
+        // Initialize when DOM ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => app.init());
+        } else {
+            app.init();
+        }
+    </script>
+</body>
+</html>
