@@ -489,6 +489,24 @@
                 {% endfor %}
             </div>
             {% endif %}
+            {% if risk_metadata_context %}
+            <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(15,23,42,0.08);">
+                <div style="font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ c.text }};margin-bottom:10px;">
+                    Metadata Risk Context
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
+                    {% for item in risk_metadata_context %}
+                    <div style="background:rgba(255,255,255,0.7);border:1px solid rgba(148,163,184,0.22);border-radius:10px;padding:12px 13px;">
+                        <div style="display:flex;align-items:center;gap:8px;font-size:.84rem;font-weight:700;color:#1f2937;margin-bottom:6px;">
+                            <i class="fa-solid {{ item.icon }}" style="color:{{ c.badge }};"></i>
+                            {{ item.title }}
+                        </div>
+                        <div style="font-size:.82rem;color:#475569;line-height:1.45;">{{ item.body }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
 
@@ -533,9 +551,9 @@
                 <div class="info-item">
                     <span class="info-label">Current Rehab Score</span>
                     <span class="info-value">
-                        {{ patient.avg_quality_score if patient.avg_quality_score else '—' }}/10
+                        {{ patient.avg_quality_score|round(1) if patient.avg_quality_score is not none else '—' }}/50
                         {% if patient.avg_quality_score %}
-                            {% if patient.avg_quality_score < 3 %}<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i>{% elif patient.avg_quality_score < 5 %}<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i>{% else %}<i class="fa-solid fa-circle-check" style="color: #22c55e;"></i>{% endif %}
+                            {% if patient.avg_quality_score < 15 %}<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i>{% elif patient.avg_quality_score < 25 %}<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i>{% else %}<i class="fa-solid fa-circle-check" style="color: #22c55e;"></i>{% endif %}
                         {% endif %}
                     </span>
                 </div>

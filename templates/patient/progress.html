@@ -108,50 +108,89 @@
 <div class="dashboard-header">
     <h2>Your Progress Overview</h2>
     <div>
-        <button class="filter-btn active">Weekly</button>
-        <button class="filter-btn">Monthly</button>
-        <button class="filter-btn">All Time</button>
+        <button class="filter-btn active">Live Trends</button>
+        <button class="filter-btn">{{ sessions|length }} Sessions</button>
     </div>
 </div>
+
+{% if risk_data %}
+{% set risk_palette = {
+    'green':  {'bg': '#f0fdf4', 'border': '#22c55e', 'text': '#166534'},
+    'yellow': {'bg': '#fefce8', 'border': '#eab308', 'text': '#854d0e'},
+    'orange': {'bg': '#fff7ed', 'border': '#f97316', 'text': '#9a3412'},
+    'red':    {'bg': '#fef2f2', 'border': '#ef4444', 'text': '#991b1b'}
+} %}
+{% set rc = risk_palette[risk_data.risk_level] %}
+<div class="card" style="margin-bottom:20px; border-left:4px solid {{ rc.border }}; background:{{ rc.bg }};">
+    <div class="card-header" style="color:{{ rc.text }};">
+        <i class="fa-solid fa-shield-heart"></i> Re-Injury Risk Trend
+        <span style="margin-left:auto; background:{{ rc.border }}; color:#fff; padding:4px 12px; border-radius:999px; font-size:.78rem; font-weight:700;">
+            {{ risk_data.risk_label }} · {{ risk_data.risk_score }}/12
+        </span>
+    </div>
+    <div style="padding:18px 20px 20px;">
+        <p style="margin:0 0 12px; color:{{ rc.text }}; font-size:.92rem; line-height:1.55;">{{ risk_data.explanation }}</p>
+        {% if risk_metadata_context %}
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:10px;">
+            {% for item in risk_metadata_context %}
+            <div style="background:rgba(255,255,255,.72); border:1px solid rgba(148,163,184,.22); border-radius:10px; padding:12px 13px;">
+                <div style="display:flex; align-items:center; gap:8px; font-size:.84rem; font-weight:700; color:#1f2937; margin-bottom:6px;">
+                    <i class="fa-solid {{ item.icon }}" style="color:{{ rc.border }};"></i>
+                    {{ item.title }}
+                </div>
+                <div style="font-size:.82rem; color:#475569; line-height:1.45;">{{ item.body }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
 
 <!-- Stats Summary -->
 <div class="stats-row">
     <div class="stat-box">
-        <div class="stat-value">87%</div>
+        <div class="stat-value">{{ patient.adherence_rate|default(0)|round|int }}%</div>
         <div class="stat-label">Overall Adherence</div>
     </div>
     <div class="stat-box">
-        <div class="stat-value">39/50</div>
+        <div class="stat-value">{{ patient.avg_quality_score|default(0)|round(1) }}/50</div>
         <div class="stat-label">Avg. Quality Score</div>
     </div>
     <div class="stat-box">
-        <div class="stat-value">2.8</div>
+        <div class="stat-value">{{ patient.avg_pain_level|default(0)|round(1) }}</div>
         <div class="stat-label">Avg. Pain Level</div>
     </div>
     <div class="stat-box">
-        <div class="stat-value">+15°</div>
-        <div class="stat-label">ROM Improvement</div>
+        <div class="stat-value">{{ sessions|length }}</div>
+        <div class="stat-label">Completed Sessions</div>
     </div>
 </div>
 
 <!-- Charts -->
 <div class="grid grid-2">
-    <!-- Adherence Chart -->
+    <!-- Completion Chart -->
     <div class="card">
-        <div class="card-header">Adherence Rate (Last 4 Weeks)</div>
+        <div class="card-header">Completion Trend (Last 4 Sessions)</div>
         <div class="chart-placeholder">
             <div class="bars">
-                <div class="bar" style="height: 75%; background: #6c757d;"></div>
-                <div class="bar" style="height: 85%; background: #6c757d;"></div>
-                <div class="bar" style="height: 80%; background: #6c757d;"></div>
-                <div class="bar" style="height: 87%; background: #333;"></div>
+                {% if trend_sessions %}
+                    {% for sess in trend_sessions %}
+                    <div class="bar" style="height: {{ [sess.completed_perc|default(0)|round|int, 8]|max }}%; background: {% if loop.last %}#333{% else %}#6c757d{% endif %};"></div>
+                    {% endfor %}
+                {% else %}
+                    <div class="bar" style="height:12%; background:#d1d5db;"></div>
+                {% endif %}
             </div>
         </div>
         <div style="display: flex; justify-content: space-around; font-size: 0.8rem; color: #666; margin-top: 10px;">
-            <span>Week 1</span>
-            <span>Week 2</span>
-            <span>Week 3</span>
-            <span>Week 4</span>
+            {% if trend_sessions %}
+                {% for sess in trend_sessions %}
+                <span>{{ sess.completed_at[5:10] if sess.completed_at else 'Session' }}</span>
+                {% endfor %}
+            {% else %}
+                <span>No sessions yet</span>
+            {% endif %}
         </div>
     </div>
     
@@ -160,17 +199,24 @@
         <div class="card-header">Form Quality Trend</div>
         <div class="chart-placeholder">
             <div class="bars">
-                <div class="bar" style="height: 60%; background: #6c757d;"></div>
-                <div class="bar" style="height: 68%; background: #6c757d;"></div>
-                <div class="bar" style="height: 72%; background: #6c757d;"></div>
-                <div class="bar" style="height: 78%; background: #333;"></div>
+                {% if trend_sessions %}
+                    {% for sess in trend_sessions %}
+                    {% set quality_height = ((sess.quality_score|default(0) / 50) * 100)|round|int %}
+                    <div class="bar" style="height: {{ [quality_height, 8]|max }}%; background: {% if loop.last %}#333{% else %}#6c757d{% endif %};"></div>
+                    {% endfor %}
+                {% else %}
+                    <div class="bar" style="height:12%; background:#d1d5db;"></div>
+                {% endif %}
             </div>
         </div>
         <div style="display: flex; justify-content: space-around; font-size: 0.8rem; color: #666; margin-top: 10px;">
-            <span>Week 1</span>
-            <span>Week 2</span>
-            <span>Week 3</span>
-            <span>Week 4</span>
+            {% if trend_sessions %}
+                {% for sess in trend_sessions %}
+                <span>{{ (sess.quality_score|default(0))|round(1) }}</span>
+                {% endfor %}
+            {% else %}
+                <span>No sessions yet</span>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -181,39 +227,66 @@
         <div class="card-header">Pain Level Trend</div>
         <div class="chart-placeholder">
             <div class="bars">
-                <div class="bar" style="height: 50%; background: #dc3545;"></div>
-                <div class="bar" style="height: 45%; background: #dc3545;"></div>
-                <div class="bar" style="height: 35%; background: #ffc107;"></div>
-                <div class="bar" style="height: 28%; background: #28a745;"></div>
+                {% if trend_sessions %}
+                    {% for sess in trend_sessions %}
+                    {% set pain_height = ((sess.pain_after|default(0)) * 10)|round|int %}
+                    <div class="bar" style="height: {{ [pain_height, 8]|max }}%; background:
+                        {% if (sess.pain_after|default(0)) >= 6 %}#dc3545{% elif (sess.pain_after|default(0)) >= 4 %}#f59e0b{% else %}#28a745{% endif %};"></div>
+                    {% endfor %}
+                {% else %}
+                    <div class="bar" style="height:12%; background:#d1d5db;"></div>
+                {% endif %}
             </div>
         </div>
         <div style="display: flex; justify-content: space-around; font-size: 0.8rem; color: #666; margin-top: 10px;">
-            <span>Week 1</span>
-            <span>Week 2</span>
-            <span>Week 3</span>
-            <span>Week 4</span>
+            {% if trend_sessions %}
+                {% for sess in trend_sessions %}
+                <span>{{ sess.pain_after|default(0) }}/10</span>
+                {% endfor %}
+            {% else %}
+                <span>No sessions yet</span>
+            {% endif %}
         </div>
-        <p style="text-align: center; margin-top: 10px; color: #28a745; font-weight: 600;">↓ Pain decreasing - Great progress!</p>
+        {% if trend_sessions|length >= 2 %}
+        {% set pain_change = (trend_sessions[-1].pain_after|default(0)) - (trend_sessions[0].pain_after|default(0)) %}
+        <p style="text-align: center; margin-top: 10px; color: {% if pain_change <= 0 %}#28a745{% else %}#dc2626{% endif %}; font-weight: 600;">
+            {% if pain_change <= 0 %}Pain is stable or improving across recent sessions.{% else %}Pain is trending up recently — worth monitoring closely.{% endif %}
+        </p>
+        {% endif %}
     </div>
     
-    <!-- ROM Progress -->
+    <!-- Metadata Trend Summary -->
     <div class="card">
-        <div class="card-header">Range of Motion Progress</div>
-        <div class="chart-placeholder">
-            <div class="bars">
-                <div class="bar" style="height: 50%; background: #6c757d;"></div>
-                <div class="bar" style="height: 60%; background: #6c757d;"></div>
-                <div class="bar" style="height: 70%; background: #6c757d;"></div>
-                <div class="bar" style="height: 83%; background: #28a745;"></div>
-            </div>
+        <div class="card-header">Session Mix Snapshot</div>
+        <div style="padding: 4px 4px 0;">
+            {% if sessions %}
+                {% set latest = sessions[0] %}
+                <div style="font-size: 0.95rem; font-weight: 700; color: #1f2937; margin-bottom: 8px;">
+                    Latest focus: {{ latest.session_overview.todays_focus if latest.session_overview else 'General rehab' }}
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+                    {% for region in latest.session_overview.regions_worked[:4] if latest.session_overview %}
+                    <span style="display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:0.75rem; font-weight:700; background:#eff6ff; color:#1d4ed8;">{{ region }}</span>
+                    {% endfor %}
+                </div>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    {% for item in latest.session_overview.movement_mix if latest.session_overview %}
+                    <div>
+                        <div style="display:flex; justify-content:space-between; gap:10px; font-size:0.82rem; color:#475569; margin-bottom:4px;">
+                            <span>{{ item.label }}</span>
+                            <strong>{{ item.pct|round(0)|int }}%</strong>
+                        </div>
+                        <div style="height:8px; border-radius:999px; background:#e5e7eb; overflow:hidden;">
+                            <div style="height:100%; width:{{ item.pct }}%; border-radius:999px; background:
+                                {% if item.key in ['mobility','flexibility'] %}#60a5fa{% elif item.key == 'strengthening' %}#34d399{% elif item.key == 'coordination' %}#c084fc{% else %}#f59e0b{% endif %};"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p style="color:#666; margin:0;">Complete a session to unlock metadata-based trend insights.</p>
+            {% endif %}
         </div>
-        <div style="display: flex; justify-content: space-around; font-size: 0.8rem; color: #666; margin-top: 10px;">
-            <span>60°</span>
-            <span>68°</span>
-            <span>75°</span>
-            <span>83°</span>
-        </div>
-        <p style="text-align: center; margin-top: 10px;">Target: 90° | Current: 83°</p>
     </div>
 </div>
 
@@ -224,54 +297,65 @@
         <thead>
             <tr style="border-bottom: 2px solid #ddd;">
                 <th style="text-align: left; padding: 10px;">Date</th>
-                <th style="text-align: left; padding: 10px;">Exercise</th>
-                <th style="text-align: center; padding: 10px;">Reps</th>
+                <th style="text-align: left; padding: 10px;">Session Focus</th>
+                <th style="text-align: left; padding: 10px;">Movement Mix</th>
+                <th style="text-align: left; padding: 10px;">Regions</th>
                 <th style="text-align: center; padding: 10px;">Quality</th>
-                <th style="text-align: center; padding: 10px;">Pain</th>
                 <th style="text-align: center; padding: 10px;">Action</th>
             </tr>
         </thead>
         <tbody>
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px;">Feb 7, 2026</td>
-                <td style="padding: 10px;">Knee Extension</td>
-                <td style="text-align: center; padding: 10px;">28/30</td>
-                <td style="text-align: center; padding: 10px;"><span style="background: #d4edda; padding: 2px 8px; border-radius: 10px;">41/50</span></td>
-                <td style="text-align: center; padding: 10px;">3</td>
-                <td style="text-align: center; padding: 10px;"><button class="btn" style="padding: 5px 10px; font-size: 0.8rem;">View</button></td>
-            </tr>
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px;">Feb 6, 2026</td>
-                <td style="padding: 10px;">Hip Flexor Stretch</td>
-                <td style="text-align: center; padding: 10px;">20/20</td>
-                <td style="text-align: center; padding: 10px;"><span style="background: #d4edda; padding: 2px 8px; border-radius: 10px;">90</span></td>
-                <td style="text-align: center; padding: 10px;">2</td>
-                <td style="text-align: center; padding: 10px;"><button class="btn" style="padding: 5px 10px; font-size: 0.8rem;">View</button></td>
-            </tr>
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 10px;">Feb 4, 2026</td>
-                <td style="padding: 10px;">Quad Strengthening</td>
-                <td style="text-align: center; padding: 10px;">35/36</td>
-                <td style="text-align: center; padding: 10px;"><span style="background: #fff3cd; padding: 2px 8px; border-radius: 10px;">75</span></td>
-                <td style="text-align: center; padding: 10px;">4</td>
-                <td style="text-align: center; padding: 10px;"><button class="btn" style="padding: 5px 10px; font-size: 0.8rem;">View</button></td>
-            </tr>
+            {% if sessions %}
+                {% for sess in sessions[:8] %}
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 10px;">{{ sess.completed_at[:10] if sess.completed_at else '—' }}</td>
+                    <td style="padding: 10px; min-width:200px;">
+                        <strong>{{ sess.session_overview.todays_focus if sess.session_overview else 'General rehab' }}</strong>
+                        <div style="font-size:0.78rem; color:#64748b; margin-top:4px;">{{ sess.exercise_names_list|join(', ') if sess.exercise_names_list else 'Session data only' }}</div>
+                    </td>
+                    <td style="padding: 10px;">
+                        {% if sess.session_overview and sess.session_overview.movement_mix %}
+                            {% for item in sess.session_overview.movement_mix[:2] %}
+                            <span style="display:inline-flex; align-items:center; margin:2px 6px 2px 0; padding:3px 8px; border-radius:999px; font-size:0.72rem; font-weight:700; background:#f1f5f9; color:#475569;">{{ item.label }} {{ item.pct|round(0)|int }}%</span>
+                            {% endfor %}
+                        {% else %}
+                            <span style="color:#999;">—</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 10px;">
+                        {% if sess.session_overview and sess.session_overview.regions_worked %}
+                            {{ sess.session_overview.regions_worked[:3]|join(', ') }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td style="text-align: center; padding: 10px;">
+                        <span style="background: {% if (sess.quality_score|default(0)) >= 35 %}#d4edda{% elif (sess.quality_score|default(0)) >= 20 %}#fff3cd{% else %}#fee2e2{% endif %}; padding: 2px 8px; border-radius: 10px; font-weight:700;">
+                            {{ sess.quality_score|default(0)|round(1) }}/50
+                        </span>
+                        <div style="font-size:0.74rem; color:#64748b; margin-top:4px;">{{ sess.completed_perc|default(0)|round|int }}% complete</div>
+                    </td>
+                    <td style="text-align: center; padding: 10px;">
+                        <a href="{{ url_for('session_summary', session_id=sess.id) }}" class="btn" style="padding: 5px 10px; font-size: 0.8rem; text-decoration:none;">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
             <tr>
-                <td style="padding: 10px;">Feb 3, 2026</td>
-                <td style="padding: 10px;">Knee Extension</td>
-                <td style="text-align: center; padding: 10px;">30/30</td>
-                <td style="text-align: center; padding: 10px;"><span style="background: #d4edda; padding: 2px 8px; border-radius: 10px;">85</span></td>
-                <td style="text-align: center; padding: 10px;">3</td>
-                <td style="text-align: center; padding: 10px;"><button class="btn" style="padding: 5px 10px; font-size: 0.8rem;">View</button></td>
+                <td colspan="6" style="padding: 18px; text-align:center; color:#666;">No completed sessions yet. Start a session to build your trend history.</td>
             </tr>
+            {% endif %}
         </tbody>
     </table>
 </div>
 
-<!-- Download Report -->
+{% if sessions %}
 <div style="text-align: center; margin-top: 30px;">
-    <button class="btn btn-primary btn-large"><i class="fa-solid fa-file-lines"></i> Download Session Report (PDF)</button>
+    <a href="{{ url_for('session_summary', session_id=sessions[0].id) }}" class="btn btn-primary btn-large" style="text-decoration:none;">
+        <i class="fa-solid fa-file-lines"></i> View Latest Session Report
+    </a>
 </div>
+{% endif %}
 
     </div><!-- /.profile-content -->
 </div><!-- /.profile-layout -->
