@@ -8085,6 +8085,7 @@ def _detect_stop_word(audio_base64: str) -> bool:
     - Silently returns False if transcription fails (non-blocking)
     """
     if not audio_base64:
+        print("[STOP-WORD] No audio chunk provided")
         return False
     
     try:
@@ -8095,29 +8096,37 @@ def _detect_stop_word(audio_base64: str) -> bool:
         import base64
         try:
             audio_bytes = base64.b64decode(audio_base64)
+            print(f"[STOP-WORD] Decoded audio: {len(audio_bytes)} bytes")
         except Exception as e:
             print(f"[STOP-WORD] Failed to decode audio: {e}")
             return False
         
         # Transcribe using existing Whisper API
         # We don't have the original filename, so we guess .wav is safe for most audio
+        print("[STOP-WORD] Starting Whisper transcription...")
         transcribed_text = transcribe(audio_bytes, filename='audio.wav', raise_on_error=False)
         
         if not transcribed_text:
+            print("[STOP-WORD] Whisper returned empty/None transcription")
             return False
+        
+        print(f"[STOP-WORD] Whisper transcribed: '{transcribed_text}'")
         
         # Check for "stop" word (case-insensitive, whole word)
         import re
         # Match "stop" as a whole word (not as part of another word)
         if re.search(r'\bstop\b', transcribed_text.lower()):
-            print(f"[STOP-WORD] Detected: '{transcribed_text}'")
+            print(f"[STOP-WORD] ✓ DETECTED 'STOP' in: '{transcribed_text}'")
             return True
         
+        print(f"[STOP-WORD] 'stop' word NOT found in transcription")
         return False
     
     except Exception as e:
         # Never block the main pipeline if audio processing fails
-        print(f"[STOP-WORD] Error during transcription: {e}")
+        print(f"[STOP-WORD] Exception during transcription: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -8238,15 +8247,20 @@ def api_live_feedback():
     # ───────────────────────────────────────────────────────────────────────
     audio_chunk = data.get("audio_chunk", "")
     if audio_chunk:
+        print(f"[API] /api/live_feedback received audio_chunk: {len(audio_chunk)} chars")
         patient_id = session.get('user_id')
         session_id = session.get('current_session_id')
+        print(f"[API] Patient: {patient_id}, Session: {session_id}")
         
         if patient_id and session_id:
             # Check if stop word is detected
+            print("[API] Calling _detect_stop_word()...")
             if _detect_stop_word(audio_chunk):
+                print("[API] ✓ Stop word detected! Completing session...")
                 # Stop word detected! Immediately complete the session
                 success = _complete_session_by_stop_word(session_id, patient_id)
                 if success:
+                    print(f"[API] ✓ Session {session_id} completed successfully")
                     # Clear current session from Flask session
                     session.pop('current_session_id', None)
                     
@@ -8257,6 +8271,7 @@ def api_live_feedback():
                         "session_id": session_id,
                     }), 200
                 else:
+                    print(f"[API] ✗ Failed to complete session {session_id}")
                     # Completion failed but stop word was detected
                     # Return error so frontend knows to handle this
                     return jsonify({
@@ -8265,6 +8280,10 @@ def api_live_feedback():
                         "message": "Stop word detected but session completion failed. Please complete manually.",
                         "session_id": session_id,
                     }), 500
+        else:
+            print(f"[API] Missing patient_id or session_id for stop word detection")
+    else:
+        print("[API] No audio_chunk in request (normal if no speech)")
     
     # ───────────────────────────────────────────────────────────────────────
     # Normal frame processing continues here

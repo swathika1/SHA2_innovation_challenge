@@ -3455,24 +3455,34 @@ function setupAudioRecorder(stream) {
 
 /**
  * Get accumulated audio chunks as base64-encoded data and reset buffer.
- * Returns base64-encoded webm audio or null if no audio is available.
+ * Returns Promise<base64-encoded webm audio or null> if no audio is available.
  */
-function getAudioChunk() {
-    if (!mediaRecorder || audioChunks.length === 0) {
+async function getAudioChunk() {
+    // Always return a Promise for consistency
+    if (!mediaRecorder) {
+        console.warn('[AUDIO] MediaRecorder not initialized');
+        return null;
+    }
+    
+    if (audioChunks.length === 0) {
+        console.warn('[AUDIO] No audio chunks available yet');
         return null;
     }
     
     try {
+        console.log(`[AUDIO] Processing ${audioChunks.length} chunks...`);
         // Create blob from accumulated chunks
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        audioChunks = [];  // Reset buffer
+        const originalSize = audioChunks.length;
+        audioChunks = [];  // Reset buffer immediately
         
         // Convert to base64
         return new Promise((resolve) => {
             const reader = new FileReader();
             reader.onload = () => {
                 const base64 = reader.result.split(',')[1];  // Remove data:audio/webm;base64, prefix
-                resolve(base64);
+                console.log(`[AUDIO] Successfully encoded ${originalSize} chunks (${base64 ? base64.length : 0} chars base64)`);
+                resolve(base64 || null);
             };
             reader.onerror = () => {
                 console.warn('[AUDIO] FileReader error');
@@ -3708,6 +3718,11 @@ async function pollFeedback() {
         
         // ========== STOP WORD DETECTION: Get audio chunk ==========
         const audioChunk = await getAudioChunk();
+        if (audioChunk) {
+            console.log(`[STOP-WORD] Audio chunk captured: ${audioChunk.length} chars`);
+        } else {
+            console.log('[STOP-WORD] No audio chunk available (normal if no speech)');
+        }
         // ===========================================================
         
         const fetchKimore = () => fetchWithTimeout(API_BASE + '/api/live_feedback',
