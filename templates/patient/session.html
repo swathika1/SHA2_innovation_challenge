@@ -2060,6 +2060,12 @@ let audioEnabled = true;
 let pollTimer = null;
 let inflight = false;
 
+// ==================== AUDIO RECORDING FOR STOP WORD DETECTION ====================
+let mediaRecorder = null;
+let audioChunks = [];
+const AUDIO_CHUNK_INTERVAL_MS = 500;  // Send audio every 500ms (~250ms of audio)
+let audioChunkTimer = null;
+
 let currentExIndex = 0;
 let currentRep = 0;
 let currentSet = 1;
@@ -3399,6 +3405,84 @@ function stopCameraCalibration() {
     }
 }
 
+// ==================== AUDIO RECORDING FOR STOP WORD DETECTION ====================
+
+/**
+ * Setup MediaRecorder to capture audio for stop word detection.
+ * Captures audio in ~250ms chunks and buffers them for sending with frame data.
+ */
+function setupAudioRecorder(stream) {
+    try {
+        // Create MediaRecorder with audio stream
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        
+        audioChunks = [];
+        
+        // Collect audio chunks as they become available
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            }
+        };
+        
+        mediaRecorder.onerror = (event) => {
+            console.warn('[AUDIO] MediaRecorder error:', event.error);
+        };
+        
+        // Start recording
+        mediaRecorder.start(250);  // Request data every 250ms
+        console.log('[AUDIO] MediaRecorder started');
+        
+    } catch (err) {
+        console.warn('[AUDIO] Failed to setup audio recorder:', err);
+        mediaRecorder = null;
+    }
+}
+
+/**
+ * Get accumulated audio chunks as base64-encoded data and reset buffer.
+ * Returns base64-encoded webm audio or null if no audio is available.
+ */
+function getAudioChunk() {
+    if (!mediaRecorder || audioChunks.length === 0) {
+        return null;
+    }
+    
+    try {
+        // Create blob from accumulated chunks
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        audioChunks = [];  // Reset buffer
+        
+        // Convert to base64
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const base64 = reader.result.split(',')[1];  // Remove data:audio/webm;base64, prefix
+                resolve(base64);
+            };
+            reader.onerror = () => {
+                console.warn('[AUDIO] FileReader error');
+                resolve(null);
+            };
+            reader.readAsDataURL(audioBlob);
+        });
+    } catch (err) {
+        console.warn('[AUDIO] Error getting audio chunk:', err);
+        return null;
+    }
+}
+
+/**
+ * Stop audio recording (called when session ends).
+ */
+function stopAudioRecorder() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        console.log('[AUDIO] MediaRecorder stopped');
+    }
+}
+
 async function startWebcam() {
     const video = document.getElementById('webcamVideo');
     const placeholder = document.getElementById('videoPlaceholder');
@@ -3436,10 +3520,11 @@ async function startWebcam() {
     if (statusMsg) statusMsg.textContent = '⏳ Requesting camera access...';
 
     // Try the simplest possible constraint first
+    // Enable audio for stop word detection during sessions
     try {
-        camLog('Attempt: {video: true}');
-        webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        camLog('✅ Got stream: ' + webcamStream.getVideoTracks().length + ' video tracks');
+        camLog('Attempt: {video: true, audio: true}');
+        webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        camLog('✅ Got stream: ' + webcamStream.getVideoTracks().length + ' video tracks, ' + webcamStream.getAudioTracks().length + ' audio tracks');
         camLog('Track: ' + (webcamStream.getVideoTracks()[0]?.label || 'unknown'));
         camLog('Track state: ' + webcamStream.getVideoTracks()[0]?.readyState);
     } catch (err) {
@@ -3447,10 +3532,10 @@ async function startWebcam() {
 
         // Try with more specific constraints
         try {
-            camLog('Attempt 2: {video: {facingMode: user}}');
+            camLog('Attempt 2: {video: {facingMode: user}, audio: true}');
             webcamStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-                audio: false
+                audio: true
             });
             camLog('✅ Got stream on attempt 2');
         } catch (err2) {
@@ -3466,6 +3551,23 @@ async function startWebcam() {
     camLog('Attaching stream to video element...');
     video.srcObject = webcamStream;
     camLog('video.srcObject set, readyState=' + video.readyState);
+
+    // ============================================================
+    // AUDIO CAPTURE FOR STOP WORD DETECTION
+    // ============================================================
+    // Set up MediaRecorder to capture audio for stop word detection
+    try {
+        const audioTracks = webcamStream.getAudioTracks();
+        if (audioTracks.length > 0) {
+            setupAudioRecorder(webcamStream);
+            camLog('✅ Audio recorder initialized for stop word detection');
+        } else {
+            camLog('⚠️ No audio tracks available (microphone access may be needed)');
+        }
+    } catch (audioErr) {
+        camLog('⚠️ Audio recorder setup failed: ' + audioErr.message);
+    }
+    // ============================================================
 
     // Force play
     try {
@@ -3520,6 +3622,7 @@ function retryCameraManual() {
 
 function stopCamera() {
     stopCameraCalibration();
+    stopAudioRecorder();  // Stop audio recording when camera stops
     if (webcamStream) {
         webcamStream.getTracks().forEach(function(t) { t.stop(); });
         webcamStream = null;
@@ -3589,19 +3692,42 @@ async function pollFeedback() {
                 body: JSON.stringify(body), signal: ctrl.signal
             }).then(r => r.json()).catch(() => null).finally(() => clearTimeout(tid));
         };
+        
+        // ========== STOP WORD DETECTION: Get audio chunk ==========
+        const audioChunk = await getAudioChunk();
+        // ===========================================================
+        
         const fetchKimore = () => fetchWithTimeout(API_BASE + '/api/live_feedback',
-            { frame_b64, language: lang, mode: exerciseMode, manual_exercise: manualExercise, exercise_hint });
+            { frame_b64, language: lang, mode: exerciseMode, manual_exercise: manualExercise, exercise_hint, audio_chunk: audioChunk });
         const fetchKeraal = () => fetchWithTimeout(API_BASE + '/api/live_feedback_keraal',
-            { frame_b64, language: lang, exercise_hint });
+            { frame_b64, language: lang, exercise_hint, audio_chunk: audioChunk });
         if (selectedPipeline === 'both') {
             const [kr, kk] = await Promise.allSettled([fetchKimore(), fetchKeraal()]);
+            if ((kr.value && kr.value.stopped) || (kk.value && kk.value.stopped)) {
+                console.log('[STOP-WORD] Stop detected!');
+                showNotification('Session stopped by voice command', 'info', 3000);
+                await handleSessionStop();
+                return;
+            }
             if (kr.status === 'fulfilled') processKimoreResult(kr.value);
             if (kk.status === 'fulfilled') processKeraalResult(kk.value);
         } else if (selectedPipeline === 'kimore') {
             const out = await fetchKimore();
+            if (out && out.stopped) {
+                console.log('[STOP-WORD] Stop detected!');
+                showNotification('Session stopped by voice command', 'info', 3000);
+                await handleSessionStop();
+                return;
+            }
             processKimoreResult(out);
         } else {
             const out = await fetchKeraal();
+            if (out && out.stopped) {
+                console.log('[STOP-WORD] Stop detected!');
+                showNotification('Session stopped by voice command', 'info', 3000);
+                await handleSessionStop();
+                return;
+            }
             processKeraalResult(out);
         }
     } catch (e) {
@@ -4047,6 +4173,34 @@ function showPostSession() {
     document.body.appendChild(overlay);
 }
 
+// ==================== STOP WORD DETECTION ====================
+/**
+ * Handle session stop when "stop" word is detected.
+ * Stops polling, stops audio recording, and shows completion form.
+ */
+async function handleSessionStop() {
+    console.log('[STOP-WORD] Handling session stop...');
+    
+    // Stop polling frames
+    stopPolling();
+    
+    // Stop audio recording
+    stopAudioRecorder();
+    
+    // Mark session as ready to complete
+    isPaused = true;
+    
+    // Show notification
+    showNotification('🎉 Session stopped by voice command', 'success', 2000);
+    
+    // Small delay then show completion form
+    setTimeout(() => {
+        showPostSessionForm();
+    }, 500);
+}
+
+// ================================================================
+
 async function completeSession() {
     const painAfter = parseInt(document.getElementById('painAfterInput').value);
     const effort = parseInt(document.getElementById('effortInput').value);
@@ -4094,6 +4248,7 @@ document.getElementById('languageSelect').addEventListener('change', async funct
 window.addEventListener('beforeunload', function() {
     stopCamera();
     stopPolling();
+    stopAudioRecorder();
 });
 
 setSessionControlState(false);
