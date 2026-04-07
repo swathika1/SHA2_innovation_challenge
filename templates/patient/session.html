@@ -417,8 +417,9 @@
     .ex-card.checked.kimore-ex { border-color:#3b82f6; box-shadow:0 0 0 4px rgba(59,130,246,.14); }
     .ex-card.checked.keraal-ex { border-color:#ef4444; box-shadow:0 0 0 4px rgba(239,68,68,.14); }
     .ex-card.checked.personalized-ex { border-color:#10b981; box-shadow:0 0 0 4px rgba(16,185,129,.14); }
-    .ex-thumb { width:100%; height:88px; object-fit:cover; display:block; }
-    .ex-card-body { padding:9px 11px; display:flex; align-items:center; gap:8px; }
+    .exercise-selection-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(235px,1fr)); gap:14px; margin-bottom:18px; }
+    .ex-card-body { padding:12px 13px 10px; display:flex; flex-direction:column; gap:10px; }
+    .ex-card-head { display:flex; align-items:flex-start; gap:10px; }
     .ex-card-check {
         width:22px; height:22px; border-radius:50%; border:2.5px solid #d1d5db;
         display:flex; align-items:center; justify-content:center; font-size:.72rem; font-weight:900;
@@ -427,13 +428,88 @@
     .ex-card.checked.kimore-ex .ex-card-check { border-color:#3b82f6; background:#3b82f6; color:#fff; }
     .ex-card.checked.keraal-ex .ex-card-check { border-color:#ef4444; background:#ef4444; color:#fff; }
     .ex-card.checked.personalized-ex .ex-card-check { border-color:#10b981; background:#10b981; color:#fff; }
-    .ex-card-name { font-size:.82rem; font-weight:600; color:#374151; }
+    .ex-card-title-block { flex:1; min-width:0; }
+    .ex-card-name { font-size:.96rem; font-weight:700; color:#1f2937; line-height:1.25; }
+    .ex-card-clinical { font-size:.72rem; color:#64748b; margin-top:2px; line-height:1.35; }
+    .ex-state-label { font-size:.68rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.04em; white-space:nowrap; }
+    .ex-card.checked .ex-state-label { color:#2563eb; }
+    .keraal-ex.checked .ex-state-label { color:#dc2626; }
+    .personalized-ex.checked .ex-state-label { color:#059669; }
+    .ex-card-chip-row { display:flex; flex-wrap:wrap; gap:6px; }
+    .ex-chip {
+        display:inline-flex; align-items:center; gap:5px; padding:4px 9px; border-radius:999px;
+        font-size:.69rem; font-weight:700; letter-spacing:.01em;
+        background:#f1f5f9; color:#334155; border:1px solid #e2e8f0;
+    }
+    .ex-chip.region-chip { background:#eef6ff; color:#1d4ed8; border-color:#bfdbfe; }
+    .ex-chip.goal-chip { background:#ecfdf5; color:#047857; border-color:#a7f3d0; }
+    .ex-chip.plane-chip { background:#f8fafc; color:#475569; border-color:#dbe4ee; }
+    .ex-chip.phase-chip { background:#fff7ed; color:#c2410c; border-color:#fed7aa; }
+    .difficulty-badge.low { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
+    .difficulty-badge.medium { background:#fef3c7; color:#b45309; border-color:#fcd34d; }
+    .difficulty-badge.high { background:#fee2e2; color:#b91c1c; border-color:#fecaca; }
+    .ex-card-mini { margin:0; font-size:.8rem; color:#334155; line-height:1.45; min-height:34px; }
+    .ex-card-footer { display:flex; flex-wrap:wrap; gap:10px; font-size:.72rem; color:#64748b; }
+    .ex-card-footer span { display:inline-flex; align-items:center; gap:4px; }
+    .ex-card-safety {
+        background:#fff7ed; border:1px solid #fed7aa; color:#9a3412;
+        border-radius:10px; padding:8px 10px; font-size:.74rem; font-weight:600; line-height:1.35;
+    }
     .ex-watch-btn {
         display:block; width:calc(100% - 22px); margin:0 11px 10px; padding:5px 0;
         background:none; border:1px solid #e2e8f0; border-radius:7px; font-size:.72rem;
         color:#64748b; cursor:pointer; transition:.2s; text-align:center;
     }
     .ex-watch-btn:hover { border-color:#94a3b8; background:#f8fafc; color:#1e293b; }
+    .session-plan-shell { margin:16px 0 18px; }
+    .session-plan-label { font-weight:700; display:block; margin-bottom:10px; font-size:.92rem; color:#0f172a; }
+    .session-plan-panel {
+        background:linear-gradient(180deg,#f8fafc,#f1f5f9); border:1px solid #e2e8f0; border-radius:16px;
+        padding:16px; min-height:72px;
+    }
+    .session-plan-empty { color:#64748b; font-size:.88rem; line-height:1.5; }
+    .plan-summary-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:10px; margin-bottom:14px; }
+    .plan-summary-card {
+        background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:12px 13px;
+        box-shadow:0 4px 16px rgba(148,163,184,.08);
+    }
+    .plan-summary-label { font-size:.7rem; font-weight:800; color:#64748b; letter-spacing:.08em; text-transform:uppercase; margin-bottom:7px; }
+    .plan-summary-value { font-size:.82rem; color:#1f2937; line-height:1.45; font-weight:600; }
+    .plan-summary-stack { display:flex; flex-wrap:wrap; gap:6px; }
+    .plan-pill {
+        display:inline-flex; align-items:center; padding:4px 9px; border-radius:999px;
+        font-size:.72rem; font-weight:700; background:#e2e8f0; color:#334155;
+    }
+    .plan-pill.mobility { background:#dbeafe; color:#1d4ed8; }
+    .plan-pill.strengthening { background:#dcfce7; color:#166534; }
+    .plan-pill.coordination { background:#fae8ff; color:#a21caf; }
+    .plan-pill.balance { background:#fef3c7; color:#b45309; }
+    .plan-pill.difficulty-low { background:#eff6ff; color:#1d4ed8; }
+    .plan-pill.difficulty-medium { background:#fef3c7; color:#b45309; }
+    .plan-pill.difficulty-high { background:#fee2e2; color:#b91c1c; }
+    .plan-pill.intensity-low { background:#e0f2fe; color:#0369a1; }
+    .plan-pill.intensity-moderate { background:#fef3c7; color:#b45309; }
+    .plan-pill.coverage { background:#f1f5f9; color:#475569; }
+    .plan-exercise-list { display:flex; flex-direction:column; gap:10px; }
+    .plan-exercise-item {
+        display:flex; gap:12px; align-items:flex-start; background:#fff;
+        border:1px solid #e2e8f0; border-radius:14px; padding:12px 13px;
+    }
+    .plan-item-index {
+        width:28px; height:28px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+        font-size:.78rem; font-weight:900; color:#fff; background:#3b82f6; flex-shrink:0;
+    }
+    .plan-item-main { flex:1; min-width:0; }
+    .plan-item-top { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+    .plan-item-name { font-size:.92rem; font-weight:700; color:#0f172a; }
+    .plan-item-dose { font-size:.76rem; color:#64748b; font-weight:600; white-space:nowrap; }
+    .plan-item-why { margin:5px 0 8px; font-size:.8rem; color:#334155; }
+    .plan-item-chip-row { display:flex; flex-wrap:wrap; gap:6px; }
+    @media (max-width: 640px) {
+        .exercise-selection-grid { grid-template-columns:1fr; }
+        .plan-item-top { flex-direction:column; }
+        .plan-item-dose { white-space:normal; }
+    }
 
     /* ===== Pipeline selector (pre-session) ===== */
     .pipeline-selector { display:flex; gap:10px; margin-bottom:22px; }
@@ -1025,14 +1101,14 @@
         </div>
 
         <!-- Dynamic exercise grid (rendered by JS) -->
-        <div id="exerciseSelector" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(155px,1fr)); gap:12px; margin-bottom:18px;"></div>
+        <div id="exerciseSelector" class="exercise-selection-grid"></div>
 
         <!-- Session plan list -->
-        <div style="margin:14px 0;">
-            <label style="font-weight:600; display:block; margin-bottom:8px; font-size:.88rem;">Session Plan:</label>
-            <ul id="selectedExercisesList" style="list-style:none; padding:10px 14px; margin:0; background:#f9f9f9; border-radius:8px; min-height:36px;">
-                <li style="color:#999; font-size:0.85rem;">No exercises selected yet</li>
-            </ul>
+        <div class="session-plan-shell">
+            <label class="session-plan-label">Session Plan</label>
+            <div id="selectedExercisesList" class="session-plan-panel">
+                <div class="session-plan-empty">Select exercises to see plan balance, body coverage, intensity, and why each movement is in today&apos;s session.</div>
+            </div>
         </div>
 
         <!-- Language selector -->
@@ -1373,36 +1449,282 @@
         "{{ e.exercise_name }}"{{ "," if not loop.last }}
         {% endfor %}
     ];
+    const EXERCISE_CATALOG = {{ exercise_catalog|tojson }};
 </script>
 
 <script>
 /* ===================== EXERCISE SELECTION ===================== */
+const BODY_REGION_RULES = [
+    { label: 'Shoulder', keywords: ['shoulder', 'scapula'] },
+    { label: 'Knee', keywords: ['knee', 'patello', 'quadriceps'] },
+    { label: 'Hip', keywords: ['hip', 'pelvis', 'lumbopelvic', 'gluteal'] },
+    { label: 'Spine', keywords: ['spine', 'lumbar', 'thoracic', 'trunk', 'core', 'oblique'] },
+];
+
+const MOVEMENT_DISPLAY = {
+    mobility: 'Mobility',
+    flexibility: 'Mobility',
+    strengthening: 'Strength',
+    coordination: 'Coordination',
+    balance: 'Balance',
+};
+
+const PLAN_MOVEMENT_CLASS = {
+    mobility: 'mobility',
+    flexibility: 'mobility',
+    strengthening: 'strengthening',
+    coordination: 'coordination',
+    balance: 'balance',
+};
+
+const DIFFICULTY_DISPLAY = {
+    low: 'Easy',
+    medium: 'Moderate',
+    high: 'Advanced',
+};
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function canonicalizeExerciseName(name) {
+    return String(name || '').replace(/\s*\(.*?\)\s*$/, '').trim();
+}
+
+function toDisplayCase(value) {
+    return String(value || '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\b\w/g, match => match.toUpperCase())
+        .trim();
+}
+
+function sentenceCase(value) {
+    const text = String(value || '').replace(/[_-]+/g, ' ').trim();
+    if (!text) return '';
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function dedupeList(values) {
+    return [...new Set((values || []).filter(Boolean))];
+}
+
+function getExerciseCatalogEntryByName(name) {
+    const canonical = canonicalizeExerciseName(name);
+    return EXERCISE_CATALOG[canonical] || EXERCISE_CATALOG[name] || null;
+}
+
 const AVAILABLE_EXERCISES = {
     // --- Kimore exercises (Deconditioning) ---
     "lifting_of_arms":      { name: "Lifting of Arms",               sets: 3, reps: 10, videoId: "IzTFCZv0--E", pipeline: 'kimore',  gifUrl: "/static/gifs/lifting_of_arms.svg",        instructions: "Stand upright, raise both arms from your sides to above your head, then slowly lower. Keep elbows slightly bent.", searchQuery: "lifting arms overhead lateral raise rehabilitation exercise" },
-    "lateral_trunk_tilt":    { name: "Lateral Trunk Tilt",            sets: 3, reps: 10, videoId: "4aR-v_5f-T4", pipeline: 'kimore',  gifUrl: "/static/gifs/lateral_trunk_tilt.svg",     instructions: "Stand with feet shoulder-width apart. Slowly tilt your trunk to one side (20-30°), return to center, then tilt to the other side.", searchQuery: "lateral trunk tilt side bend exercise rehabilitation" },
-    "trunk_rotation":        { name: "Trunk Rotation",               sets: 3, reps: 10, videoId: "IhP0LP-wyxQ", pipeline: 'kimore',  gifUrl: "/static/gifs/trunk_rotation.svg",         instructions: "Stand with arms relaxed. Rotate your upper body to the left, return to center, then rotate right. Keep hips facing forward.", searchQuery: "standing trunk rotation exercise rehabilitation" },
-    "squat":                 { name: "Squat",                         sets: 3, reps: 10, videoId: "hscOjLrW60c", pipeline: 'kimore',  gifUrl: "/static/gifs/squat.svg",                  instructions: "Stand with feet shoulder-width apart. Lower your hips to knee level by bending your knees, keeping your back straight. Rise slowly.", searchQuery: "proper squat form rehabilitation exercise" },
-    "trunk_rotation_target": { name: "Trunk Rotation & Target Touch", sets: 3, reps: 10, videoId: "IhP0LP-wyxQ", pipeline: 'kimore',  gifUrl: "/static/gifs/trunk_rotation_target.svg",  instructions: "Stand upright, rotate your trunk and reach toward targets at various positions. Combine trunk rotation with arm extension for coordination.", searchQuery: "trunk rotation reaching target touching exercise rehabilitation" },
+    "lateral_trunk_tilt":   { name: "Lateral Trunk Tilt",            sets: 3, reps: 10, videoId: "4aR-v_5f-T4", pipeline: 'kimore',  gifUrl: "/static/gifs/lateral_trunk_tilt.svg",     instructions: "Stand with feet shoulder-width apart. Slowly tilt your trunk to one side (20-30°), return to center, then tilt to the other side.", searchQuery: "lateral trunk tilt side bend exercise rehabilitation" },
+    "trunk_rotation":       { name: "Trunk Rotation",                sets: 3, reps: 10, videoId: "IhP0LP-wyxQ", pipeline: 'kimore',  gifUrl: "/static/gifs/trunk_rotation.svg",         instructions: "Stand with arms relaxed. Rotate your upper body to the left, return to center, then rotate right. Keep hips facing forward.", searchQuery: "standing trunk rotation exercise rehabilitation" },
+    "squat":                { name: "Squat",                         sets: 3, reps: 10, videoId: "hscOjLrW60c", pipeline: 'kimore',  gifUrl: "/static/gifs/squat.svg",                  instructions: "Stand with feet shoulder-width apart. Lower your hips to knee level by bending your knees, keeping your back straight. Rise slowly.", searchQuery: "proper squat form rehabilitation exercise" },
+    "trunk_rotation_target": { name: "Trunk Rotation & Target Touch", sets: 3, reps: 10, videoId: "IhP0LP-wyxQ", pipeline: 'kimore', gifUrl: "/static/gifs/trunk_rotation_target.svg", instructions: "Stand upright, rotate your trunk and reach toward targets at various positions. Combine trunk rotation with arm extension for coordination.", searchQuery: "trunk rotation reaching target touching exercise rehabilitation" },
     // --- Keraal exercises (Lower Back Pain) ---
-    "forward_flexion":       { name: "Forward Flexion (CTK)",         sets: 3, reps: 10, videoId: "Mg8NadAOEQI", pipeline: 'keraal', keraalClass: 'CTK', gifUrl: "/static/gifs/forward_flexion.svg",  instructions: "Stand upright with feet shoulder-width apart. Slowly bend forward from your hips and reach down to touch your toes. Hold briefly, then return upright.", searchQuery: "standing forward bend toe touch exercise low back rehabilitation" },
-    "flank_stretch":         { name: "Flank Stretch (ELK)",           sets: 3, reps: 10, videoId: "RfuiraEgKcY", pipeline: 'keraal', keraalClass: 'ELK', gifUrl: "/static/gifs/flank_stretch.svg",    instructions: "Stand upright, raise one arm overhead and slowly stretch to the opposite side (15-25°). Alternate sides.", searchQuery: "standing side bend flank stretch exercise rehabilitation" },
-    "torso_rotation":        { name: "Torso Rotation (RTK)",          sets: 3, reps: 10, videoId: "h6XyzlM8m24", pipeline: 'keraal', keraalClass: 'RTK', gifUrl: "/static/gifs/torso_rotation.svg",   instructions: "Stand with feet apart, rotate your trunk gently 20-30° to each side. Keep your lower body stable throughout.", searchQuery: "standing torso twist rotation exercise rehabilitation" },
-    "pelvis_rotation":       { name: "Pelvis Rotation",               sets: 3, reps: 10, videoId: "T4nbduvEiLg", pipeline: 'kimore', gifUrl: "/static/gifs/pelvis_rotation.svg",  instructions: "Stand upright and gently rotate your pelvis in a controlled circular motion while keeping your upper body stable. This builds hip mobility and core control.", searchQuery: "pelvis rotation hip circle exercise rehabilitation" },
+    "forward_flexion":      { name: "Forward Flexion (CTK)",         sets: 3, reps: 10, videoId: "Mg8NadAOEQI", pipeline: 'keraal', keraalClass: 'CTK', gifUrl: "/static/gifs/forward_flexion.svg", instructions: "Stand upright with feet shoulder-width apart. Slowly bend forward from your hips and reach down to touch your toes. Hold briefly, then return upright.", searchQuery: "standing forward bend toe touch exercise low back rehabilitation" },
+    "flank_stretch":        { name: "Flank Stretch (ELK)",           sets: 3, reps: 10, videoId: "RfuiraEgKcY", pipeline: 'keraal', keraalClass: 'ELK', gifUrl: "/static/gifs/flank_stretch.svg", instructions: "Stand upright, raise one arm overhead and slowly stretch to the opposite side (15-25°). Alternate sides.", searchQuery: "standing side bend flank stretch exercise rehabilitation" },
+    "torso_rotation":       { name: "Torso Rotation (RTK)",          sets: 3, reps: 10, videoId: "h6XyzlM8m24", pipeline: 'keraal', keraalClass: 'RTK', gifUrl: "/static/gifs/torso_rotation.svg", instructions: "Stand with feet apart, rotate your trunk gently 20-30° to each side. Keep your lower body stable throughout.", searchQuery: "standing torso twist rotation exercise rehabilitation" },
+    "pelvis_rotation":      { name: "Pelvis Rotation",               sets: 3, reps: 10, videoId: "T4nbduvEiLg", pipeline: 'kimore', gifUrl: "/static/gifs/pelvis_rotation.svg", instructions: "Stand upright and gently rotate your pelvis in a controlled circular motion while keeping your upper body stable. This builds hip mobility and core control.", searchQuery: "pelvis rotation hip circle exercise rehabilitation" },
 };
+
+Object.keys(AVAILABLE_EXERCISES).forEach(key => {
+    const exercise = AVAILABLE_EXERCISES[key];
+    exercise.canonicalName = canonicalizeExerciseName(exercise.name);
+    exercise.metadata = getExerciseCatalogEntryByName(exercise.name) || {};
+});
+
+function getExerciseMetadata(exerciseDef) {
+    if (!exerciseDef) return {};
+    return exerciseDef.metadata || getExerciseCatalogEntryByName(exerciseDef.name) || {};
+}
+
+function getMovementDisplay(meta) {
+    const movementType = String(meta?.movement_type || '').toLowerCase();
+    return MOVEMENT_DISPLAY[movementType] || toDisplayCase(movementType || 'Rehab');
+}
+
+function getMovementClass(meta) {
+    const movementType = String(meta?.movement_type || '').toLowerCase();
+    return PLAN_MOVEMENT_CLASS[movementType] || 'mobility';
+}
+
+function mapValueToBodyRegion(value) {
+    const normalized = String(value || '').toLowerCase();
+    for (const rule of BODY_REGION_RULES) {
+        if (rule.keywords.some(keyword => normalized.includes(keyword))) {
+            return rule.label;
+        }
+    }
+    return null;
+}
+
+function getBodyRegionLabels(meta) {
+    const primaryRegions = Array.isArray(meta?.primary_region) ? meta.primary_region : [];
+    const mapped = primaryRegions.map(mapValueToBodyRegion).filter(Boolean);
+    return dedupeList(mapped).slice(0, 3);
+}
+
+function getPrimaryBodyRegion(meta) {
+    return getBodyRegionLabels(meta)[0] || 'Body';
+}
+
+function getPhaseLabels(meta) {
+    return dedupeList(Array.isArray(meta?.rehab_phase) ? meta.rehab_phase : []).map(toDisplayCase);
+}
+
+function getPlaneLabels(meta) {
+    return dedupeList(Array.isArray(meta?.plane_of_motion) ? meta.plane_of_motion : []).map(toDisplayCase);
+}
+
+function getDifficultyClass(meta) {
+    const difficulty = String(meta?.difficulty_label || 'low').toLowerCase();
+    return ['low', 'medium', 'high'].includes(difficulty) ? difficulty : 'low';
+}
+
+function getDifficultyLabel(meta) {
+    const difficulty = getDifficultyClass(meta);
+    return DIFFICULTY_DISPLAY[difficulty] || toDisplayCase(difficulty);
+}
+
+function getPrimaryGoalText(meta) {
+    const primaryGoal = Array.isArray(meta?.primary_goal) ? meta.primary_goal[0] : '';
+    return sentenceCase(primaryGoal) || 'Supports today\'s rehab goals';
+}
+
+function getLateralityText(meta) {
+    return meta?.laterality ? toDisplayCase(meta.laterality) : 'Bilateral';
+}
+
+function getSafetyLabel(meta) {
+    const phases = (Array.isArray(meta?.rehab_phase) ? meta.rehab_phase : []).map(phase => String(phase).toLowerCase());
+    const avoidText = (Array.isArray(meta?.avoid_if) ? meta.avoid_if : []).join(' ').toLowerCase();
+    if (phases.includes('early')) return 'Good for early recovery';
+    if (avoidText.includes('balance') || avoidText.includes('fall risk') || avoidText.includes('dizziness')) return 'Use support if balance is poor';
+    if (avoidText.includes('post-operative') || avoidText.includes('post operative') || avoidText.includes('surgery')) return 'Follow post-op movement precautions';
+    if (avoidText.includes('acute')) return 'Avoid during acute flare-ups';
+    return 'Move in a comfortable range';
+}
+
+function getPlanReason(meta) {
+    const region = getPrimaryBodyRegion(meta).toLowerCase();
+    const movementType = String(meta?.movement_type || '').toLowerCase();
+    if (movementType === 'strengthening') {
+        if (region === 'knee' || region === 'hip') return 'Added for functional lower-limb strength';
+        if (region === 'shoulder') return 'Added for upper-limb strength';
+        return 'Added for functional strength';
+    }
+    if (movementType === 'coordination') return 'Added for balance and coordination';
+    if (movementType === 'flexibility') {
+        return region === 'spine' ? 'Added for spinal flexibility' : `Added for ${region} flexibility`;
+    }
+    if (movementType === 'mobility') {
+        return region === 'spine' ? 'Added for spinal mobility' : `Added for ${region} mobility`;
+    }
+    const goal = getPrimaryGoalText(meta).toLowerCase();
+    return goal ? `Added to support ${goal}` : 'Added to support today\'s rehab';
+}
+
+function renderChipMarkup(labels, chipClass) {
+    return labels.map(label => `<span class="ex-chip ${chipClass}">${escapeHtml(label)}</span>`).join('');
+}
+
+function renderPlanPills(labels, pillClass) {
+    return labels.map(label => `<span class="plan-pill ${pillClass}">${escapeHtml(label)}</span>`).join('');
+}
+
+function getEmptyPlanMarkup() {
+    return '<div class="session-plan-empty">Select exercises to see plan balance, body coverage, intensity, and why each movement is in today\'s session.</div>';
+}
+
+function findBackendWorkoutMatch(exDef) {
+    if (!exDef) return null;
+    const exerciseName = canonicalizeExerciseName(exDef.name).toLowerCase();
+    return BACKEND_WORKOUTS.find(workout => canonicalizeExerciseName(workout.name).toLowerCase() === exerciseName) || null;
+}
+
+function setExerciseCardSelectionState(card, isSelected) {
+    if (!card) return;
+    card.classList.toggle('checked', !!isSelected);
+    const stateLabel = card.querySelector('.ex-state-label');
+    if (stateLabel) stateLabel.textContent = isSelected ? 'Selected' : 'Tap to select';
+}
+
+function buildExerciseCardMarkup(exerciseDef, exData) {
+    const metadata = getExerciseMetadata(exData);
+    const displayName = canonicalizeExerciseName(exData?.name || exerciseDef?.label || '');
+    const clinicalName = metadata?.clinical_name && metadata.clinical_name !== displayName ? metadata.clinical_name : '';
+    const bodyRegionChips = renderChipMarkup(getBodyRegionLabels(metadata), 'region-chip');
+    const goalChip = `<span class="ex-chip goal-chip">${escapeHtml(getMovementDisplay(metadata))}</span>`;
+    const difficultyChip = `<span class="ex-chip difficulty-badge ${getDifficultyClass(metadata)}">${escapeHtml(getDifficultyLabel(metadata))}</span>`;
+    const phaseChips = renderChipMarkup(getPhaseLabels(metadata).slice(0, 3), 'phase-chip');
+    const planeChips = renderChipMarkup(getPlaneLabels(metadata).slice(0, 2), 'plane-chip');
+    const footerBits = [
+        `<span><i class="fa-solid fa-arrows-left-right-to-line"></i>${escapeHtml(getLateralityText(metadata))}</span>`,
+        `<span><i class="fa-solid fa-compass"></i>${escapeHtml(getPlaneLabels(metadata)[0] || 'Functional plane')}</span>`,
+    ].join('');
+    return `
+        <img class="ex-gif-thumb" src="${escapeHtml(exData?.gifUrl || exerciseDef?.gifUrl || '')}" alt="${escapeHtml(displayName)} demonstration">
+        <div class="ex-card-body">
+            <div class="ex-card-head">
+                <div class="ex-card-check">✓</div>
+                <div class="ex-card-title-block">
+                    <div class="ex-card-name">${escapeHtml(displayName)}</div>
+                    ${clinicalName ? `<div class="ex-card-clinical">${escapeHtml(clinicalName)}</div>` : ''}
+                </div>
+                <span class="ex-state-label">Tap to select</span>
+            </div>
+            <div class="ex-card-chip-row">
+                ${bodyRegionChips}
+                ${goalChip}
+                ${difficultyChip}
+            </div>
+            <div class="ex-card-chip-row">
+                ${phaseChips}
+                ${planeChips}
+            </div>
+            <p class="ex-card-mini">${escapeHtml(getPrimaryGoalText(metadata))}</p>
+            <div class="ex-card-footer">${footerBits}</div>
+            <div class="ex-card-safety">${escapeHtml(getSafetyLabel(metadata))}</div>
+        </div>
+        <button class="ex-watch-btn">▶ Watch Demo</button>
+    `;
+}
+
+function summarizeMovementCounts(records) {
+    const counts = {};
+    records.forEach(record => {
+        const key = getMovementClass(record.metadata);
+        counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+}
+
+function getIntensityInfo(records) {
+    const total = records.reduce((sum, record) => {
+        const difficultyClass = getDifficultyClass(record.metadata);
+        const numericDifficulty = difficultyClass === 'medium' ? 2 : difficultyClass === 'high' ? 3 : 1;
+        return sum + numericDifficulty;
+    }, 0);
+    const average = records.length ? total / records.length : 0;
+    return average > 1.5
+        ? { label: 'Moderate', className: 'intensity-moderate' }
+        : { label: 'Low', className: 'intensity-low' };
+}
 
 function showExerciseDemo(videoId, title, gifUrl, instructions, searchQuery) {
     document.getElementById('exerciseDemoTitle').textContent = title;
     const iframeEl = document.getElementById('exerciseDemoIframe');
-    const videoWrap = iframeEl.parentElement;
     const searchFallback = document.getElementById('exerciseDemoSearchFallback');
-    
+
     if (videoId && videoId.length >= 8) {
-        // Valid video ID — show YouTube embed
         iframeEl.src = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0`;
         iframeEl.style.display = 'block';
         if (searchFallback) searchFallback.style.display = 'none';
-        // Detect playback error via timeout — if video fails, show the search link after 3s
         iframeEl.onerror = function() {
             iframeEl.style.display = 'none';
             if (searchFallback) {
@@ -1411,7 +1733,6 @@ function showExerciseDemo(videoId, title, gifUrl, instructions, searchQuery) {
             }
         };
     } else {
-        // No video ID — show YouTube search fallback
         iframeEl.style.display = 'none';
         iframeEl.src = '';
         if (searchFallback) {
@@ -1419,12 +1740,10 @@ function showExerciseDemo(videoId, title, gifUrl, instructions, searchQuery) {
             searchFallback.style.display = 'flex';
         }
     }
-    
-    // Show animated exercise guide SVG
+
     const gifEl = document.getElementById('exerciseDemoGif');
     if (gifEl && gifUrl) { gifEl.src = gifUrl; gifEl.style.display = 'block'; }
     else if (gifEl) { gifEl.style.display = 'none'; }
-    // Show instructions
     const instrEl = document.getElementById('exerciseDemoInstructions');
     if (instrEl && instructions) {
         instrEl.innerHTML = '<strong>How to perform:</strong> ' + instructions;
@@ -1432,6 +1751,7 @@ function showExerciseDemo(videoId, title, gifUrl, instructions, searchQuery) {
     } else if (instrEl) { instrEl.style.display = 'none'; }
     document.getElementById('exerciseDemoModal').style.display = 'flex';
 }
+
 function closeExerciseDemo() {
     document.getElementById('exerciseDemoIframe').src = '';
     document.getElementById('exerciseDemoIframe').style.display = 'block';
@@ -1445,7 +1765,7 @@ let selectedProgram = null;
 
 function selectAllCurrentExercises() {
     document.querySelectorAll('#exerciseSelector .ex-card').forEach(function(card) {
-        card.classList.add('checked');
+        setExerciseCardSelectionState(card, true);
     });
     updateSelectedExercisesList();
 }
@@ -1456,35 +1776,25 @@ const PROGRAM_DEFINITIONS = {
         name: 'Deconditioning Syndrome',
         badgeClass: 'kimore-bg', badgeIcon: '🏋️', badgeLabel: 'Kimore', exCardClass: 'kimore-ex',
         exercises: [
-            { id: 'lifting_of_arms',      label: 'Lifting of Arms',               videoId: 'IzTFCZv0--E', gifUrl: '/static/gifs/lifting_of_arms.svg' },
-            { id: 'lateral_trunk_tilt',    label: 'Lateral Trunk Tilt',            videoId: '4aR-v_5f-T4', gifUrl: '/static/gifs/lateral_trunk_tilt.svg' },
-            { id: 'trunk_rotation',        label: 'Trunk Rotation',               videoId: 'IhP0LP-wyxQ', gifUrl: '/static/gifs/trunk_rotation.svg' },
-            { id: 'squat',                 label: 'Squat',                         videoId: 'hscOjLrW60c', gifUrl: '/static/gifs/squat.svg' },
+            { id: 'lifting_of_arms', label: 'Lifting of Arms', videoId: 'IzTFCZv0--E', gifUrl: '/static/gifs/lifting_of_arms.svg' },
+            { id: 'lateral_trunk_tilt', label: 'Lateral Trunk Tilt', videoId: '4aR-v_5f-T4', gifUrl: '/static/gifs/lateral_trunk_tilt.svg' },
+            { id: 'trunk_rotation', label: 'Trunk Rotation', videoId: 'IhP0LP-wyxQ', gifUrl: '/static/gifs/trunk_rotation.svg' },
+            { id: 'squat', label: 'Squat', videoId: 'hscOjLrW60c', gifUrl: '/static/gifs/squat.svg' },
             { id: 'trunk_rotation_target', label: 'Trunk Rotation & Target Touch', videoId: 'IhP0LP-wyxQ', gifUrl: '/static/gifs/trunk_rotation_target.svg' },
-            { id: 'pelvis_rotation',       label: 'Pelvis Rotation',                  videoId: 'T4nbduvEiLg', gifUrl: '/static/gifs/pelvis_rotation.svg' },
+            { id: 'pelvis_rotation', label: 'Pelvis Rotation', videoId: 'T4nbduvEiLg', gifUrl: '/static/gifs/pelvis_rotation.svg' },
         ]
     },
     keraal: {
         name: 'Non-specific Low Back Pain',
         badgeClass: 'keraal-bg', badgeIcon: '🦴', badgeLabel: 'Keraal', exCardClass: 'keraal-ex',
         exercises: [
-            { id: 'forward_flexion',  label: 'Forward Flexion (CTK)',  videoId: 'Mg8NadAOEQI', gifUrl: '/static/gifs/forward_flexion.svg' },
-            { id: 'flank_stretch',    label: 'Flank Stretch (ELK)',    videoId: 'RfuiraEgKcY', gifUrl: '/static/gifs/flank_stretch.svg' },
-            { id: 'torso_rotation',   label: 'Torso Rotation (RTK)',   videoId: 'h6XyzlM8m24', gifUrl: '/static/gifs/torso_rotation.svg' },
+            { id: 'forward_flexion', label: 'Forward Flexion (CTK)', videoId: 'Mg8NadAOEQI', gifUrl: '/static/gifs/forward_flexion.svg' },
+            { id: 'flank_stretch', label: 'Flank Stretch (ELK)', videoId: 'RfuiraEgKcY', gifUrl: '/static/gifs/flank_stretch.svg' },
+            { id: 'torso_rotation', label: 'Torso Rotation (RTK)', videoId: 'h6XyzlM8m24', gifUrl: '/static/gifs/torso_rotation.svg' },
         ]
     }
 };
 
-// Build a combined "personalized" program from PATIENT_ASSIGNED_EXERCISES
-// Maps canonical DB exercise names → AVAILABLE_EXERCISES keys
-const EXERCISE_NAME_TO_KEY = {};
-for (const [key, val] of Object.entries(AVAILABLE_EXERCISES)) {
-    const canonical = val.name.replace(/\s*\(.*?\)\s*$/, '').trim();
-    EXERCISE_NAME_TO_KEY[canonical] = key;
-    EXERCISE_NAME_TO_KEY[val.name] = key;   // also map the full name with suffix
-}
-
-// Build personalized exercises list from all assigned exercises
 (function buildPersonalizedProgram() {
     const allExercises = [
         ...PROGRAM_DEFINITIONS.kimore.exercises,
@@ -1494,12 +1804,11 @@ for (const [key, val] of Object.entries(AVAILABLE_EXERCISES)) {
     const addedIds = new Set();
 
     PATIENT_ASSIGNED_EXERCISES.forEach(assignedName => {
-        // Find the matching exercise from kimore or keraal definitions
         const matchingEx = allExercises.find(ex => {
             if (addedIds.has(ex.id)) return false;
             const exData = AVAILABLE_EXERCISES[ex.id];
             if (!exData) return false;
-            const canonical = exData.name.replace(/\s*\(.*?\)\s*$/, '').trim();
+            const canonical = canonicalizeExerciseName(exData.name);
             return assignedName === canonical || assignedName === exData.name || assignedName === ex.label;
         });
         if (matchingEx) {
@@ -1518,16 +1827,13 @@ for (const [key, val] of Object.entries(AVAILABLE_EXERCISES)) {
 /* ===================== PROGRAM SELECTION FLOW ===================== */
 function selectProgram(prog) {
     selectedProgram = prog;
-    // For personalized, exercises may span both pipelines — will be auto-switched per exercise
     basePipelineChoice = (prog === 'personalized') ? 'both' : prog;
     selectedPipeline = basePipelineChoice;
 
-    // Toggle card selected state with animation
     document.getElementById('progCardKimore').classList.toggle('selected', prog === 'kimore');
     document.getElementById('progCardKeraal').classList.toggle('selected', prog === 'keraal');
     document.getElementById('progCardPersonalized').classList.toggle('selected', prog === 'personalized');
 
-    // Update + enable Next button
     const btn = document.getElementById('btnNextToExercise');
     btn.classList.add('ready');
     btn.classList.toggle('keraal-ready', prog === 'keraal');
@@ -1540,12 +1846,9 @@ function selectProgram(prog) {
         btn.innerHTML = '🎯&nbsp; Continue to Your Personalized Plan &nbsp;→';
     }
 
-    // Show/hide status-bar score cards for the right pipeline
     const kimCard = document.getElementById('kimoreScoreCard');
     const kerCard = document.getElementById('keraalScoreCard');
     if (prog === 'personalized') {
-        // For personalized: show kimore by default, switchPipelineForCurrentExercise() will
-        // toggle per-exercise once the session starts
         if (kimCard) kimCard.style.display = '';
         if (kerCard) kerCard.style.display = 'none';
     } else {
@@ -1560,14 +1863,15 @@ function goToExerciseStep() {
     document.getElementById('stepExercise').style.display = 'block';
 
     const def = PROGRAM_DEFINITIONS[selectedProgram];
-    // Update the badge in step 2
     const badge = document.getElementById('progSelectedBadge');
-    if (badge) { badge.textContent = def.badgeIcon + ' ' + def.badgeLabel; badge.className = 'prog-selected-badge ' + def.badgeClass; }
+    if (badge) {
+        badge.textContent = def.badgeIcon + ' ' + def.badgeLabel;
+        badge.className = 'prog-selected-badge ' + def.badgeClass;
+    }
 
-    // Render exercise cards for this program
     renderExerciseCards(def);
     selectedExerciseIds = [];
-    document.getElementById('selectedExercisesList').innerHTML = '<li style="color:#999;font-size:.85rem;">No exercises selected yet</li>';
+    document.getElementById('selectedExercisesList').innerHTML = getEmptyPlanMarkup();
 }
 
 function goBackToProgram() {
@@ -1580,11 +1884,7 @@ function renderExerciseCards(def) {
     if (!grid) return;
     grid.innerHTML = '';
 
-    // For kimore/keraal: show ALL exercises in that pipeline (no filtering).
-    // For personalized: the def.exercises list is already built from
-    // PATIENT_ASSIGNED_EXERCISES, so it only contains assigned ones.
     const exercisesToRender = def.exercises;
-
     if (exercisesToRender.length === 0) {
         grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:30px;">No exercises assigned for this program. Please contact your clinician.</div>';
         return;
@@ -1592,22 +1892,23 @@ function renderExerciseCards(def) {
 
     exercisesToRender.forEach(ex => {
         const card = document.createElement('div');
+        const exData = AVAILABLE_EXERCISES[ex.id];
+        if (!exData) return;
+        const displayName = canonicalizeExerciseName(exData.name || ex.label);
         card.className = 'ex-card ' + def.exCardClass;
         card.dataset.value = ex.id;
-        const exData = AVAILABLE_EXERCISES[ex.id];
-        const gifSrc = ex.gifUrl || (exData && exData.gifUrl) || '';
-        const instrText = exData ? exData.instructions : '';
-        card.innerHTML =
-            `<img class="ex-gif-thumb" src="${gifSrc}" alt="${ex.label} demonstration">
-             <div class="ex-card-body">
-                 <div class="ex-card-check">✓</div>
-                 <span class="ex-card-name">${ex.label}</span>
-             </div>
-             <button class="ex-watch-btn">▶ Watch Demo</button>`;
-        card.querySelector('.ex-gif-thumb').addEventListener('click', e => { e.stopPropagation(); const exD = AVAILABLE_EXERCISES[ex.id]; showExerciseDemo(ex.videoId, ex.label, gifSrc, instrText, exD && exD.searchQuery); });
-        card.querySelector('.ex-watch-btn').addEventListener('click', e => { e.stopPropagation(); const exD = AVAILABLE_EXERCISES[ex.id]; showExerciseDemo(ex.videoId, ex.label, gifSrc, instrText, exD && exD.searchQuery); });
+        card.innerHTML = buildExerciseCardMarkup(ex, exData);
+        setExerciseCardSelectionState(card, false);
+        card.querySelector('.ex-gif-thumb').addEventListener('click', event => {
+            event.stopPropagation();
+            showExerciseDemo(ex.videoId, displayName, exData.gifUrl, exData.instructions, exData.searchQuery);
+        });
+        card.querySelector('.ex-watch-btn').addEventListener('click', event => {
+            event.stopPropagation();
+            showExerciseDemo(ex.videoId, displayName, exData.gifUrl, exData.instructions, exData.searchQuery);
+        });
         card.addEventListener('click', function() {
-            this.classList.toggle('checked');
+            setExerciseCardSelectionState(this, !this.classList.contains('checked'));
             updateSelectedExercisesList();
         });
         grid.appendChild(card);
@@ -1615,32 +1916,84 @@ function renderExerciseCards(def) {
 }
 
 function updateSelectedExercisesList() {
-    const checked = [...document.querySelectorAll('.ex-card.checked')];
-    selectedExerciseIds = checked.map(c => c.dataset.value);
+    const checkedCards = [...document.querySelectorAll('.ex-card.checked')];
+    selectedExerciseIds = checkedCards.map(card => card.dataset.value);
     const list = document.getElementById('selectedExercisesList');
-    if (!checked.length) {
-        list.innerHTML = '<li style="color:#999;font-size:.85rem;">No exercises selected yet</li>';
+    if (!checkedCards.length) {
+        list.innerHTML = getEmptyPlanMarkup();
         return;
     }
+
     const def = PROGRAM_DEFINITIONS[selectedProgram] || { exercises: [] };
-    list.innerHTML = checked.map((c, i) => {
-        const ex = def.exercises.find(e => e.id === c.dataset.value);
-        const exDef = AVAILABLE_EXERCISES[c.dataset.value];
-        let backendMatch = null;
-        if (exDef) {
-            const exNameLower = exDef.name.toLowerCase().trim();
-            backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim() === exNameLower);
-            if (!backendMatch) backendMatch = BACKEND_WORKOUTS.find(bw => exNameLower.startsWith(bw.name.toLowerCase().trim()));
-            if (!backendMatch) backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim().startsWith(exNameLower));
-        }
-        const dispSets = backendMatch ? backendMatch.sets : 3;
-        const dispReps = backendMatch ? backendMatch.reps : 10;
-        return `<li style="padding:6px 0;border-bottom:1px solid #eee;display:flex;align-items:center;gap:9px;">
-            <span style="width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:900;flex-shrink:0;background:#3b82f6;color:#fff;">${i + 1}</span>
-            <strong>${ex ? ex.label : c.dataset.value}</strong>
-            <span style="color:#888;font-size:.8rem;margin-left:auto;">${dispSets} sets × ${dispReps} reps</span>
-        </li>`;
+    const selectedRecords = checkedCards.map((card, index) => {
+        const exerciseId = card.dataset.value;
+        const programExercise = def.exercises.find(ex => ex.id === exerciseId) || {};
+        const exDef = AVAILABLE_EXERCISES[exerciseId] || {};
+        const metadata = getExerciseMetadata(exDef);
+        const backendMatch = findBackendWorkoutMatch(exDef);
+        return {
+            order: index + 1,
+            exerciseId,
+            name: canonicalizeExerciseName(exDef.name || programExercise.label || exerciseId),
+            metadata,
+            sets: backendMatch ? backendMatch.sets : exDef.sets || 3,
+            reps: backendMatch ? backendMatch.reps : exDef.reps || 10,
+        };
+    });
+
+    const movementCounts = summarizeMovementCounts(selectedRecords);
+    const movementSummaryPills = Object.entries(movementCounts)
+        .map(([movementClass, count]) => {
+            const label = `${count} ${movementClass === 'strengthening' ? 'strengthening' : movementClass} exercise${count === 1 ? '' : 's'}`;
+            return `<span class="plan-pill ${movementClass}">${escapeHtml(label)}</span>`;
+        })
+        .join('');
+    const coverageLabels = dedupeList(selectedRecords.flatMap(record => getBodyRegionLabels(record.metadata)));
+    const intensityInfo = getIntensityInfo(selectedRecords);
+
+    const summaryMarkup = `
+        <div class="plan-summary-grid">
+            <div class="plan-summary-card">
+                <div class="plan-summary-label">Plan Balance</div>
+                <div class="plan-summary-stack">${movementSummaryPills || '<span class="plan-summary-value">Balanced session</span>'}</div>
+            </div>
+            <div class="plan-summary-card">
+                <div class="plan-summary-label">Body Coverage</div>
+                <div class="plan-summary-stack">${coverageLabels.length ? renderPlanPills(coverageLabels, 'coverage') : '<span class="plan-summary-value">Whole-body support</span>'}</div>
+            </div>
+            <div class="plan-summary-card">
+                <div class="plan-summary-label">Session Intensity</div>
+                <div class="plan-summary-stack">${renderPlanPills([intensityInfo.label], intensityInfo.className)}</div>
+            </div>
+        </div>
+    `;
+
+    const listMarkup = selectedRecords.map(record => {
+        const bodyRegions = getBodyRegionLabels(record.metadata);
+        const chipLabels = [
+            ...bodyRegions.map(region => ({ label: region, className: 'coverage' })),
+            { label: getMovementDisplay(record.metadata), className: getMovementClass(record.metadata) },
+            { label: getDifficultyLabel(record.metadata), className: `difficulty-${getDifficultyClass(record.metadata)}` },
+            ...(getPhaseLabels(record.metadata).slice(0, 2).map(phase => ({ label: phase, className: 'coverage' }))),
+        ];
+        return `
+            <div class="plan-exercise-item">
+                <span class="plan-item-index">${record.order}</span>
+                <div class="plan-item-main">
+                    <div class="plan-item-top">
+                        <div class="plan-item-name">${escapeHtml(record.name)}</div>
+                        <div class="plan-item-dose">${record.sets} sets × ${record.reps} reps</div>
+                    </div>
+                    <div class="plan-item-why">Why this is in your plan: ${escapeHtml(getPlanReason(record.metadata))}</div>
+                    <div class="plan-item-chip-row">
+                        ${chipLabels.map(chip => `<span class="plan-pill ${chip.className}">${escapeHtml(chip.label)}</span>`).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
     }).join('');
+
+    list.innerHTML = summaryMarkup + `<div class="plan-exercise-list">${listMarkup}</div>`;
 }
 
 /* ===================== CONFIG ===================== */
@@ -3302,14 +3655,7 @@ function buildSelectedWorkouts() {
     console.log('🔍 BACKEND_WORKOUTS:', BACKEND_WORKOUTS);
     const userSelectedWorkouts = selectedExerciseIds.map((id, idx) => {
         const exDef = AVAILABLE_EXERCISES[id];
-        const exNameLower = exDef.name.toLowerCase().trim();
-        let backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim() === exNameLower);
-        if (!backendMatch) {
-            backendMatch = BACKEND_WORKOUTS.find(bw => exNameLower.startsWith(bw.name.toLowerCase().trim()));
-        }
-        if (!backendMatch) {
-            backendMatch = BACKEND_WORKOUTS.find(bw => bw.name.toLowerCase().trim().startsWith(exNameLower));
-        }
+        const backendMatch = findBackendWorkoutMatch(exDef);
         console.log(`  Exercise "${exDef.name}" → backendMatch:`, backendMatch ? `"${backendMatch.name}" (${backendMatch.sets}×${backendMatch.reps})` : 'NONE (using default 3×10)');
         return {
             id: idx + 1,

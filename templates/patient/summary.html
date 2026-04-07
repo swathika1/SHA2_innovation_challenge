@@ -81,6 +81,94 @@
         display: inline-flex; align-items: center; gap: 8px;
     }
     .action-pdf:hover { opacity: .92; }
+    .insight-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px; margin-bottom:24px; }
+    .insight-card {
+        background:#fff; border-radius:14px; padding:18px 20px;
+        box-shadow:0 2px 12px rgba(0,0,0,.06);
+    }
+    .insight-card .eyebrow {
+        font-size:.72rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#64748b;
+        margin-bottom:8px;
+    }
+    .insight-card .headline { font-size:1.02rem; font-weight:700; color:#1f2937; line-height:1.35; }
+    .insight-card .subline { font-size:.84rem; color:#64748b; margin-top:6px; line-height:1.5; }
+    .insight-chip-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .insight-chip {
+        display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px;
+        font-size:.74rem; font-weight:700; background:#eef2ff; color:#4338ca;
+    }
+    .visual-grid { display:grid; grid-template-columns:1.15fr .95fr; gap:18px; margin-bottom:24px; }
+    .visual-card {
+        background:#fff; border-radius:14px; padding:22px 24px;
+        box-shadow:0 2px 12px rgba(0,0,0,.06);
+    }
+    .visual-card h3 { margin:0 0 6px; font-size:1.08rem; color:#1f2937; }
+    .visual-card .visual-sub { font-size:.82rem; color:#64748b; margin-bottom:16px; }
+    .mix-layout { display:flex; gap:22px; align-items:center; flex-wrap:wrap; }
+    .mix-donut {
+        --donut-size: 170px;
+        width:var(--donut-size); height:var(--donut-size); border-radius:50%;
+        position:relative; flex-shrink:0;
+        box-shadow:inset 0 0 0 1px rgba(255,255,255,.5);
+    }
+    .mix-donut::after {
+        content:''; position:absolute; inset:26px; border-radius:50%;
+        background:#fff; box-shadow:inset 0 0 0 1px #e5e7eb;
+    }
+    .mix-donut-center {
+        position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+        z-index:1; text-align:center;
+    }
+    .mix-donut-center strong { font-size:1.4rem; color:#111827; line-height:1; }
+    .mix-donut-center span { font-size:.75rem; color:#64748b; margin-top:6px; }
+    .mix-legend { flex:1; min-width:220px; display:flex; flex-direction:column; gap:10px; }
+    .mix-legend-row {
+        display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center;
+        font-size:.85rem; color:#334155;
+    }
+    .mix-dot { width:12px; height:12px; border-radius:50%; }
+    .mix-bar-track { height:8px; border-radius:999px; background:#e5e7eb; overflow:hidden; }
+    .mix-bar-fill { height:100%; border-radius:999px; }
+    .readiness-list { display:flex; flex-direction:column; gap:14px; }
+    .readiness-row { display:grid; grid-template-columns:68px 1fr 44px; gap:12px; align-items:center; }
+    .readiness-row label { font-size:.82rem; font-weight:700; color:#334155; }
+    .readiness-track { height:10px; border-radius:999px; background:#e5e7eb; overflow:hidden; }
+    .readiness-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#60a5fa,#34d399); }
+    .readiness-value { font-size:.78rem; color:#475569; font-weight:700; text-align:right; }
+    .improvement-list { display:flex; flex-direction:column; gap:12px; }
+    .improvement-row {
+        display:grid; grid-template-columns:1fr auto; gap:10px; align-items:start;
+        padding-bottom:12px; border-bottom:1px solid #eef2f7;
+    }
+    .improvement-row:last-child { border-bottom:none; padding-bottom:0; }
+    .improvement-title { font-size:.88rem; font-weight:700; color:#1f2937; }
+    .improvement-meta { font-size:.78rem; color:#64748b; margin-top:4px; }
+    .improvement-delta {
+        padding:4px 9px; border-radius:999px; font-size:.76rem; font-weight:800;
+        background:#eff6ff; color:#2563eb; white-space:nowrap;
+    }
+    .improvement-delta.down { background:#fef2f2; color:#dc2626; }
+    .improvement-delta.flat { background:#f8fafc; color:#475569; }
+    .exercise-name-block { display:flex; flex-direction:column; gap:6px; }
+    .exercise-meta-line { font-size:.78rem; color:#64748b; line-height:1.4; }
+    .exercise-chip-row { display:flex; flex-wrap:wrap; gap:6px; }
+    .exercise-chip {
+        display:inline-flex; align-items:center; padding:3px 8px; border-radius:999px;
+        font-size:.7rem; font-weight:700; background:#f1f5f9; color:#475569;
+    }
+    .exercise-chip.region { background:#eff6ff; color:#1d4ed8; }
+    .exercise-chip.movement { background:#ecfdf5; color:#047857; }
+    .exercise-chip.phase { background:#fff7ed; color:#c2410c; }
+    .exercise-chip.plane { background:#f8fafc; color:#475569; }
+    @media (max-width: 760px) {
+        .visual-grid { grid-template-columns:1fr; }
+        .mix-layout { flex-direction:column; align-items:flex-start; }
+        .mix-donut { --donut-size: 150px; }
+        .exercise-table th:nth-child(4),
+        .exercise-table td:nth-child(4),
+        .exercise-table th:nth-child(5),
+        .exercise-table td:nth-child(5) { display:none; }
+    }
 </style>
 
 <div class="summary-container">
@@ -130,6 +218,127 @@
             <div class="stat-label">Duration</div>
         </div>
     </div>
+
+    {% if session_overview %}
+    <div class="insight-grid">
+        <div class="insight-card">
+            <div class="eyebrow">Today's Focus</div>
+            <div class="headline">{{ session_overview.todays_focus }}</div>
+            <div class="subline">
+                Best-performing category:
+                <strong>{{ session_overview.best_category.label if session_overview.best_category else 'Balanced' }}</strong>
+            </div>
+        </div>
+        <div class="insight-card">
+            <div class="eyebrow">Movement Mix</div>
+            <div class="headline">
+                {% for item in session_overview.movement_mix %}
+                    {{ item.pct|round(0)|int }}% {{ item.label|lower }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </div>
+            <div class="subline">Interprets the session by training intent instead of only exercise names.</div>
+        </div>
+        <div class="insight-card">
+            <div class="eyebrow">Regions Worked</div>
+            <div class="headline">{{ session_overview.regions_worked|join(', ') if session_overview.regions_worked else 'Whole body' }}</div>
+            <div class="subline">Needs improvement: <strong>{{ session_overview.needs_improvement }}</strong></div>
+        </div>
+    </div>
+
+    <div class="visual-grid">
+        <div class="visual-card">
+            <h3>Category Donut Chart</h3>
+            <div class="visual-sub">Movement mix across today&apos;s session plan.</div>
+            {% set mix_colors = {
+                'mobility': '#60a5fa',
+                'flexibility': '#60a5fa',
+                'strengthening': '#34d399',
+                'coordination': '#c084fc',
+                'balance': '#f59e0b'
+            } %}
+            {% set donut = namespace(start=0, segments=[]) %}
+            {% for item in session_overview.movement_mix %}
+                {% set end = donut.start + item.pct %}
+                {% set _ = donut.segments.append((mix_colors.get(item.key, '#94a3b8')) ~ ' ' ~ donut.start ~ '% ' ~ end ~ '%') %}
+                {% set donut.start = end %}
+            {% endfor %}
+            <div class="mix-layout">
+                <div class="mix-donut" style="background: conic-gradient({{ donut.segments|join(', ') }});">
+                    <div class="mix-donut-center">
+                        <strong>{{ exercises|length }}</strong>
+                        <span>exercise{{ '' if exercises|length == 1 else 's' }}</span>
+                    </div>
+                </div>
+                <div class="mix-legend">
+                    {% for item in session_overview.movement_mix %}
+                    <div class="mix-legend-row">
+                        <span class="mix-dot" style="background:{{ mix_colors.get(item.key, '#94a3b8') }};"></span>
+                        <div>
+                            <div style="font-weight:700;">{{ item.label }}</div>
+                            <div class="mix-bar-track">
+                                <div class="mix-bar-fill" style="width:{{ item.pct }}%; background:{{ mix_colors.get(item.key, '#94a3b8') }};"></div>
+                            </div>
+                        </div>
+                        <strong>{{ item.count }}</strong>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="visual-card">
+            <h3>Phase Readiness</h3>
+            <div class="visual-sub">Readiness blends exercise quality and completion for each rehab phase tagged in today&apos;s plan.</div>
+            <div class="readiness-list">
+                {% for item in session_overview.phase_readiness %}
+                <div class="readiness-row">
+                    <label>{{ item.phase }}</label>
+                    <div class="readiness-track">
+                        <div class="readiness-fill" style="width:{{ item.readiness }}%; opacity:{{ 0.35 if item.count == 0 else 1 }};"></div>
+                    </div>
+                    <div class="readiness-value">
+                        {% if item.count %}{{ item.readiness|round(0)|int }}%{% else %}--{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="visual-card" style="margin-bottom:24px;">
+        <h3>Improvement by Exercise Type</h3>
+        <div class="visual-sub">Compares today&apos;s movement categories with prior sessions where the same type appeared.</div>
+        <div class="improvement-list">
+            {% for item in session_overview.improvement_by_type %}
+            {% set delta = item.delta %}
+            <div class="improvement-row">
+                <div>
+                    <div class="improvement-title">{{ item.label }}</div>
+                    <div class="improvement-meta">
+                        Current avg {{ item.current_avg|round(1) }}/50
+                        {% if item.previous_avg is not none %}
+                        · Previous avg {{ item.previous_avg|round(1) }}/50
+                        {% else %}
+                        · First comparable session block
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="improvement-delta {% if delta is none or delta == 0 %}flat{% elif delta < 0 %}down{% endif %}">
+                    {% if delta is none %}
+                    New
+                    {% elif delta > 0 %}
+                    +{{ delta|round(1) }}
+                    {% elif delta < 0 %}
+                    {{ delta|round(1) }}
+                    {% else %}
+                    0.0
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- ===== RECOVERY TIMELINE ===== -->
     {% if recovery %}
@@ -241,12 +450,29 @@
         <tbody>
             {% for ex in exercises %}
             <tr>
-                <td style="display:flex; align-items:center; gap:8px;">
+                <td style="display:flex; align-items:flex-start; gap:8px;">
                     {% set ex_key = ex.exercise_name|lower|replace(' ', '_') %}
                     <img src="{{ url_for('static', filename='gifs/' ~ ex_key ~ '.svg') }}"
                          alt="" style="width:40px; height:40px; object-fit:contain; border-radius:6px; background:#f0f4ff; flex-shrink:0;"
                          onerror="this.style.display='none'">
-                    <strong>{{ ex.exercise_name }}</strong>
+                    <div class="exercise-name-block">
+                        <strong>{{ ex.exercise_name }}</strong>
+                        {% if ex.metadata and ex.metadata.clinical_name and ex.metadata.clinical_name != ex.exercise_name %}
+                        <div class="exercise-meta-line">{{ ex.metadata.clinical_name }}</div>
+                        {% endif %}
+                        <div class="exercise-chip-row">
+                            {% for region in ex.body_regions[:2] %}
+                            <span class="exercise-chip region">{{ region }}</span>
+                            {% endfor %}
+                            <span class="exercise-chip movement">{{ ex.movement_type_label }}</span>
+                            {% for phase in ex.rehab_phase_labels[:1] %}
+                            <span class="exercise-chip phase">{{ phase }}</span>
+                            {% endfor %}
+                            {% for plane in ex.plane_labels[:1] %}
+                            <span class="exercise-chip plane">{{ plane }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
                 </td>
                 <td>{{ ex.quality_score | default(0) }}/50</td>
                 <td>

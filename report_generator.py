@@ -385,6 +385,47 @@ def _draw_pie_chart(correct, wrong, width, height, title=""):
     return d
 
 
+def _draw_multi_pie_chart(data_dict, width, height, title=""):
+    """Generic donut chart for movement/category distribution."""
+    d = Drawing(width, height)
+    if not data_dict:
+        d.add(String(width / 2, height / 2, "No data", fontSize=8,
+                     fillColor=TEXT_MUTED, textAnchor="middle"))
+        return d
+
+    palette = [
+        colors.HexColor("#60a5fa"),
+        colors.HexColor("#34d399"),
+        colors.HexColor("#c084fc"),
+        colors.HexColor("#f59e0b"),
+        colors.HexColor("#f87171"),
+        colors.HexColor("#94a3b8"),
+    ]
+    pie = Pie()
+    pie.x = width / 2 - 42
+    pie.y = 15
+    pie.width = 84
+    pie.height = 84
+    pie.data = list(data_dict.values())
+    pie.labels = [f"{name}\n{value}" for name, value in data_dict.items()]
+    pie.slices.fontName = "Helvetica"
+    pie.slices.fontSize = 6.5
+    pie.slices.fontColor = TEXT_DARK
+    pie.simpleLabels = 0
+    pie.sideLabels = 1
+    pie.sideLabelsOffset = 0.1
+    pie.innerRadiusFraction = 0.45
+    for idx, _ in enumerate(data_dict.values()):
+        pie.slices[idx].fillColor = palette[idx % len(palette)]
+        pie.slices[idx].strokeColor = WHITE
+        pie.slices[idx].strokeWidth = 1.0
+    d.add(pie)
+    if title:
+        d.add(String(width / 2, height - 5, title, fontSize=9,
+                     fontName="Helvetica-Bold", fillColor=TEXT_DARK, textAnchor="middle"))
+    return d
+
+
 # ═══════════════════════  BUILDING BLOCKS  ════════════════════════════════
 def _section(title, styles, icon=None):
     """Section heading. Icons are plain Helvetica-safe characters."""
@@ -416,6 +457,7 @@ def generate_session_report(
     exercises,
     frames,
     overall_duration=None,
+    report_context=None,
 ):
     """Return PDF as bytes."""
     buf = io.BytesIO()
@@ -471,6 +513,7 @@ def generate_session_report(
     effort    = int(session_data.get('effort_level', 5) or 5)
     started   = session_data.get('started_at', '') or ''
     needs_center = quality < CENTER_VISIT_SCORE_THRESHOLD
+    session_overview = (report_context or {}).get("session_overview") or {}
 
     # ── build normalised set of selected exercise names ────────────────
     selected_norm = set()
@@ -722,6 +765,113 @@ def generate_session_report(
         Spacer(1, 18*mm),
         _comp_bar,
         Spacer(1, 5*mm)]))
+
+    # ━━━━ 3b. INTERPRETABLE SESSION HIGHLIGHTS ━━━━━━━━━━━━━━━━━━━━━━━━
+    if session_overview:
+        best_category = session_overview.get("best_category") or {}
+        highlight_rows = [
+            ["Today's Focus", session_overview.get("todays_focus", "Whole-body rehab")],
+            ["Regions Worked", ", ".join(session_overview.get("regions_worked", [])) or "Whole body"],
+            ["Best Category", best_category.get("label", "Balanced session")],
+            ["Needs Improvement", session_overview.get("needs_improvement", "Movement quality")],
+        ]
+        highlight_table = Table(highlight_rows, colWidths=[36*mm, CW - 36*mm])
+        highlight_table.setStyle(TableStyle([
+            ("FONTNAME",      (0,0),(0,-1), "Helvetica-Bold"),
+            ("FONTSIZE",      (0,0),(-1,-1), 9),
+            ("TEXTCOLOR",     (0,0),(0,-1), PRIMARY_DARK),
+            ("BACKGROUND",    (0,0),(-1,-1), LIGHT_BG),
+            ("BOX",           (0,0),(-1,-1), 0.5, BORDER),
+            ("INNERGRID",     (0,0),(-1,-1), 0.3, BORDER_LIGHT),
+            ("TOPPADDING",    (0,0),(-1,-1), 5),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+            ("LEFTPADDING",   (0,0),(-1,-1), 8),
+        ]))
+
+        movement_mix = OrderedDict(
+            (item["label"], item["count"])
+            for item in session_overview.get("movement_mix", [])
+        )
+        movement_chart = _draw_multi_pie_chart(
+            movement_mix,
+            float(CW * 0.42),
+            120,
+            title="Movement Mix",
+        )
+
+        phase_items = [Paragraph(
+            '<b>Phase Readiness</b>',
+            ParagraphStyle("phase_hdr", parent=S["Normal"], textColor=TEXT_DARK,
+                           fontSize=10, fontName="Helvetica-Bold", spaceAfter=3*mm)
+        )]
+        for item in session_overview.get("phase_readiness", []):
+            label = f"{item['phase']} ({item['count']})" if item.get("count") else item['phase']
+            phase_items.append(_draw_progress_bar(
+                float(CW * 0.48), 12, item.get("readiness", 0),
+                SUCCESS if item.get("readiness", 0) >= 70 else (WARNING if item.get("readiness", 0) >= 40 else DANGER),
+                label_left=label,
+                label_right="%.0f%%" % item.get("readiness", 0) if item.get("count") else "--",
+            ))
+            phase_items.append(Spacer(1, 1.5*mm))
+
+        insights_table = Table(
+            [[movement_chart, phase_items]],
+            colWidths=[CW * 0.44, CW * 0.56],
+        )
+        insights_table.setStyle(TableStyle([
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+            ("LEFTPADDING",  (0,0), (-1,-1), 0),
+            ("RIGHTPADDING", (0,0), (-1,-1), 0),
+        ]))
+
+        improvement_rows = [["Exercise Type", "Current Avg", "Change vs Prior"]]
+        for item in session_overview.get("improvement_by_type", []):
+            delta = item.get("delta")
+            if delta is None:
+                delta_label = "New"
+            elif delta > 0:
+                delta_label = f"+{delta:.1f}"
+            elif delta < 0:
+                delta_label = f"{delta:.1f}"
+            else:
+                delta_label = "0.0"
+            improvement_rows.append([
+                item.get("label", "Type"),
+                f"{item.get('current_avg', 0):.1f}/50",
+                delta_label,
+            ])
+        improvement_table = Table(
+            improvement_rows,
+            colWidths=[CW * 0.42, CW * 0.24, CW * 0.24],
+            repeatRows=1,
+        )
+        improvement_table.setStyle(TableStyle([
+            ("BACKGROUND",     (0,0),(-1,0), PRIMARY_DARK),
+            ("TEXTCOLOR",      (0,0),(-1,0), WHITE),
+            ("FONTNAME",       (0,0),(-1,0), "Helvetica-Bold"),
+            ("FONTSIZE",       (0,0),(-1,-1), 8.8),
+            ("ROWBACKGROUNDS", (0,1),(-1,-1), [WHITE, LIGHT_BG]),
+            ("GRID",           (0,0),(-1,-1), 0.35, BORDER),
+            ("ALIGN",          (1,0),(-1,-1), "CENTER"),
+            ("TOPPADDING",     (0,0),(-1,-1), 4),
+            ("BOTTOMPADDING",  (0,0),(-1,-1), 4),
+            ("LEFTPADDING",    (0,0),(-1,-1), 6),
+        ]))
+
+        story.extend([
+            _section("Interpretable Session Highlights", S),
+            highlight_table,
+            Spacer(1, 4*mm),
+            insights_table,
+            Spacer(1, 4*mm),
+            Paragraph(
+                '<b>Improvement by Exercise Type</b>',
+                ParagraphStyle("imp_hdr", parent=S["Normal"], textColor=TEXT_DARK,
+                               fontSize=10, fontName="Helvetica-Bold", spaceAfter=2*mm)
+            ),
+            improvement_table,
+            Spacer(1, 5*mm),
+        ])
 
     # ━━━━ 4. SESSION GOALS vs ACHIEVEMENTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if exercises:

@@ -26,6 +26,7 @@ if not _meralion_key:
     print("⚠️  WARNING: MERILION_API_KEY not found in .env - Meralion API may not work")
 
 from functools import wraps
+from collections import Counter, defaultdict
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
@@ -34,6 +35,8 @@ from Rehab_Scorer_Coach.src.keraal_pipeline import KeraalRehabPipeline
 from flask_cors import CORS # type: ignore
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
+import json
+import re
 import os
 import uuid
 try:
@@ -384,6 +387,749 @@ def sync_patient_specialties(patient_user_id, condition):
 
     return normalized, specialties
 
+
+CANONICAL_EXERCISE_DETAILS = {
+    'Lifting of Arms': {
+        'category': 'Shoulder',
+        'description': 'Stand upright, raise both arms from your sides to above your head, then slowly lower. Keep elbows slightly bent.',
+    },
+    'Lateral Trunk Tilt': {
+        'category': 'Spine',
+        'description': 'Stand with feet shoulder-width apart. Slowly tilt your trunk to one side, return to center, then tilt to the other side.',
+    },
+    'Trunk Rotation': {
+        'category': 'Spine',
+        'description': 'Stand with arms relaxed. Rotate your upper body to the left, return to center, then rotate right. Keep hips facing forward.',
+    },
+    'Squat': {
+        'category': 'Knee',
+        'description': 'Stand with feet shoulder-width apart. Lower your hips by bending your knees, keeping your back straight. Rise slowly.',
+    },
+    'Trunk Rotation & Target Touch': {
+        'category': 'Spine',
+        'description': 'Stand upright, rotate your trunk and reach toward targets at various positions. Combine trunk rotation with arm extension.',
+    },
+    'Pelvis Rotation': {
+        'category': 'Hip',
+        'description': 'Stand upright and gently rotate your pelvis in a controlled circular motion while keeping your upper body stable.',
+    },
+    'Forward Flexion': {
+        'category': 'Spine',
+        'description': 'Stand upright, slowly bend forward from your hips keeping your back straight. Reach towards your toes, then return upright.',
+    },
+    'Flank Stretch': {
+        'category': 'Spine',
+        'description': 'Stand upright, raise one arm overhead and slowly stretch to the opposite side. Alternate sides.',
+    },
+    'Torso Rotation': {
+        'category': 'Spine',
+        'description': 'Stand with feet apart, rotate your trunk gently to each side. Keep your lower body stable throughout.',
+    },
+}
+
+EXERCISE_METADATA = {
+    'Lateral Trunk Tilt': {
+        'clinical_name': 'Lateral Trunk Flexion',
+        'movement_type': 'mobility',
+        'primary_region': ['lumbar spine', 'thoracic spine'],
+        'secondary_region': ['obliques', 'core'],
+        'primary_goal': ['improve spinal mobility', 'reduce trunk stiffness', 'improve lateral flexion control'],
+        'difficulty': 'low',
+        'rehab_phase': ['early', 'mid'],
+        'laterality': 'bilateral',
+        'functional_level': 'basic',
+        'suitable_for': [
+            'Non-specific Low Back Pain',
+            'Lumbar Spondylosis',
+            'Mechanical Back Stiffness',
+            'Deconditioning Syndrome'
+        ],
+        'avoid_if': [
+            'acute severe low back pain',
+            'uncontrolled post-operative spine precautions',
+            'severe balance impairment'
+        ],
+        'plane_of_motion': ['frontal']
+    },
+    'Trunk Rotation': {
+        'clinical_name': 'Seated or Standing Trunk Rotation',
+        'movement_type': 'mobility',
+        'primary_region': ['thoracic spine', 'lumbar spine'],
+        'secondary_region': ['core', 'obliques'],
+        'primary_goal': ['improve trunk rotation mobility', 'improve spinal coordination', 'reduce stiffness'],
+        'difficulty': 'low',
+        'rehab_phase': ['early', 'mid'],
+        'laterality': 'bilateral',
+        'functional_level': 'basic',
+        'suitable_for': [
+            'Lumbar Spondylosis',
+            'Mechanical Neck and Back Dysfunction',
+            'Post-Stroke Rehabilitation',
+            'Deconditioning Syndrome'
+        ],
+        'avoid_if': [
+            'recent abdominal surgery without clearance',
+            'early post-spinal surgery with rotation restriction',
+            'acute disc prolapse with severe pain'
+        ],
+        'plane_of_motion': ['transverse']
+    },
+    'Forward Flexion': {
+        'clinical_name': 'Trunk Forward Flexion',
+        'movement_type': 'mobility',
+        'primary_region': ['lumbar spine', 'hip'],
+        'secondary_region': ['hamstrings', 'core'],
+        'primary_goal': ['improve flexion range of motion', 'improve trunk control', 'improve reaching function'],
+        'difficulty': 'low',
+        'rehab_phase': ['early', 'mid'],
+        'laterality': 'bilateral',
+        'functional_level': 'basic',
+        'suitable_for': [
+            'Post-Stroke Rehabilitation',
+            'Deconditioning Syndrome',
+            'Mechanical Trunk Stiffness'
+        ],
+        'avoid_if': [
+            'lumbar flexion-intolerant pain',
+            'osteoporotic vertebral fracture risk',
+            'post-operative bending restriction'
+        ],
+        'plane_of_motion': ['sagittal']
+    },
+    'Flank Stretch': {
+        'clinical_name': 'Lateral Trunk Stretch',
+        'movement_type': 'flexibility',
+        'primary_region': ['lateral trunk', 'thoracolumbar fascia'],
+        'secondary_region': ['obliques', 'shoulder girdle'],
+        'primary_goal': ['improve flexibility', 'reduce side-body tightness', 'improve posture'],
+        'difficulty': 'low',
+        'rehab_phase': ['early', 'mid'],
+        'laterality': 'bilateral',
+        'functional_level': 'basic',
+        'suitable_for': [
+            'Lumbar Spondylosis',
+            'Non-specific Low Back Pain',
+            'General Deconditioning'
+        ],
+        'avoid_if': [
+            'acute rib injury',
+            'uncontrolled spinal pain',
+            'recent trunk surgery'
+        ],
+        'plane_of_motion': ['frontal']
+    },
+    'Torso Rotation': {
+        'clinical_name': 'Functional Torso Rotation',
+        'movement_type': 'mobility',
+        'primary_region': ['thoracic spine', 'core'],
+        'secondary_region': ['lumbar spine', 'shoulder girdle'],
+        'primary_goal': ['improve functional rotation', 'improve trunk control', 'improve coordination'],
+        'difficulty': 'low',
+        'rehab_phase': ['mid'],
+        'laterality': 'bilateral',
+        'functional_level': 'basic',
+        'suitable_for': [
+            'General Rehabilitation',
+            'Deconditioning Syndrome',
+            'Mechanical Trunk Stiffness'
+        ],
+        'avoid_if': [
+            'early spine post-operative restriction',
+            'acute vertigo',
+            'severe balance impairment'
+        ],
+        'plane_of_motion': ['transverse']
+    },
+    'Trunk Rotation & Target Touch': {
+        'clinical_name': 'Task-Oriented Trunk Rotation with Reach',
+        'movement_type': 'coordination',
+        'primary_region': ['trunk', 'core'],
+        'secondary_region': ['upper limb', 'balance system'],
+        'primary_goal': ['improve motor control', 'improve reaching accuracy', 'improve dynamic sitting or standing balance'],
+        'difficulty': 'medium',
+        'rehab_phase': ['mid', 'late'],
+        'laterality': 'bilateral',
+        'functional_level': 'functional',
+        'suitable_for': [
+            'Post-Stroke Rehabilitation',
+            'Neurological Rehabilitation',
+            'Balance and Coordination Deficits'
+        ],
+        'avoid_if': [
+            'severe neglect without supervision',
+            'high fall risk without support',
+            'acute dizziness'
+        ],
+        'plane_of_motion': ['transverse', 'multiplanar']
+    },
+    'Squat': {
+        'clinical_name': 'Sit-to-Stand / Partial Squat',
+        'movement_type': 'strengthening',
+        'primary_region': ['knee', 'hip'],
+        'secondary_region': ['gluteals', 'quadriceps', 'core'],
+        'primary_goal': ['improve lower limb strength', 'improve functional transfer ability', 'improve weight-bearing tolerance'],
+        'difficulty': 'medium',
+        'rehab_phase': ['mid', 'late'],
+        'laterality': 'bilateral',
+        'functional_level': 'functional',
+        'suitable_for': [
+            'Knee Osteoarthritis',
+            'Hip Osteoarthritis',
+            'Post-Total Knee Replacement (TKR)',
+            'General Deconditioning',
+            'Sports Rehabilitation'
+        ],
+        'avoid_if': [
+            'strict post-operative weight-bearing restriction',
+            'uncontrolled knee pain',
+            'poor balance without support'
+        ],
+        'plane_of_motion': ['sagittal']
+    },
+    'Pelvis Rotation': {
+        'clinical_name': 'Pelvic Rotation Control Exercise',
+        'movement_type': 'mobility',
+        'primary_region': ['pelvis', 'lumbopelvic region'],
+        'secondary_region': ['hip', 'core'],
+        'primary_goal': ['improve lumbopelvic mobility', 'improve pelvic control', 'improve gait-related movement'],
+        'difficulty': 'low',
+        'rehab_phase': ['early', 'mid'],
+        'laterality': 'bilateral',
+        'functional_level': 'basic',
+        'suitable_for': [
+            'Hip Osteoarthritis',
+            'Post-Total Hip Replacement (THR)',
+            'Orthopaedic Rehabilitation',
+            'Low Back Dysfunction'
+        ],
+        'avoid_if': [
+            'early hip post-operative rotation precaution',
+            'acute pelvic pain',
+            'unstable fracture'
+        ],
+        'plane_of_motion': ['transverse']
+    },
+    'Lifting of Arms': {
+        'clinical_name': 'Shoulder Flexion / Bilateral Arm Raise',
+        'movement_type': 'mobility',
+        'primary_region': ['shoulder'],
+        'secondary_region': ['scapula', 'upper thoracic region'],
+        'primary_goal': ['improve shoulder range of motion', 'improve upper limb mobility', 'support postural control'],
+        'difficulty': 'low',
+        'rehab_phase': ['early', 'mid'],
+        'laterality': 'bilateral',
+        'functional_level': 'basic',
+        'suitable_for': [
+            'Rotator Cuff Tendinopathy',
+            'Shoulder Impingement Syndrome',
+            'Post-Shoulder Surgery',
+            'Orthopaedic Rehabilitation',
+            'Deconditioning Syndrome'
+        ],
+        'avoid_if': [
+            'post-operative movement restriction above shoulder level',
+            'acute shoulder pain',
+            'unstable shoulder'
+        ],
+        'plane_of_motion': ['sagittal', 'scapular plane']
+    }
+}
+
+EXERCISE_DIFFICULTY_LEVELS = {
+    'low': 1,
+    'medium': 2,
+    'high': 3,
+}
+
+EXERCISE_JSON_METADATA_COLUMNS = (
+    ('primary_region_json', 'primary_region'),
+    ('secondary_region_json', 'secondary_region'),
+    ('primary_goal_json', 'primary_goal'),
+    ('rehab_phase_json', 'rehab_phase'),
+    ('suitable_for_json', 'suitable_for'),
+    ('avoid_if_json', 'avoid_if'),
+    ('plane_of_motion_json', 'plane_of_motion'),
+)
+
+
+def _parse_json_list(value):
+    """Parse JSON-encoded exercise metadata lists safely."""
+    if not value:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def serialize_exercise_metadata_row(row):
+    """Convert an exercise row into a JSON-friendly dict with parsed metadata."""
+    record = dict(row)
+    for source_key, target_key in EXERCISE_JSON_METADATA_COLUMNS:
+        record[target_key] = _parse_json_list(record.get(source_key))
+
+    difficulty_value = int(record.get('difficulty') or 1)
+    record['difficulty_label'] = (
+        record.get('difficulty_label')
+        or {1: 'low', 2: 'medium', 3: 'high'}.get(difficulty_value, 'low')
+    )
+    return record
+
+
+EXERCISE_CATALOG_SELECT_SQL = '''
+    SELECT
+        id,
+        name,
+        description,
+        category,
+        clinical_name,
+        movement_type,
+        primary_region_json,
+        secondary_region_json,
+        primary_goal_json,
+        difficulty,
+        difficulty_label,
+        rehab_phase_json,
+        laterality,
+        functional_level,
+        suitable_for_json,
+        avoid_if_json,
+        plane_of_motion_json
+    FROM exercises
+    ORDER BY category, name
+'''
+
+EXERCISE_BODY_REGION_RULES = (
+    ('Shoulder', ('shoulder', 'scapula')),
+    ('Knee', ('knee', 'patello', 'quadriceps')),
+    ('Hip', ('hip', 'pelvis', 'lumbopelvic', 'gluteal')),
+    ('Spine', ('spine', 'lumbar', 'thoracic', 'trunk', 'core', 'oblique')),
+)
+
+EXERCISE_MOVEMENT_DISPLAY = {
+    'mobility': 'Mobility',
+    'flexibility': 'Mobility',
+    'strengthening': 'Strengthening',
+    'coordination': 'Coordination',
+    'balance': 'Balance',
+}
+
+EXERCISE_DIFFICULTY_DISPLAY = {
+    'low': 'Easy',
+    'medium': 'Moderate',
+    'high': 'Advanced',
+}
+
+
+def canonicalize_exercise_name(name):
+    """Strip pipeline suffixes like '(CTK)' so metadata lookups stay stable."""
+    return re.sub(r'\s*\(.*?\)\s*$', '', str(name or '')).strip()
+
+
+def humanize_exercise_value(value):
+    """Convert stored enum-like exercise metadata into title-cased display text."""
+    text = str(value or '').replace('_', ' ').replace('-', ' ').strip()
+    if not text:
+        return ''
+    return text[:1].upper() + text[1:]
+
+
+def compute_linear_slope(values):
+    """Return a simple least-squares slope for ordered numeric values."""
+    numeric_values = [float(v) for v in (values or []) if v is not None]
+    count = len(numeric_values)
+    if count < 2:
+        return 0.0
+    mean_x = (count - 1) / 2.0
+    mean_y = sum(numeric_values) / count
+    numerator = sum((idx - mean_x) * (value - mean_y) for idx, value in enumerate(numeric_values))
+    denominator = sum((idx - mean_x) ** 2 for idx in range(count))
+    return numerator / denominator if denominator else 0.0
+
+
+def fetch_exercise_catalog():
+    """Load the exercise metadata catalog keyed by both exact and canonical exercise names."""
+    rows = query_db(EXERCISE_CATALOG_SELECT_SQL)
+    catalog = {}
+    for row in (rows or []):
+        record = serialize_exercise_metadata_row(row)
+        exact_name = record.get('name', '')
+        canonical_name = canonicalize_exercise_name(exact_name)
+        if exact_name:
+            catalog[exact_name] = record
+        if canonical_name and canonical_name not in catalog:
+            catalog[canonical_name] = record
+    return catalog
+
+
+def get_exercise_catalog_entry(exercise_name, exercise_catalog):
+    """Resolve a possibly suffixed exercise name against the metadata catalog."""
+    if not exercise_name or not exercise_catalog:
+        return {}
+    canonical_name = canonicalize_exercise_name(exercise_name)
+    return exercise_catalog.get(canonical_name) or exercise_catalog.get(exercise_name) or {}
+
+
+def derive_exercise_body_regions(metadata):
+    """Map detailed anatomy tags into the higher-level body regions used in the UI."""
+    values = list(metadata.get('primary_region') or [])
+    if metadata.get('category'):
+        values.append(metadata['category'])
+
+    regions = []
+    for value in values:
+        value_lower = str(value or '').lower()
+        for label, keywords in EXERCISE_BODY_REGION_RULES:
+            if any(keyword in value_lower for keyword in keywords):
+                if label not in regions:
+                    regions.append(label)
+                break
+
+    if not regions and metadata.get('category'):
+        regions.append(humanize_exercise_value(metadata['category']))
+    return regions
+
+
+def get_exercise_movement_label(metadata):
+    movement_type = str(metadata.get('movement_type') or '').lower()
+    return EXERCISE_MOVEMENT_DISPLAY.get(movement_type, humanize_exercise_value(movement_type) or 'Rehab')
+
+
+def get_exercise_difficulty_display(metadata):
+    difficulty_label = str(metadata.get('difficulty_label') or 'low').lower()
+    return EXERCISE_DIFFICULTY_DISPLAY.get(difficulty_label, humanize_exercise_value(difficulty_label) or 'Easy')
+
+
+def describe_exercise_focus(metadata):
+    """Generate a concise focus phrase like 'shoulder mobility' or 'lower-limb strength'."""
+    movement_type = str(metadata.get('movement_type') or '').lower()
+    movement_label = get_exercise_movement_label(metadata).lower()
+    regions = derive_exercise_body_regions(metadata)
+    region_label = regions[0].lower() if regions else 'general'
+
+    if movement_type == 'strengthening':
+        if any(region in ('Knee', 'Hip') for region in regions):
+            return 'lower-limb strength'
+        if region_label == 'shoulder':
+            return 'shoulder strength'
+        return f'{region_label} strength'
+
+    if movement_type in ('mobility', 'flexibility'):
+        if region_label == 'spine':
+            return 'spinal mobility'
+        if any(region in ('Knee', 'Hip') for region in regions):
+            return 'lower-limb mobility'
+        return f'{region_label} mobility'
+
+    if movement_type == 'coordination':
+        if any(region in ('Knee', 'Hip') for region in regions):
+            return 'lower-limb coordination'
+        return f'{region_label} coordination'
+
+    if movement_type == 'balance':
+        return 'balance control'
+
+    return movement_label.lower() if movement_label else 'general rehab'
+
+
+def describe_improvement_area(focus_label):
+    """Convert a raw focus label into a slightly more clinical improvement heading."""
+    focus_lower = str(focus_label or '').lower()
+    if 'lower-limb strength' in focus_lower:
+        return 'Functional strength'
+    if 'shoulder mobility' in focus_lower:
+        return 'Shoulder mobility'
+    if 'spinal mobility' in focus_lower:
+        return 'Spinal mobility'
+    if focus_lower:
+        return humanize_exercise_value(focus_lower)
+    return 'Movement quality'
+
+
+def enrich_exercise_summary_record(record, exercise_catalog):
+    """Attach parsed metadata and display helpers to a session exercise record."""
+    enriched = dict(record)
+    canonical_name = canonicalize_exercise_name(enriched.get('exercise_name'))
+    metadata = get_exercise_catalog_entry(canonical_name, exercise_catalog)
+    body_regions = derive_exercise_body_regions(metadata)
+    movement_label = get_exercise_movement_label(metadata)
+    movement_key = str(metadata.get('movement_type') or 'mobility').lower()
+    completion_perc = float(enriched.get('completion_perc') or 0)
+    quality_score = float(enriched.get('quality_score') or 0)
+    enriched.update({
+        'exercise_name': canonical_name or enriched.get('exercise_name', ''),
+        'metadata': metadata,
+        'body_regions': body_regions,
+        'movement_type_label': movement_label,
+        'movement_type_key': movement_key,
+        'difficulty_display': get_exercise_difficulty_display(metadata),
+        'difficulty_key': str(metadata.get('difficulty_label') or 'low').lower(),
+        'rehab_phase_labels': [humanize_exercise_value(phase) for phase in (metadata.get('rehab_phase') or [])],
+        'plane_labels': [humanize_exercise_value(plane) for plane in (metadata.get('plane_of_motion') or [])],
+        'laterality_display': humanize_exercise_value(metadata.get('laterality') or 'bilateral'),
+        'focus_label': describe_exercise_focus(metadata),
+        'quality_pct': round((quality_score / 50.0) * 100, 1) if quality_score else 0,
+        'readiness_score': round(((quality_score / 50.0) * 100 * 0.65) + (completion_perc * 0.35), 1),
+    })
+    return enriched
+
+
+def build_session_metadata_overview(exercises, prior_exercises=None):
+    """Summarise a session in metadata terms for the summary page and PDF."""
+    if not exercises:
+        return {}
+
+    movement_groups = defaultdict(list)
+    focus_groups = defaultdict(list)
+    phase_groups = defaultdict(list)
+    body_region_counter = Counter()
+
+    for exercise in exercises:
+        movement_label = exercise.get('movement_type_label') or 'Mobility'
+        movement_key = str(movement_label).lower().replace(' ', '_')
+        movement_groups[movement_key].append(exercise)
+        focus_groups[exercise.get('focus_label') or 'general rehab'].append(exercise)
+        for phase in (exercise.get('rehab_phase_labels') or []):
+            phase_groups[phase].append(exercise)
+        for region in (exercise.get('body_regions') or []):
+            body_region_counter[region] += 1
+
+    total_exercises = len(exercises)
+    focus_candidates = [label for label, _ in sorted(focus_groups.items(), key=lambda item: (-len(item[1]), item[0]))]
+    todays_focus = ' + '.join(humanize_exercise_value(label) for label in focus_candidates[:2]) or 'Whole-body rehab'
+
+    movement_mix = []
+    for movement_key, items in movement_groups.items():
+        movement_label = items[0].get('movement_type_label') or humanize_exercise_value(movement_key)
+        movement_mix.append({
+            'key': movement_key,
+            'label': movement_label,
+            'count': len(items),
+            'pct': round((len(items) / total_exercises) * 100, 1) if total_exercises else 0,
+            'avg_quality': round(sum(float(item.get('quality_score') or 0) for item in items) / len(items), 1),
+        })
+    movement_mix.sort(key=lambda item: (-item['count'], item['label']))
+
+    best_category = None
+    if movement_mix:
+        best_category = max(movement_mix, key=lambda item: item['avg_quality'])
+
+    weakest_focus = min(
+        focus_groups.items(),
+        key=lambda item: (
+            sum(float(ex.get('quality_score') or 0) for ex in item[1]) / max(len(item[1]), 1),
+            -len(item[1]),
+        ),
+    )[0]
+
+    phase_readiness = []
+    for phase_label in ('Early', 'Mid', 'Late'):
+        items = phase_groups.get(phase_label, [])
+        readiness = round(sum(float(item.get('readiness_score') or 0) for item in items) / len(items), 1) if items else 0
+        phase_readiness.append({
+            'phase': phase_label,
+            'readiness': readiness,
+            'count': len(items),
+        })
+
+    prior_movement_avgs = {}
+    for prior in (prior_exercises or []):
+        movement_label = prior.get('movement_type_label') or 'Mobility'
+        movement_key = str(movement_label).lower().replace(' ', '_')
+        prior_movement_avgs.setdefault(movement_key, []).append(float(prior.get('quality_score') or 0))
+    prior_movement_avgs = {
+        key: (sum(values) / len(values))
+        for key, values in prior_movement_avgs.items()
+        if values
+    }
+
+    improvement_by_type = []
+    for item in movement_mix:
+        previous_avg = prior_movement_avgs.get(item['key'])
+        delta = round(item['avg_quality'] - previous_avg, 1) if previous_avg is not None else None
+        improvement_by_type.append({
+            'key': item['key'],
+            'label': item['label'],
+            'current_avg': item['avg_quality'],
+            'previous_avg': round(previous_avg, 1) if previous_avg is not None else None,
+            'delta': delta,
+        })
+
+    return {
+        'todays_focus': todays_focus,
+        'movement_mix': movement_mix,
+        'regions_worked': [region for region, _ in body_region_counter.most_common()],
+        'best_category': best_category,
+        'needs_improvement': describe_improvement_area(weakest_focus),
+        'phase_readiness': phase_readiness,
+        'improvement_by_type': improvement_by_type,
+    }
+
+
+def build_metadata_risk_context(patient_id, exercise_catalog, session_limit=8):
+    """Explain re-injury risk in metadata terms like regions, planes, and movement types."""
+    recent_sessions = query_db(
+        '''
+        SELECT id, completed_at, pain_before, pain_after
+        FROM sessions
+        WHERE patient_id = ? AND completed_at IS NOT NULL
+        ORDER BY completed_at DESC
+        LIMIT ?
+        ''',
+        (patient_id, session_limit),
+    ) or []
+    if not recent_sessions:
+        return []
+
+    ordered_sessions = list(reversed([dict(row) for row in recent_sessions]))
+    session_ids = [row['id'] for row in ordered_sessions]
+    id_list = ','.join(str(int(session_id)) for session_id in session_ids)
+
+    session_exercises = query_db(
+        f'''
+        SELECT
+            se.session_id,
+            s.completed_at,
+            s.pain_before,
+            s.pain_after,
+            se.quality_score,
+            COALESCE(se.exercise_name, e.name) AS exercise_name
+        FROM session_exercises se
+        JOIN sessions s ON se.session_id = s.id
+        LEFT JOIN workouts w ON se.workout_id = w.id
+        LEFT JOIN exercises e ON w.exercise_id = e.id
+        WHERE se.patient_id = ? AND se.session_id IN ({id_list})
+        ORDER BY s.completed_at ASC, se.id ASC
+        ''',
+        (patient_id,),
+    ) or []
+
+    if not session_exercises:
+        return []
+
+    enriched_exercises = []
+    labels_by_session = defaultdict(set)
+    pain_values_by_label = defaultdict(list)
+    quality_values_by_label = defaultdict(list)
+
+    for row in session_exercises:
+        record = enrich_exercise_summary_record({
+            'session_id': row['session_id'],
+            'completed_at': row['completed_at'],
+            'exercise_name': row['exercise_name'],
+            'quality_score': row['quality_score'] or 0,
+            'pain_delta': (float(row['pain_after'] or 0) - float(row['pain_before'] or 0)),
+        }, exercise_catalog)
+        label = record.get('focus_label') or 'general rehab'
+        enriched_exercises.append(record)
+        labels_by_session[row['session_id']].add(label)
+        quality_values_by_label[label].append(float(record.get('quality_score') or 0))
+
+    for session_row in ordered_sessions:
+        pain_delta = float(session_row.get('pain_after') or 0) - float(session_row.get('pain_before') or 0)
+        for label in labels_by_session.get(session_row['id'], set()):
+            pain_values_by_label[label].append(pain_delta)
+
+    findings = []
+
+    decline_candidates = []
+    for label, values in quality_values_by_label.items():
+        if len(values) < 2:
+            continue
+        slope = compute_linear_slope(values)
+        decline_candidates.append((slope, label))
+    if decline_candidates:
+        weakest_slope, weakest_label = min(decline_candidates, key=lambda item: item[0])
+        if weakest_slope < -0.35:
+            findings.append({
+                'title': 'Decline Focus',
+                'icon': 'fa-arrow-trend-down',
+                'body': f"Decline is showing most in {weakest_label}.",
+            })
+
+    pain_candidates = []
+    for label, deltas in pain_values_by_label.items():
+        if not deltas:
+            continue
+        pain_candidates.append((sum(deltas) / len(deltas), label))
+    if pain_candidates:
+        highest_pain_delta, pain_label = max(pain_candidates, key=lambda item: item[0])
+        if highest_pain_delta > 0.25:
+            findings.append({
+                'title': 'Pain Signal',
+                'icon': 'fa-face-grimace',
+                'body': f"Pain increases most during {pain_label}.",
+            })
+
+    recent_frame_rows = query_db(
+        f'''
+        SELECT exercise_name, asymmetry_pct, score, status
+        FROM session_frames
+        WHERE patient_id = ? AND session_id IN ({id_list})
+        ORDER BY id DESC
+        LIMIT 1200
+        ''',
+        (patient_id,),
+    ) or []
+
+    asymmetry_values = defaultdict(list)
+    plane_scores = defaultdict(list)
+    plane_wrong_counts = Counter()
+    plane_total_counts = Counter()
+
+    for frame in recent_frame_rows:
+        frame_name = canonicalize_exercise_name(frame['exercise_name'])
+        metadata = get_exercise_catalog_entry(frame_name, exercise_catalog)
+        if not metadata:
+            continue
+
+        asymmetry_pct = frame['asymmetry_pct']
+        if asymmetry_pct is not None and str(metadata.get('laterality') or '').lower() == 'bilateral':
+            exercise_label = metadata.get('clinical_name') or frame_name
+            asymmetry_values[exercise_label].append(float(asymmetry_pct))
+
+        for plane in (metadata.get('plane_of_motion') or []):
+            plane_label = humanize_exercise_value(plane)
+            plane_scores[plane_label].append(float(frame['score'] or 0))
+            plane_total_counts[plane_label] += 1
+            if str(frame['status'] or '').upper() in ('WRONG', 'INCORRECT'):
+                plane_wrong_counts[plane_label] += 1
+
+    if asymmetry_values:
+        asymmetry_avg = {
+            label: (sum(values) / len(values))
+            for label, values in asymmetry_values.items()
+            if len(values) >= 4
+        }
+        if asymmetry_avg:
+            worst_exercise, avg_asymmetry = max(asymmetry_avg.items(), key=lambda item: item[1])
+            if avg_asymmetry >= 8:
+                findings.append({
+                    'title': 'Asymmetry',
+                    'icon': 'fa-scale-unbalanced',
+                    'body': f"Asymmetry is most noticeable during {worst_exercise}.",
+                })
+
+    plane_candidates = []
+    for plane_label, scores in plane_scores.items():
+        if len(scores) < 6:
+            continue
+        avg_score = sum(scores) / len(scores)
+        wrong_ratio = plane_wrong_counts[plane_label] / plane_total_counts[plane_label] if plane_total_counts[plane_label] else 0
+        plane_candidates.append((avg_score - (wrong_ratio * 20), plane_label))
+    if plane_candidates:
+        _, weakest_plane = min(plane_candidates, key=lambda item: item[0])
+        findings.append({
+            'title': 'Movement Consistency',
+            'icon': 'fa-compass-drafting',
+            'body': f"Consistency is weakest in {weakest_plane.lower()}-plane movements.",
+        })
+
+    return findings[:4]
+
 # Global dict to store latest landmarks for frontend polling
 LATEST_LANDMARKS = {}
 
@@ -453,6 +1199,42 @@ def get_primary_doctor_id_for_patient(patient_id: int):
         one=True,
     )
     return row['doctor_id'] if row else None
+
+
+def sync_patient_exercise_links_from_workouts(patient_id: int):
+    """
+    Keep patient_exercises aligned with the active workout plan.
+
+    The plan editor persists assigned exercises as active workouts. Some legacy
+    rows can end up with an active workout but a disabled patient_exercises
+    record, which makes patient/profile views incorrectly show "no exercises
+    assigned". This helper repairs that link without changing the workout plan.
+    """
+    if not patient_id:
+        return
+
+    execute_db(
+        '''
+        INSERT OR IGNORE INTO patient_exercises (patient_id, exercise_id, enabled)
+        SELECT ?, w.exercise_id, 1
+        FROM workouts w
+        WHERE w.patient_id = ? AND w.is_active = 1
+        ''',
+        (patient_id, patient_id),
+    )
+    execute_db(
+        '''
+        UPDATE patient_exercises
+        SET enabled = 1
+        WHERE patient_id = ?
+          AND exercise_id IN (
+              SELECT exercise_id
+              FROM workouts
+              WHERE patient_id = ? AND is_active = 1
+          )
+        ''',
+        (patient_id, patient_id),
+    )
 
 
 def create_adaptive_suggestion(
@@ -1116,13 +1898,14 @@ def patient_dashboard():
             one=True
         )
     
-    # Get patient's workouts — only exercises actively assigned/enabled for this patient
+    sync_patient_exercise_links_from_workouts(session['user_id'])
+
+    # Get patient's workouts from the active clinician plan
     workouts = query_db('''
         SELECT w.*, e.name as exercise_name, e.description
         FROM workouts w
         JOIN exercises e ON w.exercise_id = e.id
-        JOIN patient_exercises pe ON pe.patient_id = w.patient_id AND pe.exercise_id = w.exercise_id
-        WHERE w.patient_id = ? AND w.is_active = 1 AND pe.enabled = 1
+        WHERE w.patient_id = ? AND w.is_active = 1
     ''', (session['user_id'],))
 
     # If no rows in workouts, build the list from patient_exercises (condition-based)
@@ -1318,6 +2101,8 @@ def rehab_session():
     """Rehab Session Screen"""
     patient_id = session['user_id']
 
+    sync_patient_exercise_links_from_workouts(patient_id)
+
     # Auto-sync: ensure every enabled patient_exercise has a corresponding workouts row
     # (Workouts rows hold the clinician-set sets/reps; if none exists yet, create with defaults)
     assigned_pe = query_db('''
@@ -1344,19 +2129,53 @@ def rehab_session():
         SELECT w.*, e.name as exercise_name, e.description, e.category
         FROM workouts w
         JOIN exercises e ON w.exercise_id = e.id
-        JOIN patient_exercises pe ON pe.patient_id = w.patient_id AND pe.exercise_id = w.exercise_id
-        WHERE w.patient_id = ? AND w.is_active = 1 AND pe.enabled = 1
+        WHERE w.patient_id = ? AND w.is_active = 1
     ''', (patient_id,))
 
-    # Get exercises assigned to this patient via patient_exercises
+    # Get exercises assigned to this patient from the active plan first.
     assigned_exercises = query_db('''
-        SELECT e.id, e.name as exercise_name, e.category, e.description
-        FROM patient_exercises pe
-        JOIN exercises e ON pe.exercise_id = e.id
-        WHERE pe.patient_id = ? AND pe.enabled = 1
+        SELECT DISTINCT e.id, e.name as exercise_name, e.category, e.description
+        FROM workouts w
+        JOIN exercises e ON w.exercise_id = e.id
+        WHERE w.patient_id = ? AND w.is_active = 1
         ORDER BY e.category, e.name
     ''', (patient_id,))
+    if not assigned_exercises:
+        assigned_exercises = query_db('''
+            SELECT e.id, e.name as exercise_name, e.category, e.description
+            FROM patient_exercises pe
+            JOIN exercises e ON pe.exercise_id = e.id
+            WHERE pe.patient_id = ? AND pe.enabled = 1
+            ORDER BY e.category, e.name
+        ''', (patient_id,))
     assigned_exercises = [dict(e) for e in assigned_exercises] if assigned_exercises else []
+
+    exercise_rows = query_db('''
+        SELECT
+            id,
+            name,
+            description,
+            category,
+            clinical_name,
+            movement_type,
+            primary_region_json,
+            secondary_region_json,
+            primary_goal_json,
+            difficulty,
+            difficulty_label,
+            rehab_phase_json,
+            laterality,
+            functional_level,
+            suitable_for_json,
+            avoid_if_json,
+            plane_of_motion_json
+        FROM exercises
+        ORDER BY category, name
+    ''')
+    exercise_catalog = {}
+    for row in (exercise_rows or []):
+        serialized = serialize_exercise_metadata_row(row)
+        exercise_catalog[serialized['name']] = serialized
 
     # Get patient condition for the personalized plan card
     patient_info = query_db(
@@ -1368,6 +2187,7 @@ def rehab_session():
     resp = make_response(render_template('patient/session.html',
                                          workouts=workouts if workouts else [],
                                          assigned_exercises=assigned_exercises,
+                                         exercise_catalog=exercise_catalog,
                                          patient_condition=patient_condition))
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
@@ -1380,13 +2200,22 @@ def rehab_session():
 @role_required('patient')
 def api_patient_exercises():
     """Return the exercises assigned to the current patient."""
+    sync_patient_exercise_links_from_workouts(session['user_id'])
     exercises = query_db('''
-        SELECT e.id, e.name as exercise_name, e.category, pe.enabled
-        FROM patient_exercises pe
-        JOIN exercises e ON pe.exercise_id = e.id
-        WHERE pe.patient_id = ?
+        SELECT DISTINCT e.id, e.name as exercise_name, e.category, 1 as enabled
+        FROM workouts w
+        JOIN exercises e ON w.exercise_id = e.id
+        WHERE w.patient_id = ? AND w.is_active = 1
         ORDER BY e.category, e.name
     ''', (session['user_id'],))
+    if not exercises:
+        exercises = query_db('''
+            SELECT e.id, e.name as exercise_name, e.category, pe.enabled
+            FROM patient_exercises pe
+            JOIN exercises e ON pe.exercise_id = e.id
+            WHERE pe.patient_id = ?
+            ORDER BY e.category, e.name
+        ''', (session['user_id'],))
     return jsonify([dict(e) for e in exercises] if exercises else [])
 
 
@@ -1400,10 +2229,45 @@ def api_toggle_patient_exercise():
     enabled = data.get('enabled', 1)
     if not exercise_id:
         return jsonify({'error': 'exercise_id required'}), 400
+    if enabled:
+        execute_db(
+            'INSERT OR IGNORE INTO patient_exercises (patient_id, exercise_id, enabled) VALUES (?, ?, 1)',
+            (session['user_id'], exercise_id)
+        )
     execute_db(
         'UPDATE patient_exercises SET enabled = ? WHERE patient_id = ? AND exercise_id = ?',
         (1 if enabled else 0, session['user_id'], exercise_id)
     )
+    if enabled:
+        existing_workout = query_db(
+            '''
+            SELECT id FROM workouts
+            WHERE patient_id = ? AND exercise_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            ''',
+            (session['user_id'], exercise_id),
+            one=True,
+        )
+        if existing_workout:
+            execute_db(
+                'UPDATE workouts SET is_active = 1 WHERE id = ?',
+                (existing_workout['id'],),
+            )
+        else:
+            execute_db(
+                '''
+                INSERT INTO workouts
+                (patient_id, exercise_id, assigned_by_doctor_id, sets, reps, frequency, instructions, is_active)
+                VALUES (?, ?, ?, 3, 10, 'Daily', '', 1)
+                ''',
+                (session['user_id'], exercise_id, get_primary_doctor_id_for_patient(session['user_id'])),
+            )
+    else:
+        execute_db(
+            'UPDATE workouts SET is_active = 0 WHERE patient_id = ? AND exercise_id = ?',
+            (session['user_id'], exercise_id),
+        )
     return jsonify({'ok': True})
 
 
@@ -1428,6 +2292,7 @@ def cam_test():
 def session_summary(session_id=None):
     """Session Summary Screen — loads data dynamically via API."""
     import json
+    exercise_catalog = fetch_exercise_catalog()
     if session_id is None:
         # Fallback: get latest session for this patient
         latest = query_db('''
@@ -1483,6 +2348,47 @@ def session_summary(session_id=None):
                 except:
                     pass
 
+    exercises_list = [
+        enrich_exercise_summary_record(exercise, exercise_catalog)
+        for exercise in exercises_list
+    ]
+
+    prior_exercises_raw = []
+    if session_id is not None:
+        prior_exercises_raw = query_db('''
+            SELECT
+                COALESCE(se.exercise_name, e.name) AS exercise_name,
+                se.quality_score,
+                se.sets_required,
+                se.sets_completed
+            FROM session_exercises se
+            JOIN sessions s ON se.session_id = s.id
+            LEFT JOIN workouts w ON se.workout_id = w.id
+            LEFT JOIN exercises e ON w.exercise_id = e.id
+            WHERE se.patient_id = ?
+              AND s.completed_at IS NOT NULL
+              AND se.session_id != ?
+            ORDER BY s.completed_at DESC, se.id DESC
+            LIMIT 36
+        ''', (session['user_id'], session_id))
+
+    prior_exercises = []
+    for exercise in (prior_exercises_raw or []):
+        req = json.loads(exercise['sets_required']) if exercise['sets_required'] else {}
+        comp = json.loads(exercise['sets_completed']) if exercise['sets_completed'] else {}
+        total_req = sum(int(v) for v in req.values())
+        total_comp = sum(int(v) for v in comp.values())
+        completion_perc = round(total_comp / total_req * 100, 1) if total_req > 0 else 0
+        prior_exercises.append(enrich_exercise_summary_record({
+            'exercise_name': exercise['exercise_name'],
+            'quality_score': exercise['quality_score'],
+            'sets_required': req,
+            'sets_completed': comp,
+            'completion_perc': completion_perc,
+        }, exercise_catalog))
+
+    session_overview = build_session_metadata_overview(exercises_list, prior_exercises)
+
     # ── Recovery prediction ──
     recovery_data = None
     if RECOVERY_PREDICTOR_AVAILABLE:
@@ -1494,6 +2400,7 @@ def session_summary(session_id=None):
     return render_template('patient/summary.html',
                          session_data=sess,
                          exercises=exercises_list,
+                         session_overview=session_overview,
                          overall_duration=overall_duration,
                          session_id=session_id,
                          recovery=recovery_data)
@@ -1507,6 +2414,7 @@ def session_summary(session_id=None):
 def api_session_report(session_id):
     """Generate and return a downloadable PDF report for a completed session."""
     import json as _json
+    exercise_catalog = fetch_exercise_catalog()
 
     if not REPORT_AVAILABLE:
         return jsonify({"error": "PDF report module not available (install reportlab)"}), 503
@@ -1561,6 +2469,45 @@ def api_session_report(session_id):
             "duration_seconds": ex_duration,
         })
 
+    exercises_list = [
+        enrich_exercise_summary_record(exercise, exercise_catalog)
+        for exercise in exercises_list
+    ]
+
+    prior_exercises_raw = query_db('''
+        SELECT
+            COALESCE(se.exercise_name, e.name) AS exercise_name,
+            se.quality_score,
+            se.sets_required,
+            se.sets_completed
+        FROM session_exercises se
+        JOIN sessions s ON se.session_id = s.id
+        LEFT JOIN workouts w ON se.workout_id = w.id
+        LEFT JOIN exercises e ON w.exercise_id = e.id
+        WHERE se.patient_id = ?
+          AND s.completed_at IS NOT NULL
+          AND se.session_id != ?
+        ORDER BY s.completed_at DESC, se.id DESC
+        LIMIT 36
+    ''', (patient_id, session_id))
+
+    prior_exercises = []
+    for exercise in (prior_exercises_raw or []):
+        req = _json.loads(exercise['sets_required']) if exercise['sets_required'] else {}
+        comp = _json.loads(exercise['sets_completed']) if exercise['sets_completed'] else {}
+        total_req = sum(int(v) for v in req.values())
+        total_comp = sum(int(v) for v in comp.values())
+        completion_perc = round(total_comp / total_req * 100, 1) if total_req > 0 else 0
+        prior_exercises.append(enrich_exercise_summary_record({
+            "exercise_name": exercise['exercise_name'],
+            "quality_score": exercise['quality_score'],
+            "sets_required": req,
+            "sets_completed": comp,
+            "completion_perc": completion_perc,
+        }, exercise_catalog))
+
+    session_overview = build_session_metadata_overview(exercises_list, prior_exercises)
+
     # ── overall duration ────────────────────────────────────────────────
     overall_duration = None
     if sess['started_at'] and sess['completed_at']:
@@ -1591,6 +2538,7 @@ def api_session_report(session_id):
         exercises=exercises_list,
         frames=frames,
         overall_duration=overall_duration,
+        report_context={"session_overview": session_overview},
     )
 
     response = make_response(pdf_bytes)
@@ -2031,6 +2979,7 @@ def api_session_report_doctor(session_id):
 @role_required('patient')
 def patient_profile():
     """Personal Details page"""
+    exercise_catalog = fetch_exercise_catalog()
     user_info = query_db(
         'SELECT id, name, email, role, phone, pincode, dob, created_at FROM users WHERE id = ?',
         (session['user_id'],), one=True
@@ -2066,9 +3015,11 @@ def patient_profile():
 
     # Re-injury risk
     risk_data = None
+    risk_metadata_context = []
     if REINJURY_RISK_AVAILABLE:
         try:
             risk_data = analyze_patient_risk(session['user_id'], query_db)
+            risk_metadata_context = build_metadata_risk_context(session['user_id'], exercise_catalog)
         except Exception as _re:
             print(f"[WARNING] Re-injury risk analysis failed for patient {session['user_id']}: {_re}")
 
@@ -2080,6 +3031,7 @@ def patient_profile():
                          patient_specialties=patient_specialties,
                          age=age,
                          risk_data=risk_data,
+                         risk_metadata_context=risk_metadata_context,
                          active_tab='personal')
 
 
@@ -2130,12 +3082,13 @@ def update_profile():
 @role_required('patient')
 def progress_history():
     """Progress & History Screen"""
+    exercise_catalog = fetch_exercise_catalog()
     all_sessions = query_db('''
         SELECT s.*,
-               (SELECT GROUP_CONCAT(DISTINCT e.name)
+               (SELECT GROUP_CONCAT(DISTINCT COALESCE(se.exercise_name, e.name))
                 FROM session_exercises se
-                JOIN workouts w ON se.workout_id = w.id
-                JOIN exercises e ON w.exercise_id = e.id
+                LEFT JOIN workouts w ON se.workout_id = w.id
+                LEFT JOIN exercises e ON w.exercise_id = e.id
                 WHERE se.session_id = s.id) as exercise_name
         FROM sessions s
         WHERE s.patient_id = ?
@@ -2148,10 +3101,44 @@ def progress_history():
         (session['user_id'],),
         one=True
     )
+
+    session_summaries = []
+    for session_row in (all_sessions or []):
+        session_record = dict(session_row)
+        exercise_names = [
+            canonicalize_exercise_name(name)
+            for name in str(session_record.get('exercise_name') or '').split(',')
+            if canonicalize_exercise_name(name)
+        ]
+        enriched = [
+            enrich_exercise_summary_record({
+                'exercise_name': name,
+                'quality_score': session_record.get('quality_score') or 0,
+                'completion_perc': session_record.get('completed_perc') or 0,
+            }, exercise_catalog)
+            for name in exercise_names
+        ]
+        session_record['exercise_names_list'] = exercise_names
+        session_record['session_overview'] = build_session_metadata_overview(enriched)
+        session_summaries.append(session_record)
+
+    risk_data = None
+    risk_metadata_context = []
+    if REINJURY_RISK_AVAILABLE:
+        try:
+            risk_data = analyze_patient_risk(session['user_id'], query_db)
+            risk_metadata_context = build_metadata_risk_context(session['user_id'], exercise_catalog)
+        except Exception as _re:
+            print(f"[WARNING] Re-injury risk analysis failed for patient {session['user_id']}: {_re}")
+
+    trend_sessions = list(reversed(session_summaries[:4]))
     
     return render_template('patient/progress.html',
-                         sessions=all_sessions if all_sessions else [],
-                         patient=patient_info)
+                         sessions=session_summaries,
+                         trend_sessions=trend_sessions,
+                         patient=patient_info,
+                         risk_data=risk_data,
+                         risk_metadata_context=risk_metadata_context)
 
 
 @app.route('/patient/appointments')
@@ -2747,15 +3734,26 @@ def patient_detail(patient_id):
         flash('Patient not found.', 'error')
         return redirect(url_for('clinician_dashboard'))
 
-    # ── Assigned exercises (from patient_exercises, synced to workouts) ──
+    sync_patient_exercise_links_from_workouts(patient_id)
+
+    # ── Assigned exercises from the active workout plan ───────────────────
     assigned_exercises = query_db('''
-        SELECT pe.id as pe_id, pe.enabled, e.id as exercise_id,
+        SELECT DISTINCT e.id as exercise_id,
                e.name as exercise_name, e.category, e.description
-        FROM patient_exercises pe
-        JOIN exercises e ON pe.exercise_id = e.id
-        WHERE pe.patient_id = ? AND pe.enabled = 1
+        FROM workouts w
+        JOIN exercises e ON w.exercise_id = e.id
+        WHERE w.patient_id = ? AND w.is_active = 1
         ORDER BY e.category, e.name
     ''', (patient_id,))
+    if not assigned_exercises:
+        assigned_exercises = query_db('''
+            SELECT pe.id as pe_id, pe.enabled, e.id as exercise_id,
+                   e.name as exercise_name, e.category, e.description
+            FROM patient_exercises pe
+            JOIN exercises e ON pe.exercise_id = e.id
+            WHERE pe.patient_id = ? AND pe.enabled = 1
+            ORDER BY e.category, e.name
+        ''', (patient_id,))
     assigned_exercises = [dict(e) for e in assigned_exercises] if assigned_exercises else []
 
     # Workouts with sets/reps details
@@ -4036,6 +5034,8 @@ def plan_editor():
 
     # For every patient, sync patient_exercises → workouts, then fetch workouts
     for pat in patients:
+        sync_patient_exercise_links_from_workouts(pat['id'])
+
         # 1. Get exercises assigned via patient_exercises (condition-based defaults)
         assigned = query_db('''
             SELECT pe.exercise_id
@@ -6084,7 +7084,19 @@ def ensure_tables_exist():
             description TEXT,
             category TEXT,
             difficulty INTEGER DEFAULT 1,
-            video_url TEXT
+            video_url TEXT,
+            clinical_name TEXT,
+            movement_type TEXT,
+            primary_region_json TEXT,
+            secondary_region_json TEXT,
+            primary_goal_json TEXT,
+            difficulty_label TEXT,
+            rehab_phase_json TEXT,
+            laterality TEXT,
+            functional_level TEXT,
+            suitable_for_json TEXT,
+            avoid_if_json TEXT,
+            plane_of_motion_json TEXT
         );
         
         CREATE TABLE IF NOT EXISTS workouts (
@@ -6237,6 +7249,27 @@ def ensure_tables_exist():
         ("workouts", "assigned_by_doctor_id", "INTEGER"),
     ]
     for table, col, col_type in migrations:
+        try:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+    exercise_metadata_columns = [
+        ("exercises", "clinical_name", "TEXT"),
+        ("exercises", "movement_type", "TEXT"),
+        ("exercises", "primary_region_json", "TEXT"),
+        ("exercises", "secondary_region_json", "TEXT"),
+        ("exercises", "primary_goal_json", "TEXT"),
+        ("exercises", "difficulty_label", "TEXT"),
+        ("exercises", "rehab_phase_json", "TEXT"),
+        ("exercises", "laterality", "TEXT"),
+        ("exercises", "functional_level", "TEXT"),
+        ("exercises", "suitable_for_json", "TEXT"),
+        ("exercises", "avoid_if_json", "TEXT"),
+        ("exercises", "plane_of_motion_json", "TEXT"),
+    ]
+    for table, col, col_type in exercise_metadata_columns:
         try:
             cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
             conn.commit()
@@ -6437,35 +7470,62 @@ def ensure_tables_exist():
         print(f"[INIT] Created {len(timeslot_data)} timeslots")
     
     # ---- Seed / update exercises table with canonical list ----
-    CANONICAL_EXERCISES = [
-        ('Lifting of Arms', 'Shoulder', 'Stand upright, raise both arms from your sides to above your head, then slowly lower. Keep elbows slightly bent.'),
-        ('Lateral Trunk Tilt', 'Spine', 'Stand with feet shoulder-width apart. Slowly tilt your trunk to one side, return to center, then tilt to the other side.'),
-        ('Trunk Rotation', 'Spine', 'Stand with arms relaxed. Rotate your upper body to the left, return to center, then rotate right. Keep hips facing forward.'),
-        ('Squat', 'Knee', 'Stand with feet shoulder-width apart. Lower your hips by bending your knees, keeping your back straight. Rise slowly.'),
-        ('Trunk Rotation & Target Touch', 'Spine', 'Stand upright, rotate your trunk and reach toward targets at various positions. Combine trunk rotation with arm extension.'),
-        ('Pelvis Rotation', 'Hip', 'Stand upright and gently rotate your pelvis in a controlled circular motion while keeping your upper body stable.'),
-        ('Forward Flexion', 'Spine', 'Stand upright, slowly bend forward from your hips keeping your back straight. Reach towards your toes, then return upright.'),
-        ('Flank Stretch', 'Spine', 'Stand upright, raise one arm overhead and slowly stretch to the opposite side. Alternate sides.'),
-        ('Torso Rotation', 'Spine', 'Stand with feet apart, rotate your trunk gently to each side. Keep your lower body stable throughout.'),
-    ]
-    canonical_names = [e[0] for e in CANONICAL_EXERCISES]
+    canonical_names = list(CANONICAL_EXERCISE_DETAILS.keys())
 
     # Remove any exercises NOT in the canonical list
     placeholders = ','.join('?' * len(canonical_names))
     cursor.execute(f"DELETE FROM exercises WHERE name NOT IN ({placeholders})", canonical_names)
 
     # Insert/update canonical exercises
-    for ex_name, ex_category, ex_desc in CANONICAL_EXERCISES:
+    for ex_name, ex_details in CANONICAL_EXERCISE_DETAILS.items():
+        ex_category = ex_details['category']
+        ex_desc = ex_details['description']
+        ex_meta = EXERCISE_METADATA.get(ex_name, {})
+        difficulty_label = ex_meta.get('difficulty', 'low')
+        difficulty_value = EXERCISE_DIFFICULTY_LEVELS.get(difficulty_label, 1)
+        metadata_values = (
+            ex_meta.get('clinical_name', ex_name),
+            ex_meta.get('movement_type'),
+            json.dumps(ex_meta.get('primary_region', [])),
+            json.dumps(ex_meta.get('secondary_region', [])),
+            json.dumps(ex_meta.get('primary_goal', [])),
+            difficulty_label,
+            json.dumps(ex_meta.get('rehab_phase', [])),
+            ex_meta.get('laterality'),
+            ex_meta.get('functional_level'),
+            json.dumps(ex_meta.get('suitable_for', [])),
+            json.dumps(ex_meta.get('avoid_if', [])),
+            json.dumps(ex_meta.get('plane_of_motion', [])),
+        )
         cursor.execute("SELECT id FROM exercises WHERE name = ?", (ex_name,))
         row = cursor.fetchone()
         if row:
-            cursor.execute("UPDATE exercises SET category = ?, description = ? WHERE name = ?", (ex_category, ex_desc, ex_name))
+            cursor.execute(
+                """
+                UPDATE exercises
+                SET category = ?, description = ?, difficulty = ?, clinical_name = ?,
+                    movement_type = ?, primary_region_json = ?, secondary_region_json = ?,
+                    primary_goal_json = ?, difficulty_label = ?, rehab_phase_json = ?,
+                    laterality = ?, functional_level = ?, suitable_for_json = ?,
+                    avoid_if_json = ?, plane_of_motion_json = ?
+                WHERE name = ?
+                """,
+                (ex_category, ex_desc, difficulty_value, *metadata_values, ex_name)
+            )
         else:
             cursor.execute(
-                "INSERT INTO exercises (name, category, description, difficulty) VALUES (?, ?, ?, 1)",
-                (ex_name, ex_category, ex_desc)
+                """
+                INSERT INTO exercises (
+                    name, category, description, difficulty, clinical_name,
+                    movement_type, primary_region_json, secondary_region_json,
+                    primary_goal_json, difficulty_label, rehab_phase_json,
+                    laterality, functional_level, suitable_for_json,
+                    avoid_if_json, plane_of_motion_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (ex_name, ex_category, ex_desc, difficulty_value, *metadata_values)
             )
-    print(f"[INIT] Exercises table seeded with {len(CANONICAL_EXERCISES)} canonical exercises")
+    print(f"[INIT] Exercises table seeded with {len(CANONICAL_EXERCISE_DETAILS)} canonical exercises")
 
     # Caregiver messages (complaints & queries)
     cursor.execute('''

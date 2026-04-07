@@ -79,7 +79,19 @@ CREATE TABLE IF NOT EXISTS exercises (
     description TEXT,
     category TEXT,
     difficulty INTEGER DEFAULT 1,
-    video_url TEXT
+    video_url TEXT,
+    clinical_name TEXT,
+    movement_type TEXT,
+    primary_region_json TEXT,
+    secondary_region_json TEXT,
+    primary_goal_json TEXT,
+    difficulty_label TEXT,
+    rehab_phase_json TEXT,
+    laterality TEXT,
+    functional_level TEXT,
+    suitable_for_json TEXT,
+    avoid_if_json TEXT,
+    plane_of_motion_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS workouts (
