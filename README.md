@@ -22,7 +22,17 @@
 - Rule-based checks for exercise form
 
 
-## Setup Guide & Steps
+## Deployment link - Test our application!
+
+<p align="center">
+  <img src="qr-code.png" alt="Session Feedback" width="600" />
+</p>
+
+[Deployment Link](https://sha2-rehab-coach-v7.mangoground-e36db5c5.southeastasia.azurecontainerapps.io/)
+
+
+
+## Setup Guide & Steps (local run)
 
 For the latest setup instructions and deployment steps, please see:
 [Setup & Deployment Guide (Google Doc)](https://docs.google.com/document/d/1qvcju2KoFT-kRUrpA6qwuMHvGF9V89HACPjtdlyOOrw/edit?tab=t.0)
