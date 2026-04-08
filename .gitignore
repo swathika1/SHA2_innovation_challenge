@@ -43,3 +43,8 @@ vector_store/
 pose_env/
 __pycache__/
 *.pyc
+__pycache__/optim.cpython-311.pyc
+rehab_coach.db
+*.db
+*.db
+__pycache__/optim.cpython-311.pyc

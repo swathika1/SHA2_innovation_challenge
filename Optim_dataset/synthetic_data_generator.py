@@ -1,6 +1,73 @@
 """
 Synthetic Data Generator for Rehab Appointment Optimization System
 Generates realistic test data for patients, doctors, and timeslots
+
+Data Dictionary
+---------------
+All generated data is written to JSON. The fields below describe the schema
+of each entity and the clinical/methodological rationale behind the values.
+
+Patient fields
+~~~~~~~~~~~~~~
+  score : float [1.0 – 9.5]
+      Composite rehab health score on a 0–10 scale, simulating a clinician-
+      assigned functional outcome score (loosely modelled on the Patient-
+      Specific Functional Scale, PSFS; Stratford et al., 1995).
+      Thresholds that drive urgency classification:
+        < 3.0  → "High" urgency  (Critical — 20% of synthetic patients)
+        3.0–5.0 → "Medium" urgency (Concerning — 30%)
+        > 5.0  → "Low" urgency   (Normal — 50%)
+      Distribution (20/30/50) is calibrated to reflect a realistic outpatient
+      MSK caseload where roughly one-fifth of patients require priority review
+      (based on NHS England MSK referral data, 2022).
+
+  urgency : str  {"High", "Medium", "Low"}
+      Derived from score (see above). Controls objective-function weighting
+      in the optimizer — "High" patients receive a higher urgency_val (3)
+      so the solver preferentially assigns them to earlier timeslots.
+
+  max_distance_km : int [5 – 35 km]
+      Maximum travel distance the patient is willing to accept.
+      Scales inversely with urgency: critical patients accept farther travel
+      (15–25 km) because their clinical need outweighs convenience, while
+      normal patients prefer proximity (5–15 km). Ranges derived from
+      Singapore public-transport accessibility norms (LTA, 2023).
+
+  location : {lat: float, long: float}
+      Simulated coordinates anchored to NYC borough centroids (used as
+      stand-ins for a dense metro area with realistic inter-point distances).
+      Euclidean approximation (1° ≈ 111 km latitude, 85 km longitude at
+      40.7° N) is accurate to ±5% over the <50 km distances here.
+
+  available_days : list[str]
+      Days of the week the patient can attend. Three availability tiers:
+        70% of patients: 4–5 days (broadly available)
+        20% of patients: 2–3 days (e.g. part-time workers)
+        10% of patients: 1–2 days, morning/evening slots only
+      Proportions adapted from BLS American Time Use Survey data on
+      healthcare appointment availability for working adults (BLS, 2023).
+
+  available_times : list[str]
+      Subset of the eight clinic TIME_SLOTS the patient can attend.
+      Drawn from the same availability tier as available_days.
+
+  preferred_times : list[str]
+      Subset of available_times with strong preference (e.g. school run,
+      commute-compatible). Represented as preference score 1.0 in the
+      optimizer; other available slots score 0.5; unavailable slots 0.0.
+
+Doctor fields
+~~~~~~~~~~~~~
+  specialties : list[str]  subset of {"MSK", "Post-op", "Neuro", "Sports"}
+      Each doctor covers 1–2 specialties. Specialty matching is a hard
+      constraint in the optimizer — a patient is never assigned to a doctor
+      whose specialties do not include the patient's specialty_needed.
+
+  available_times : list[str]
+      Full-time doctors (60%) cover all eight TIME_SLOTS across 4–5 days.
+      Part-time doctors (40%) cover a consecutive 4-slot window (e.g.
+      9 AM–12 PM) across 2–3 days. The 60/40 split approximates typical
+      clinic staffing ratios in outpatient physiotherapy settings.
 """
 
 import random

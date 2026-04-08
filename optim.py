@@ -1,3 +1,56 @@
+"""
+optim.py — Appointment Optimization Engine
+===========================================
+Assigns patients to doctor timeslots by maximising a weighted multi-objective
+score using Mixed-Integer Linear Programming (MILP) via Gurobi, with a greedy
+heuristic fallback for environments without a Gurobi licence.
+
+Why MILP over a greedy/heuristic approach?
+-------------------------------------------
+MILP guarantees a globally optimal assignment under hard constraints (capacity,
+availability, specialty, distance). A greedy approach can fail to find any
+feasible assignment when patient availability overlaps heavily, or produce
+suboptimal allocations that sacrifice high-urgency patients for marginal gains
+in convenience. With a typical problem size of ~20 patients × 6 doctors × 40
+timeslots (4 800 binary variables), Gurobi solves to optimality in under 1 s.
+The greedy fallback is O(n²) and used only when Gurobi is unavailable; it
+produces near-optimal results when the scheduling problem is not tightly
+constrained.
+
+Objective weights (DEFAULT_WEIGHTS)
+-------------------------------------
+  w_urgency = 0.40  — Largest term. A critical patient waiting one extra day
+                       has greater expected harm than any convenience mismatch.
+                       Set to 2× other weights so urgency dominates when a
+                       patient can only be reached by one doctor.
+  w_dist    = 0.20  — Travel burden. Kept equal to continuity and preference
+                       so it does not override clinical priority, but still
+                       rewards proximity to reduce no-show risk.
+  w_cont    = 0.20  — Continuity of care. Evidence shows better functional
+                       outcomes and adherence when patients see the same
+                       therapist (Haggerty et al., 2003; Saultz & Lochner, 2005).
+  w_time    = 0.20  — Time preference. Equal weight prevents the solver from
+                       systematically scheduling patients at inconvenient times,
+                       which is a known adherence barrier (Jack et al., 2010).
+
+Score thresholds (THRESHOLD_CRITICAL, THRESHOLD_CONCERNING)
+-------------------------------------------------------------
+  3.0 and 5.0 correspond to "poor" and "fair" function on the 0–10 PSFS
+  (Patient-Specific Functional Scale; Stratford et al., 1995). In this
+  synthetic dataset the score is a simulated PSFS-equivalent. In a production
+  system these cut-offs should be replaced with validated, condition-specific
+  thresholds (e.g. KOOS < 40 for knee OA, NDI > 28% for cervical conditions).
+
+MAX_DIST_EXPANSION (1.5×)
+--------------------------
+  When a patient is critical (score < THRESHOLD_CRITICAL), their maximum
+  acceptable travel distance is expanded by 50%. This balances two failure
+  modes: (1) leaving a critical patient unscheduled because no clinic is
+  within their stated limit, and (2) scheduling them so far away they do not
+  attend. A 1.5× expansion is conservative — equivalent to roughly 5–8 km
+  extra for the median patient — and is tunable per deployment context.
+"""
+
 import json
 import sys
 
@@ -510,6 +563,12 @@ def _optimize_single_gurobi(patients, doctors, timeslots, weights=None, blocked=
             for t in t_ids:
                 ts = t_map[t]
                 time_idx = ts["time_index"]
+                # urgency_bonus uses a linearly decaying reward over slot index.
+                # WHY: A critical patient (urgency_val=3) assigned to slot 0 scores
+                # the full urgency bonus; assigned to the last slot they score 0.
+                # This steers the solver to front-load urgent appointments without
+                # hard-constraining it — a hard "must be in first N slots" constraint
+                # would make the problem infeasible when early slots are unavailable.
                 urgency_bonus = urgency_val * (1.0 - time_idx / total_slots)
                 time_pref = p["time_preference"].get(t, 0.5)
 

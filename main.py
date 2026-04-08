@@ -212,7 +212,7 @@ from database import close_db, query_db, execute_db, load_optimization_data
 import random
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-this-in-production'  # Required for sessions
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(24)
 
 # ==================== CONDITIONS & EXERCISE MAPPING ====================
 

@@ -39,5 +39,3 @@ class AppConfig:
     threshold_low: float = 22.0
     threshold_high: float = 26.0
     cooldown_seconds: float = 12.0
-    
-    openpose_url: str = "http://127.0.0.1:9001"
